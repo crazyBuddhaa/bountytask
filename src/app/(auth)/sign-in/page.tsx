@@ -30,18 +30,23 @@ function SignInForm() {
 
   async function onSubmit(data: FormData) {
     setLoading(true)
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email:    data.email,
-      password: data.password,
-    })
-    if (error) {
-      toast.error(error.message)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({
+        email:    data.email,
+        password: data.password,
+      })
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+      router.push(redirect)
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+    } finally {
       setLoading(false)
-      return
     }
-    router.push(redirect)
-    router.refresh()
   }
 
   return (

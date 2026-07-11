@@ -59,18 +59,22 @@ function RegisterForm() {
 
   // ── Free registration (no fee) ──────────────────────────────────────────────
   async function onSubmitFree(data: BaseData) {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-      options: {
-        data: { full_name: data.full_name, referral_code: data.referral_code || undefined },
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    })
-    if (error) { toast.error(error.message); return }
-    toast.success("Account created! Check your email to verify.", { duration: 6000 })
-    router.push("/sign-in")
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: { full_name: data.full_name, referral_code: data.referral_code || undefined },
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        },
+      })
+      if (error) { toast.error(error.message); return }
+      toast.success("Account created! Check your email to verify.", { duration: 6000 })
+      router.push("/sign-in")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+    }
   }
 
   // ── Paystack inline payment ──────────────────────────────────────────────────
@@ -108,18 +112,22 @@ function RegisterForm() {
 
   // ── Bank-transfer submission ─────────────────────────────────────────────────
   async function onSubmitBank(data: BankData) {
-    const res  = await fetch("/api/auth/request-verification", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(data),
-    })
-    const json = await res.json()
-    if (json.error) { toast.error(json.error); return }
-    toast.success(
-      "Request submitted! An admin will verify your transfer and activate your account within 24 hours.",
-      { duration: 8000 }
-    )
-    router.push("/sign-in")
+    try {
+      const res  = await fetch("/api/auth/request-verification", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(data),
+      })
+      const json = await res.json()
+      if (json.error) { toast.error(json.error); return }
+      toast.success(
+        "Request submitted! An admin will verify your transfer and activate your account within 24 hours.",
+        { duration: 8000 }
+      )
+      router.push("/sign-in")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+    }
   }
 
   const feeNaira = regSettings ? Math.round(regSettings.fee_amount / 100) : 0
