@@ -97,7 +97,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 4 — Withdrawals
-**Pushed:** commit `(pending)`
+**Pushed:** commit `887dcc5`
 **Date:** 2026-07-11
 
 ### Built
@@ -118,15 +118,19 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 5 — Referral Program
-**Status:** Pending
+## ✅ Stage 5 — Referral Program
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/api/referrals/route.ts` — stats + referral list
-- `src/app/dashboard/referral/page.tsx` — referral code, share links, stats
+### Built
+- `src/app/api/referrals/route.ts` — stats (total referred, credited, earned) + full referral list with bonus status
+- `src/app/dashboard/referral/page.tsx` — referral code display + copy, link copy, WhatsApp/Twitter share,
+  3-step explainer card, referral table with bonus credited status
 
 ### Verify
 - User A refers User B → User B completes first unverified task → User A gets ₦500 bonus.
+- Referral table shows "Awaiting first task" until bonus credited.
+- Share links open WhatsApp/Twitter with pre-filled message.
 
 ---
 
