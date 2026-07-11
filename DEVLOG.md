@@ -119,7 +119,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 5 — Referral Program
-**Pushed:** commit `(pending)`
+**Pushed:** commit `58f0ced`
 **Date:** 2026-07-11
 
 ### Built
@@ -134,16 +134,18 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 6 — Notifications
-**Status:** Pending
+## ✅ Stage 6 — Notifications
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/api/notifications/route.ts` — paginated list; mark-read (single/all)
-- `src/app/dashboard/notifications/page.tsx` — notification inbox
+### Built
+- `src/app/api/notifications/route.ts` — paginated list ordered by unread-first; PATCH mark-read (single IDs or all)
+- `src/app/dashboard/notifications/page.tsx` — inbox with unread dot, type emoji icons, click-to-read, mark-all-read button, pagination
 
 ### Verify
-- Task approved → in-app notification appears.
-- Bell badge count decrements when notifications are marked read.
+- Task approved → in-app notification appears at top of inbox.
+- Click a notification → dot disappears (marked read).
+- Mark all → all dots clear, header count drops to zero.
 
 ---
 
