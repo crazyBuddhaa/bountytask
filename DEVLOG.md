@@ -135,7 +135,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 6 — Notifications
-**Pushed:** commit `(pending)`
+**Pushed:** commit `d585e02`
 **Date:** 2026-07-11
 
 ### Built
@@ -149,12 +149,18 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 7 — Profile & Security
-**Status:** Pending
+## ✅ Stage 7 — Profile & Security
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/dashboard/profile/page.tsx` — edit name, username, phone, avatar upload
-- `src/app/dashboard/security/page.tsx` — change password, active session info
+### Built
+- `src/app/dashboard/profile/page.tsx` — avatar upload (hover-to-replace, 2 MB limit), full name, username, phone fields, referral code display, account metadata; all changes audited via PATCH /api/profile
+- `src/app/dashboard/security/page.tsx` — change password with re-auth, live password-strength meter (score 0-4, tips), show/hide toggles, security tips panel
+
+### Verify
+- Upload avatar → image updates in header pill immediately.
+- Change password with wrong current password → shows "incorrect" error.
+- Weak password → strength bar turns red and shows tips.
 
 ---
 
