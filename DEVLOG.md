@@ -82,12 +82,13 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 3 — Ledger & Earnings
-**Status:** Pending
+## ✅ Stage 3 — Ledger & Earnings
+**Pushed:** commit `652d1ba`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/api/ledger/route.ts` — paginated ledger + live balance
-- `src/app/dashboard/earnings/page.tsx` — balance widget + full transaction history
+### Built
+- `src/app/api/ledger/route.ts` — paginated ledger + live balance via `get_user_balance()` RPC
+- `src/app/dashboard/earnings/page.tsx` — balance hero, total credits/debits, full transaction table with type badge and ref-type label; pagination
 
 ### Verify
 - Every credit/debit entry is visible.
@@ -95,8 +96,11 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 4 — Withdrawals
-**Status:** Pending
+## ✅ Stage 4 — Withdrawals
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
+
+### Built
 
 ### Planned
 - `src/app/api/paystack/banks/route.ts` — bank list (cached 1hr)
