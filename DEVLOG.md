@@ -165,7 +165,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 8 — Admin Dashboard
-**Pushed:** commit `(pending)`
+**Pushed:** commit `406782c`
 **Date:** 2026-07-11
 
 ### Built
@@ -185,13 +185,19 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 9 — Fraud Detection & Audit
-**Status:** Pending
+## ✅ Stage 9 — Fraud Detection & Audit
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/admin/fraud/page.tsx` — open fraud flags, severity filter, resolve
-- `src/app/admin/audit-logs/page.tsx` — searchable immutable log
-- Admin API routes: fraud, audit-logs
+### Built
+- `src/app/admin/fraud/page.tsx` — open flags table with severity filter; critical/high summary cards; one-click resolve
+- `src/app/admin/audit-logs/page.tsx` — 50-per-page immutable log with action search, colour-coded action badges, mono font for IDs
+- `src/app/api/admin/fraud/route.ts` — GET open flags filtered by severity; PATCH resolve
+- `src/app/api/admin/audit-logs/route.ts` — GET paginated, filterable by actor and action
+
+### Verify
+- Resolve a fraud flag → it disappears from the list; count decrements.
+- Audit log is read-only — no edit or delete is possible (DB trigger enforces this).
 
 ---
 
