@@ -44,7 +44,7 @@ export function DashboardHeader({ user, balance, unreadCount = 0 }: DashboardHea
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-64">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <DashboardSidebar />
+            <DashboardSidebar mobile />
           </SheetContent>
         </Sheet>
 

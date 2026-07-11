@@ -19,11 +19,21 @@ const navItems = [
   { href: "/dashboard/security", label: "Security", icon: Shield },
 ]
 
-export function DashboardSidebar() {
+interface DashboardSidebarProps {
+  /** When true, renders as a plain flex column (for use inside a mobile Sheet). */
+  mobile?: boolean
+}
+
+export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col border-r bg-card min-h-screen">
+    <aside
+      className={cn(
+        "w-64 flex-col border-r bg-card min-h-screen",
+        mobile ? "flex" : "hidden lg:flex"
+      )}
+    >
       <div className="p-6 border-b">
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bounty-gradient flex items-center justify-center">
