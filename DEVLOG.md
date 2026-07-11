@@ -202,7 +202,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 10 — Ledger Explorer & Reports (Admin)
-**Pushed:** commit `(pending)`
+**Pushed:** commit `ea92942`
 **Date:** 2026-07-11
 
 ### Built
@@ -218,13 +218,22 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 11 — Public Pages
-**Status:** Pending
+## ✅ Stage 11 — Public Pages
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/page.tsx` — landing page
-- `src/app/about/page.tsx`, `src/app/faq/page.tsx`, `src/app/contact/page.tsx`
-- `src/components/layout/PublicHeader.tsx`, `src/components/layout/Footer.tsx`
+### Built
+- `src/components/layout/PublicHeader.tsx` — sticky nav, mobile drawer, CTA buttons
+- `src/components/layout/Footer.tsx` — 3-column links, tagline, year
+- `src/app/page.tsx` — hero, stats bar, how-it-works (4 steps), features, sample tasks grid, testimonials, CTA
+- `src/app/about/page.tsx` — mission, values (3 cards), stat tiles
+- `src/app/faq/page.tsx` — 11 Q&A cards covering earning, withdrawals, referrals, safety
+- `src/app/contact/page.tsx` — contact form (name, email, topic select, message), simulated submit
+
+### Verify
+- Landing page renders at `/`; "Get Started Free" navigates to `/register`.
+- Mobile nav opens/closes correctly at small viewports.
+- Contact form shows success state after submission.
 
 ---
 
