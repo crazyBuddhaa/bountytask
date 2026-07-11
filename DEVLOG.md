@@ -101,8 +101,6 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 **Date:** 2026-07-11
 
 ### Built
-
-### Planned
 - `src/app/api/paystack/banks/route.ts` — bank list (cached 1hr)
 - `src/app/api/paystack/resolve/route.ts` — account name verification
 - `src/app/api/withdrawals/accounts/route.ts` — list + add verified bank account
@@ -237,19 +235,40 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 12 — Cron Jobs
-**Status:** Pending
+## ✅ Stage 12 — Cron Jobs
+**Pushed:** 2026-07-11
 
-### Planned
-- `src/app/api/cron/process-tasks/route.ts` — close expired tasks (secured by CRON_SECRET)
-- `.github/workflows/cron.yml` — GitHub Actions hourly schedule
+### Built
+- `src/app/api/cron/process-tasks/route.ts` — closes expired tasks (status: active/paused → completed); authenticated by `x-cron-secret` header; writes audit log entry on each run
+- `.github/workflows/cron.yml` — GitHub Actions schedule (hourly at :00); uses `APP_URL` + `CRON_SECRET` repo secrets; supports manual `workflow_dispatch` trigger
+
+### Verify
+- Trigger manually via Actions → Run workflow → response 200.
+- Expired task (expires_at < now, status = active) → status becomes `completed` after cron runs.
+- Audit log records `cron.process_expired_tasks` action with count and task IDs.
+- Missing or wrong `CRON_SECRET` header → 401 response.
 
 ---
 
-## ⏳ Stage 13 — Production Hardening
-**Status:** Pending
+## ✅ Stage 13 — Production Hardening
+**Pushed:** 2026-07-11
 
-### Planned
-- `src/app/error.tsx`, `src/app/not-found.tsx`
-- `vercel.json` — cron config, headers, redirects
-- `README.md` — full setup and deployment guide
+### Built
+- `src/lib/supabase/server.ts` — fixed implicit `any` on `cookiesToSet` parameter (Vercel TS build error)
+- `src/middleware.ts` — same fix; both `createServerClient` call sites now fully typed
+- `src/app/error.tsx` — error boundary page with retry + back-to-dashboard actions; logs `error.digest`
+- `src/app/not-found.tsx` — 404 page with home + dashboard navigation
+- `vercel.json` — security headers (X-Frame-Options, X-Content-Type-Options, XSS, Referrer-Policy, Permissions-Policy) + permanent redirects (`/login` → `/sign-in`, `/signup` → `/register`)
+- `README.md` — full setup guide: Supabase migrations, env vars table, local dev, Vercel deployment, cron secrets, project structure, architecture decisions
+- `package.json` — Next.js upgraded `15.3.4` → `15.5.20` (patches CVE-2025-66478); `eslint-config-next` bumped to match
+- **18 loading skeletons** — `loading.tsx` for every async page:
+  - Dashboard: overview, tasks, my-tasks, earnings, withdrawal, referral, notifications, profile, security
+  - Admin: overview, users, tasks, approvals, withdrawals, fraud, audit-logs, ledger, reports
+
+### Verify
+- Vercel build completes with no TypeScript errors.
+- Slow network: navigating to any dashboard or admin page shows a skeleton, not a blank screen.
+- `/login` redirects to `/sign-in` (301).
+- `curl -I https://your-domain.vercel.app` — response includes `X-Frame-Options: DENY`.
+- Non-existent route → renders `not-found.tsx` (404 page).
+- Runtime error in a page → renders `error.tsx` with retry button.
