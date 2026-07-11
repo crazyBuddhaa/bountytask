@@ -7,6 +7,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 async function assertAdmin(userId: string) {
   const admin = createAdminClient()
   const { data } = await admin.from("users").select("role").eq("id", userId).single()
