@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, Mail, Lock, Chrome } from "lucide-react"
+import { Loader2, Mail, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -13,48 +13,35 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 const schema = z.object({
-  email: z.string().email("Enter a valid email"),
+  email:    z.string().email("Enter a valid email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 })
 type FormData = z.infer<typeof schema>
 
 function SignInForm() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get("redirect") ?? "/dashboard"
-  const [oauthLoading, setOauthLoading] = useState(false)
+  const redirect     = searchParams.get("redirect") ?? "/dashboard"
+  const [loading, setLoading] = useState(false)
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
 
   async function onSubmit(data: FormData) {
+    setLoading(true)
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
+      email:    data.email,
       password: data.password,
     })
     if (error) {
       toast.error(error.message)
+      setLoading(false)
       return
     }
     router.push(redirect)
     router.refresh()
-  }
-
-  async function signInWithGoogle() {
-    setOauthLoading(true)
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=${redirect}`,
-      },
-    })
-    if (error) {
-      toast.error(error.message)
-      setOauthLoading(false)
-    }
   }
 
   return (
@@ -62,26 +49,6 @@ function SignInForm() {
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
         <p className="text-muted-foreground mt-1">Sign in to your BountyTask account</p>
-      </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full mb-6"
-        onClick={signInWithGoogle}
-        disabled={oauthLoading || isSubmitting}
-      >
-        {oauthLoading ? <Loader2 className="animate-spin" /> : <Chrome className="w-4 h-4" />}
-        Continue with Google
-      </Button>
-
-      <div className="relative mb-6">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border" />
-        </div>
-        <div className="relative flex justify-center text-xs">
-          <span className="bg-background px-3 text-muted-foreground">or sign in with email</span>
-        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -120,8 +87,8 @@ function SignInForm() {
           {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
 
-        <Button type="submit" variant="gradient" className="w-full" disabled={isSubmitting || oauthLoading}>
-          {isSubmitting && <Loader2 className="animate-spin" />}
+        <Button type="submit" variant="gradient" className="w-full" disabled={loading}>
+          {loading && <Loader2 className="animate-spin" />}
           Sign In
         </Button>
       </form>
