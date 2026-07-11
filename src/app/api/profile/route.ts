@@ -6,6 +6,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const updateSchema = z.object({
   full_name: z.string().min(2).max(80).optional(),
   username: z.string().min(3).max(30).regex(/^[a-z0-9_]+$/, "Lowercase letters, numbers and underscores only").optional(),
