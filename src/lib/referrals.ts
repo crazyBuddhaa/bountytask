@@ -2,6 +2,38 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { appendLedger } from "@/lib/ledger";
 import { createNotification } from "@/lib/notifications";
 
+/**
+ * Credit the signup bonus (and process a pending referral code) for a
+ * brand-new user, but only once. Safe to call from multiple entry points
+ * (post-signup, OAuth callback, admin approval) since it checks the ledger
+ * first and is a no-op for any user who already has an entry.
+ */
+export async function creditSignupBonusIfNew(
+  userId: string,
+  referralCode?: string | null
+) {
+  const admin = createAdminClient();
+
+  const { count } = await admin
+    .from("ledger")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (count && count > 0) return { credited: false };
+
+  await creditSignupBonus(userId);
+
+  if (referralCode) {
+    try {
+      await processReferral(userId, referralCode);
+    } catch (e) {
+      console.error("Referral processing error:", e);
+    }
+  }
+
+  return { credited: true };
+}
+
 /** Referral signup bonus in kobo */
 export const REFERRAL_BONUS_KOBO = 50_000; // ₦500
 

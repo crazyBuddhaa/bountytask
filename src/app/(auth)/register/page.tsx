@@ -61,7 +61,7 @@ function RegisterForm() {
   async function onSubmitFree(data: BaseData) {
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -70,6 +70,27 @@ function RegisterForm() {
         },
       })
       if (error) { toast.error(error.message); return }
+
+      // Credit the welcome bonus right away. Don't rely on the user ever
+      // clicking a confirmation-email link (email confirmation may be off
+      // for this project, or the email may not arrive) — the callback
+      // route still handles it too, but only as an idempotent fallback.
+      if (signUpData.user) {
+        try {
+          await fetch("/api/auth/credit-signup-bonus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: signUpData.user.id,
+              referral_code: data.referral_code || undefined,
+            }),
+          })
+        } catch {
+          // Non-fatal — the /api/auth/callback path will still credit it
+          // once the account is confirmed/used for the first time.
+        }
+      }
+
       toast.success("Account created! Check your email to verify.", { duration: 6000 })
       router.push("/sign-in")
     } catch (err) {
