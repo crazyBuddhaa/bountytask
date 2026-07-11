@@ -1,0 +1,22 @@
+name: Process Expired Tasks
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour at :00
+  workflow_dispatch:       # allow manual trigger from GitHub UI
+
+jobs:
+  process-tasks:
+    name: Close expired tasks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call cron endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.APP_URL }}/api/cron/process-tasks" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "Response status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Cron endpoint returned unexpected status: $STATUS"
+            exit 1
+          fi
