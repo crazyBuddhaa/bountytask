@@ -5,6 +5,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const createSchema = z.object({
   title: z.string().min(5).max(120),
   description: z.string().min(10),
