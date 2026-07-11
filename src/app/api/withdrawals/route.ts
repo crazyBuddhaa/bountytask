@@ -7,6 +7,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const MIN_WITHDRAWAL = 500_000 // ₦5,000 in kobo
 
 const requestSchema = z.object({
