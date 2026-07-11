@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { creditSignupBonus, processReferral } from "@/lib/referrals"
+import { notifyVerificationApproved, notifyVerificationRejected } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
@@ -75,6 +76,10 @@ export async function PATCH(request: NextRequest) {
       reviewed_by: user.id,
     }).eq("id", id)
 
+    try {
+      await notifyVerificationRejected(record.email, record.full_name, notes ?? null)
+    } catch {}
+
     return NextResponse.json({ data: { success: true }, error: null })
   }
 
@@ -116,6 +121,12 @@ export async function PATCH(request: NextRequest) {
     reviewed_at: new Date().toISOString(),
     reviewed_by: user.id,
   }).eq("id", id)
+
+  // Email user — non-blocking
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://bountytask.vercel.app"
+  try {
+    await notifyVerificationApproved(record.email, record.full_name, appUrl)
+  } catch {}
 
   await auditLog({
     actorId: user.id,
