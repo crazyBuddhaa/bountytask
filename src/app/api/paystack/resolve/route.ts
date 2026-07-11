@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { resolveAccount } from "@/lib/paystack"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const schema = z.object({
   account_number: z.string().length(10),
   bank_code: z.string().min(1),
