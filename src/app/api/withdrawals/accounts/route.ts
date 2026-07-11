@@ -6,6 +6,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const addSchema = z.object({
   bank_code: z.string().min(2),
   bank_name: z.string().min(2),
