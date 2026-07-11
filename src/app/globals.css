@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 270 50% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 270 50% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 270 50% 8%;
+    --primary: 293 80% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 20% 95%;
+    --secondary-foreground: 270 50% 15%;
+    --muted: 270 20% 96%;
+    --muted-foreground: 270 15% 50%;
+    --accent: 293 60% 95%;
+    --accent-foreground: 293 80% 30%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 270 20% 90%;
+    --input: 270 20% 90%;
+    --ring: 293 80% 40%;
+    --radius: 0.625rem;
+
+    /* Brand */
+    --bounty-gradient: linear-gradient(135deg, #a21caf 0%, #7c3aed 50%, #4f46e5 100%);
+    --bounty-glow: 0 0 30px rgba(162, 28, 175, 0.15);
+  }
+
+  .dark {
+    --background: 270 50% 4%;
+    --foreground: 270 20% 95%;
+    --card: 270 40% 7%;
+    --card-foreground: 270 20% 95%;
+    --popover: 270 40% 7%;
+    --popover-foreground: 270 20% 95%;
+    --primary: 293 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 30% 12%;
+    --secondary-foreground: 270 20% 90%;
+    --muted: 270 30% 12%;
+    --muted-foreground: 270 15% 55%;
+    --accent: 293 40% 15%;
+    --accent-foreground: 293 70% 75%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 270 30% 18%;
+    --input: 270 30% 18%;
+    --ring: 293 70% 55%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-muted; }
+  ::-webkit-scrollbar-thumb { @apply bg-muted-foreground/30 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/50; }
+}
+
+@layer components {
+  .bounty-gradient {
+    background: var(--bounty-gradient);
+  }
+  .bounty-text-gradient {
+    background: var(--bounty-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bounty-glow {
+    box-shadow: var(--bounty-glow);
+  }
+  .glass {
+    @apply bg-white/80 backdrop-blur-sm border border-white/20;
+  }
+  .stat-card {
+    @apply rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow;
+  }
+  .shimmer {
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.4) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+}
