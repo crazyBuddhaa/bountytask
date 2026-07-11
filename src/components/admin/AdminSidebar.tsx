@@ -3,21 +3,24 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, Users, ListTodo, ClipboardCheck,
-  Banknote, Shield, FileText, BookOpen, BarChart2, LogOut,
+  Banknote, Shield, FileText, BookOpen, BarChart2,
+  Settings, UserCheck, LogOut,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
 const links = [
-  { href: "/admin",              label: "Overview",      icon: LayoutDashboard },
-  { href: "/admin/users",        label: "Users",         icon: Users           },
-  { href: "/admin/tasks",        label: "Tasks",         icon: ListTodo        },
-  { href: "/admin/approvals",    label: "Approvals",     icon: ClipboardCheck  },
-  { href: "/admin/withdrawals",  label: "Withdrawals",   icon: Banknote        },
-  { href: "/admin/fraud",        label: "Fraud Flags",   icon: Shield          },
-  { href: "/admin/audit-logs",   label: "Audit Logs",    icon: FileText        },
-  { href: "/admin/ledger",       label: "Ledger",        icon: BookOpen        },
-  { href: "/admin/reports",      label: "Reports",       icon: BarChart2       },
+  { href: "/admin",                       label: "Overview",              icon: LayoutDashboard },
+  { href: "/admin/users",                 label: "Users",                 icon: Users           },
+  { href: "/admin/tasks",                 label: "Tasks",                 icon: ListTodo        },
+  { href: "/admin/approvals",             label: "Approvals",             icon: ClipboardCheck  },
+  { href: "/admin/withdrawals",           label: "Withdrawals",           icon: Banknote        },
+  { href: "/admin/pending-verifications", label: "Pending Verifications", icon: UserCheck       },
+  { href: "/admin/fraud",                 label: "Fraud Flags",           icon: Shield          },
+  { href: "/admin/audit-logs",            label: "Audit Logs",            icon: FileText        },
+  { href: "/admin/ledger",                label: "Ledger",                icon: BookOpen        },
+  { href: "/admin/reports",               label: "Reports",               icon: BarChart2       },
+  { href: "/admin/settings",             label: "Settings",              icon: Settings        },
 ]
 
 export function AdminSidebar() {
