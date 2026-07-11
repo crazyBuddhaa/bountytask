@@ -108,6 +108,68 @@ export async function notifyTaskRejected(
   ]);
 }
 
+/** Email user when their bank-transfer registration is approved */
+export async function notifyVerificationApproved(
+  email: string,
+  fullName: string,
+  appUrl: string
+) {
+  await sendEmail({
+    to: email,
+    subject: "Your BountyTask account has been activated 🎉",
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#16a34a">Account Activated!</h2>
+        <p>Hi ${fullName},</p>
+        <p>
+          Your registration payment has been verified and your BountyTask account
+          is now active. We also credited your <strong>₦200 signup bonus</strong>.
+        </p>
+        <p>Click the button below to set your password and start earning:</p>
+        <a href="${appUrl}/forgot-password"
+           style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">
+          Set My Password &amp; Sign In →
+        </a>
+        <p style="color:#6b7280;font-size:13px">
+          Enter your email address on the password-reset page and we'll send you
+          a secure link to create your password.
+        </p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria · You're receiving this because you registered at bountytask.com</p>
+      </div>
+    `,
+  })
+}
+
+/** Email user when their bank-transfer registration is rejected */
+export async function notifyVerificationRejected(
+  email: string,
+  fullName: string,
+  reason: string | null
+) {
+  await sendEmail({
+    to: email,
+    subject: "BountyTask registration request — not approved",
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#dc2626">Registration Not Approved</h2>
+        <p>Hi ${fullName},</p>
+        <p>
+          Unfortunately we could not verify your payment and your registration
+          request has been declined.
+        </p>
+        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+        <p>
+          If you believe this is a mistake, please reply to this email with your
+          proof of payment and we'll review it again.
+        </p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria</p>
+      </div>
+    `,
+  })
+}
+
 /** Notify withdrawal status change */
 export async function notifyWithdrawalUpdate(
   userId: string,
