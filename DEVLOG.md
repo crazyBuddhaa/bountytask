@@ -186,7 +186,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 9 — Fraud Detection & Audit
-**Pushed:** commit `(pending)`
+**Pushed:** commit `a65b64b`
 **Date:** 2026-07-11
 
 ### Built
@@ -201,13 +201,20 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 10 — Ledger Explorer & Reports (Admin)
-**Status:** Pending
+## ✅ Stage 10 — Ledger Explorer & Reports (Admin)
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/app/admin/ledger/page.tsx` — full ledger with user/type/date filters
-- `src/app/admin/reports/page.tsx` — charts: signups, completions, credits, withdrawals
-- Admin API routes: ledger, reports
+### Built
+- `src/app/admin/ledger/page.tsx` — full cross-user ledger; filter by user ID, ref type, date range; 50/page; colour-coded credit/debit
+- `src/app/admin/reports/page.tsx` — period toggle (7d/30d/90d); signups+completions area chart; daily credits bar chart; top-tasks ranked bar; withdrawal volume breakdown
+- `src/app/api/admin/ledger/route.ts` — paginated, filterable by user, ref_type, date range
+- `src/app/api/admin/reports/route.ts` — aggregated daily stats, top tasks, withdrawal volume
+
+### Verify
+- Switch period → charts reload with correct date range.
+- Filter ledger by user ID → only that user's entries appear.
+- Top tasks list is sorted by completion count descending.
 
 ---
 
