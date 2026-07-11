@@ -1,27 +1,49 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+
+type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 const PROTECTED_ROUTES = ["/dashboard", "/admin"];
 const AUTH_ROUTES = ["/sign-in", "/register"];
 
-/**
- * Check for a Supabase session cookie.
- * @supabase/ssr stores the session in cookies named:
- *   sb-<project-ref>-auth-token  (or chunked as .0, .1, …)
- * We don't need to verify the JWT here — server components do that.
- * Middleware only needs to decide whether to redirect for UX purposes.
- */
-function hasAuthCookie(request: NextRequest): boolean {
-  for (const name of request.cookies.getAll().map((c) => c.name)) {
-    if (name.startsWith("sb-") && name.includes("-auth-token")) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isLoggedIn = hasAuthCookie(request);
+
+  // Response we'll mutate as Supabase refreshes/reads cookies, then
+  // ultimately return (or replace with a redirect further down).
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet: CookieToSet[]) {
+          // Cookies must be written to both the request (so this same
+          // middleware invocation sees the refreshed values) and the
+          // response (so the browser actually receives them).
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // IMPORTANT: this validates the session against Supabase (and refreshes
+  // it if the access token is expiring) rather than just checking whether
+  // a cookie happens to exist. A cookie can be present but the session it
+  // refers to invalid/expired — trusting presence alone causes an infinite
+  // redirect loop between protected routes and /sign-in.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
 
   // Redirect unauthenticated users away from protected routes
   const isProtected = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
@@ -40,7 +62,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
