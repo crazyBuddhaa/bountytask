@@ -150,7 +150,7 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 ---
 
 ## ✅ Stage 7 — Profile & Security
-**Pushed:** commit `(pending)`
+**Pushed:** commit `a6cd693`
 **Date:** 2026-07-11
 
 ### Built
@@ -164,22 +164,24 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ⏳ Stage 8 — Admin Dashboard
-**Status:** Pending
+## ✅ Stage 8 — Admin Dashboard
+**Pushed:** commit `(pending)`
+**Date:** 2026-07-11
 
-### Planned
-- `src/components/admin/AdminSidebar.tsx`
-- `src/app/admin/layout.tsx`
-- `src/app/admin/page.tsx` — platform stats
-- `src/app/admin/users/page.tsx` — user table with search, role, balance
-- `src/app/admin/tasks/page.tsx` — task CRUD with status management
-- `src/app/admin/approvals/page.tsx` — pending completions queue, bulk approve/reject
-- `src/app/admin/withdrawals/page.tsx` — withdrawal review
-- All admin API routes (stats, users, tasks, approvals, withdrawals)
+### Built
+- `src/components/admin/AdminSidebar.tsx` — sticky left nav with all 9 admin routes + back-to-dashboard link
+- `src/app/admin/layout.tsx` — server-side admin role guard (redirects non-admins to /dashboard)
+- `src/app/admin/page.tsx` — 6-stat overview grid using get_platform_stats() RPC
+- `src/app/admin/users/page.tsx` — searchable user table, role + status edit modal, balance shown per user
+- `src/app/admin/tasks/page.tsx` — full task CRUD: create, edit, status change, soft-archive
+- `src/app/admin/approvals/page.tsx` — pending queue with checkbox multi-select, bulk approve/reject, rejection-reason modal
+- `src/app/admin/withdrawals/page.tsx` — withdrawal review: approve, reject (with reversal), mark paid
+- `src/app/api/admin/{stats,users,users/[id],tasks,tasks/[id],approvals,withdrawals}/route.ts` — all admin API routes
 
 ### Verify
-- Admin approves completion → user balance increases.
-- Admin rejects withdrawal → ledger reversal entry appears.
+- Non-admin hitting /admin → redirected to /dashboard.
+- Approve completion → user balance increases immediately.
+- Reject withdrawal → ledger reversal credit appears in user's ledger.
 
 ---
 
