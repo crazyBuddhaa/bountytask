@@ -8,6 +8,8 @@ import { notifyTaskApproved } from "@/lib/notifications"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
+export const dynamic = 'force-dynamic'
+
 const bodySchema = z.object({
   proof_url: z.string().url().optional().nullable(),
   proof_text: z.string().max(2000).optional().nullable(),
