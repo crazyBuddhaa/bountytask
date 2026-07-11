@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest) {
     actorId: user.id,
     action: "settings.update",
     targetType: "platform_settings",
-    targetId: null,
+    targetId: undefined,
     details: { keys: entries.map(([k]) => k) },
     ipAddress: getClientIp(request.headers),
   })
