@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+export const dynamic = 'force-dynamic'
+
 async function assertAdmin(userId: string) {
   const admin = createAdminClient()
   const { data } = await admin.from("users").select("role").eq("id", userId).single()
