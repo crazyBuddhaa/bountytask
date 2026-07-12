@@ -121,7 +121,7 @@ returns json
 language sql
 stable
 security definer
-as $
+as $$
   select json_build_object(
     'total_users',              (select count(*) from public.users where role = 'user'),
     'active_users',             (select count(*) from public.users where role = 'user' and is_active = true),
@@ -134,4 +134,4 @@ as $
     'total_fraud_flags',        (select count(*) from public.fraud_flags where resolved = false),
     'total_ledger_credits_kobo',(select coalesce(sum(delta), 0) from public.ledger where type = 'credit')
   );
-$;
+$$;
