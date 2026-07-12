@@ -34,6 +34,7 @@ export default function AdminTiersPage() {
       body: JSON.stringify({
         name: tier.name,
         min_referrals: tier.min_referrals,
+        min_completions: tier.min_completions,
         daily_task_limit: tier.daily_task_limit,
         perks: tier.perks,
       }),
@@ -51,14 +52,15 @@ export default function AdminTiersPage() {
           <Layers className="w-6 h-6" /> User Tiers
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Users level up automatically as they onboard more referrals. Adjust the referral
-          threshold, daily task limit, and perks for each tier below.
+          Users level up automatically when they reach a tier's referral threshold <em>or</em> its
+          task-completion threshold — whichever comes first. Adjust thresholds, daily limits, and
+          perks for each tier below.
         </p>
       </div>
 
       {loading ? (
         <div className="space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-56 w-full" />)}
         </div>
       ) : (
         tiers.map((tier) => (
@@ -73,23 +75,35 @@ export default function AdminTiersPage() {
               <CardDescription>
                 {tier.id === 1
                   ? "The default tier every new user starts on."
-                  : `Unlocked once a user has onboarded at least this many referrals.`}
+                  : "Unlocked once a user meets either the referral or the task-completion threshold below."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor={`name-${tier.id}`}>Tier Name</Label>
+                <Input id={`name-${tier.id}`} value={tier.name}
+                  onChange={(e) => update(tier.id, { name: e.target.value })} />
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor={`name-${tier.id}`}>Tier Name</Label>
-                  <Input id={`name-${tier.id}`} value={tier.name}
-                    onChange={(e) => update(tier.id, { name: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`min-${tier.id}`}>Min. Referrals Required</Label>
-                  <Input id={`min-${tier.id}`} type="number" min={0} value={tier.min_referrals}
+                  <Label htmlFor={`min-ref-${tier.id}`}>Min. Referrals to Unlock</Label>
+                  <Input id={`min-ref-${tier.id}`} type="number" min={0}
+                    value={tier.min_referrals}
                     disabled={tier.id === 1}
                     onChange={(e) => update(tier.id, { min_referrals: parseInt(e.target.value) || 0 })} />
+                  <p className="text-xs text-muted-foreground">Referral-based path to this tier.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`min-comp-${tier.id}`}>Min. Tasks Completed to Unlock</Label>
+                  <Input id={`min-comp-${tier.id}`} type="number" min={0}
+                    value={tier.min_completions}
+                    disabled={tier.id === 1}
+                    onChange={(e) => update(tier.id, { min_completions: parseInt(e.target.value) || 0 })} />
+                  <p className="text-xs text-muted-foreground">Task-completion path to this tier.</p>
                 </div>
               </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor={`limit-${tier.id}`}>Daily Task Limit</Label>
                 <Input id={`limit-${tier.id}`} type="number" min={1} className="w-40"
@@ -102,7 +116,7 @@ export default function AdminTiersPage() {
                 <Textarea id={`perks-${tier.id}`} rows={2} value={tier.perks}
                   onChange={(e) => update(tier.id, { perks: e.target.value })}
                   placeholder="e.g. Access to exclusive tasks, priority support..." />
-                <p className="text-xs text-muted-foreground">Shown to users on their Referral page.</p>
+                <p className="text-xs text-muted-foreground">Shown to users on their progress page.</p>
               </div>
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => save(tier)} disabled={savingId === tier.id}>

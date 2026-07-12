@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { Copy, Check, Users, Gift, Share2, Trophy, Sparkles } from "lucide-react"
+import { Copy, Check, Users, Gift, Share2, Trophy, Sparkles, CheckSquare } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,15 +31,16 @@ interface TierStatus {
   currentTier: Tier | null
   nextTier: Tier | null
   referralCount: number
+  totalCompletions: number
   tasksCompletedToday: number
   dailyLimit: number
 }
 
 export default function ReferralPage() {
-  const [data, setData]       = useState<ReferralData | null>(null)
+  const [data, setData]             = useState<ReferralData | null>(null)
   const [tierStatus, setTierStatus] = useState<TierStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [copied, setCopied]   = useState<"code" | "url" | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [copied, setCopied]         = useState<"code" | "url" | null>(null)
 
   useEffect(() => {
     fetch("/api/referrals")
@@ -109,7 +110,7 @@ export default function ReferralPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {!tierStatus ? (
-            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-40 w-full" />
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -127,28 +128,71 @@ export default function ReferralPage() {
                 </div>
               </div>
 
-              {tierStatus.nextTier && (
-                <div>
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>{tierStatus.referralCount} referred</span>
-                    <span>
-                      {Math.max(tierStatus.nextTier.min_referrals - tierStatus.referralCount, 0)} more to reach{" "}
-                      {tierStatus.nextTier.name}
-                    </span>
+              {tierStatus.nextTier && (() => {
+                const { nextTier, referralCount, totalCompletions } = tierStatus
+
+                // Progress toward next tier via referrals
+                const refPct = Math.min(
+                  100,
+                  nextTier.min_referrals > 0
+                    ? (referralCount / nextTier.min_referrals) * 100
+                    : 100
+                )
+                const refLeft = Math.max(nextTier.min_referrals - referralCount, 0)
+
+                // Progress toward next tier via task completions
+                const compPct = Math.min(
+                  100,
+                  nextTier.min_completions > 0
+                    ? (totalCompletions / nextTier.min_completions) * 100
+                    : 100
+                )
+                const compLeft = Math.max(nextTier.min_completions - totalCompletions, 0)
+
+                return (
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Progress to {nextTier.name} — complete either path
+                    </p>
+
+                    {/* Referral path */}
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span className="flex items-center gap-1">
+                          <Users className="w-3 h-3" /> {referralCount} referral{referralCount !== 1 ? "s" : ""}
+                        </span>
+                        <span>
+                          {refLeft > 0 ? `${refLeft} more referral${refLeft !== 1 ? "s" : ""} needed` : "✓ threshold met"}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bounty-gradient rounded-full transition-all"
+                          style={{ width: `${refPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Task completion path */}
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span className="flex items-center gap-1">
+                          <CheckSquare className="w-3 h-3" /> {totalCompletions} task{totalCompletions !== 1 ? "s" : ""} completed
+                        </span>
+                        <span>
+                          {compLeft > 0 ? `${compLeft} more task${compLeft !== 1 ? "s" : ""} needed` : "✓ threshold met"}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all"
+                          style={{ width: `${compPct}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bounty-gradient rounded-full"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          (tierStatus.referralCount / Math.max(tierStatus.nextTier.min_referrals, 1)) * 100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
+                )
+              })()}
 
               <div className="grid sm:grid-cols-3 gap-2 pt-1">
                 {tierStatus.tiers.map((t) => (
@@ -161,7 +205,8 @@ export default function ReferralPage() {
                     }`}
                   >
                     <p className="font-semibold">{t.id}. {t.name}</p>
-                    <p className="text-muted-foreground">{t.min_referrals}+ referrals · {t.daily_task_limit}/day</p>
+                    <p className="text-muted-foreground">{t.min_referrals}+ referrals</p>
+                    <p className="text-muted-foreground">{t.min_completions}+ tasks · {t.daily_task_limit}/day</p>
                   </div>
                 ))}
               </div>

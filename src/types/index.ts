@@ -52,6 +52,7 @@ export interface Tier {
   id: number;
   name: string;
   min_referrals: number;
+  min_completions: number;
   daily_task_limit: number;
   perks: string;
   updated_at: string;

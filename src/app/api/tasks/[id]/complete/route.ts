@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { creditReferralBonus } from "@/lib/referrals"
 import { flagUser, checkTaskCompletionRate, hasCompletedTask, recordDevice } from "@/lib/fraud"
-import { checkDailyTaskLimit } from "@/lib/tiers"
+import { checkDailyTaskLimit, recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved } from "@/lib/notifications"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
@@ -104,6 +104,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await Promise.all([
       notifyTaskApproved(user.id, profile?.email ?? "", task.title, task.reward_amount, completion.id),
       creditReferralBonus(user.id),
+      recalcUserTier(user.id),
     ])
     void ledgerEntry // used above
   }

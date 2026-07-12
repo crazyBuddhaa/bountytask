@@ -8,28 +8,54 @@ export async function getAllTiers(): Promise<Tier[]> {
   return data ?? [];
 }
 
-/** Highest tier whose min_referrals threshold the given count satisfies. */
-export function pickTierForCount(tiers: Tier[], referralCount: number): Tier | null {
-  const eligible = tiers.filter((t) => referralCount >= t.min_referrals);
-  if (eligible.length === 0) return tiers[0] ?? null;
-  return eligible.reduce((best, t) => (t.min_referrals > best.min_referrals ? t : best));
+/**
+ * Total approved task completions for a user (all-time, not just today).
+ * Used for task-based tier advancement.
+ */
+export async function getTotalApprovedCompletions(userId: string): Promise<number> {
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("task_completions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "approved");
+  return count ?? 0;
 }
 
 /**
- * Recalculate and persist a user's tier from their current referral count.
- * Called whenever a new referral is recorded. Only ever raises the tier —
- * never automatically downgrades a tier an admin manually raised.
+ * Highest tier the user qualifies for.
+ * A user reaches a tier by meeting EITHER the referral threshold OR the
+ * task-completion threshold — whichever path they hit first promotes them.
+ */
+export function pickTierForUser(
+  tiers: Tier[],
+  referralCount: number,
+  completionCount: number
+): Tier | null {
+  const eligible = tiers.filter(
+    (t) => referralCount >= t.min_referrals || completionCount >= t.min_completions
+  );
+  if (eligible.length === 0) return tiers[0] ?? null;
+  return eligible.reduce((best, t) => (t.id > best.id ? t : best));
+}
+
+/**
+ * Recalculate and persist a user's tier from their current referral count
+ * AND their total approved task completions.
+ * Only ever raises the tier — never automatically downgrades a tier an admin
+ * manually set to a higher value.
  */
 export async function recalcUserTier(userId: string): Promise<number> {
   const admin = createAdminClient();
 
-  const [{ count }, tiers, { data: current }] = await Promise.all([
+  const [{ count: referralCount }, completionCount, tiers, { data: current }] = await Promise.all([
     admin.from("referrals").select("id", { count: "exact", head: true }).eq("referrer_id", userId),
+    getTotalApprovedCompletions(userId),
     getAllTiers(),
     admin.from("users").select("tier").eq("id", userId).single(),
   ]);
 
-  const earned = pickTierForCount(tiers, count ?? 0);
+  const earned = pickTierForUser(tiers, referralCount ?? 0, completionCount);
   const currentTier = current?.tier ?? 1;
   if (!earned) return currentTier;
 
@@ -40,7 +66,7 @@ export async function recalcUserTier(userId: string): Promise<number> {
   return newTier;
 }
 
-/** Number of tasks a user has completed (submitted) since UTC midnight today. */
+/** Number of tasks a user has completed (approved) since UTC midnight today. */
 export async function getTasksCompletedToday(userId: string): Promise<number> {
   const admin = createAdminClient();
   const startOfDay = new Date();
@@ -50,6 +76,7 @@ export async function getTasksCompletedToday(userId: string): Promise<number> {
     .from("task_completions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
+    .eq("status", "approved")
     .gte("created_at", startOfDay.toISOString());
 
   return count ?? 0;
@@ -75,15 +102,20 @@ export async function checkDailyTaskLimit(
   return { limited: used >= limit, used, limit };
 }
 
-/** Full tier snapshot for a user: current tier, referral count, next tier, and today's usage. */
+/**
+ * Full tier snapshot for a user: current tier, referral count, total approved
+ * completions, next tier thresholds, and today's usage.
+ */
 export async function getUserTierStatus(userId: string) {
   const admin = createAdminClient();
-  const [tiers, { count: referralCount }, { data: profile }, tasksCompletedToday] = await Promise.all([
-    getAllTiers(),
-    admin.from("referrals").select("id", { count: "exact", head: true }).eq("referrer_id", userId),
-    admin.from("users").select("tier").eq("id", userId).single(),
-    getTasksCompletedToday(userId),
-  ]);
+  const [tiers, { count: referralCount }, { data: profile }, tasksCompletedToday, totalCompletions] =
+    await Promise.all([
+      getAllTiers(),
+      admin.from("referrals").select("id", { count: "exact", head: true }).eq("referrer_id", userId),
+      admin.from("users").select("tier").eq("id", userId).single(),
+      getTasksCompletedToday(userId),
+      getTotalApprovedCompletions(userId),
+    ]);
 
   const currentTierId = profile?.tier ?? 1;
   const currentTier = tiers.find((t) => t.id === currentTierId) ?? tiers[0] ?? null;
@@ -94,6 +126,7 @@ export async function getUserTierStatus(userId: string) {
     currentTier,
     nextTier,
     referralCount: referralCount ?? 0,
+    totalCompletions,
     tasksCompletedToday,
     dailyLimit: currentTier?.daily_task_limit ?? 10,
   };

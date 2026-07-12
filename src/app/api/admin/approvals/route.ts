@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { creditReferralBonus } from "@/lib/referrals"
+import { recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved, notifyTaskRejected } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
       })
       await notifyTaskApproved(completion.user_id, completion.user.email, completion.task.title, completion.task.reward_amount, completionId)
       await creditReferralBonus(completion.user_id)
+      await recalcUserTier(completion.user_id)
     } else {
       await admin.from("task_completions").update({ status: "rejected", reviewed_at: now, reviewed_by: user.id, rejection_reason: reason ?? "Does not meet requirements" }).eq("id", completionId)
       await notifyTaskRejected(completion.user_id, completion.user.email, completion.task.title, reason ?? "Does not meet requirements", completionId)

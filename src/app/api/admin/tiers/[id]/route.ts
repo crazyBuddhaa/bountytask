@@ -16,6 +16,7 @@ async function assertAdmin(userId: string) {
 const updateSchema = z.object({
   name:             z.string().min(1).max(40).optional(),
   min_referrals:    z.number().int().min(0).optional(),
+  min_completions:  z.number().int().min(0).optional(),
   daily_task_limit: z.number().int().min(1).optional(),
   perks:            z.string().max(1000).optional(),
 })
