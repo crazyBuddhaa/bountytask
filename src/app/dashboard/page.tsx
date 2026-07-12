@@ -1,14 +1,27 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getLiveBalance, getLedgerHistory } from "@/lib/ledger"
+import { getUserTierStatus } from "@/lib/tiers"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { TrendingUp, CheckCircle2, Clock, Banknote, ArrowRight, Zap, ListTodo } from "lucide-react"
+import { TrendingUp, CheckCircle2, Clock, ArrowRight, Zap, ListTodo, Award, ChevronRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatCurrency, formatDate, timeAgo } from "@/lib/utils"
 import type { TaskCompletion, LedgerEntry } from "@/types"
+
+function tierBadgeClass(name?: string | null) {
+  switch (name?.toLowerCase()) {
+    case "bronze":   return "bg-amber-100 text-amber-800 border-amber-200"
+    case "silver":   return "bg-slate-100 text-slate-700 border-slate-200"
+    case "gold":     return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    case "platinum": return "bg-cyan-100 text-cyan-800 border-cyan-200"
+    case "diamond":  return "bg-blue-100 text-blue-800 border-blue-200"
+    case "elite":    return "bg-purple-100 text-purple-800 border-purple-200"
+    default:         return "bg-muted text-muted-foreground border-border"
+  }
+}
 
 export const metadata = { title: "Dashboard" }
 
@@ -19,7 +32,7 @@ export default async function DashboardPage() {
 
   const admin = createAdminClient()
 
-  const [balance, { entries: recentLedger }, completionsResult, tasksResult] = await Promise.all([
+  const [balance, { entries: recentLedger }, completionsResult, tasksResult, tierStatus] = await Promise.all([
     getLiveBalance(user.id),
     getLedgerHistory(user.id, { page: 1, limit: 5 }),
     admin
@@ -32,6 +45,7 @@ export default async function DashboardPage() {
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
+    getUserTierStatus(user.id),
   ])
 
   const completions = (completionsResult.data ?? []) as unknown as (TaskCompletion & { task: { title: string } })[]
@@ -124,6 +138,73 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Tier status card */}
+      {tierStatus.currentTier && (
+        <Link href="/dashboard/referral">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-primary/20">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-4">
+                {/* Left: badge + perks */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${tierBadgeClass(tierStatus.currentTier.name)}`}>
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge className={`text-[10px] border ${tierBadgeClass(tierStatus.currentTier.name)}`}>
+                        Tier {tierStatus.currentTier.id} · {tierStatus.currentTier.name}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{tierStatus.currentTier.perks}</p>
+                  </div>
+                </div>
+
+                {/* Centre: daily limit progress */}
+                <div className="hidden sm:block text-center shrink-0">
+                  <p className="text-sm font-bold">{tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit}</p>
+                  <p className="text-[10px] text-muted-foreground">tasks today</p>
+                </div>
+
+                {/* Right: next tier nudge */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {tierStatus.nextTier ? (
+                    <p className="text-xs text-muted-foreground hidden md:block">
+                      Next: <span className="font-semibold text-foreground">{tierStatus.nextTier.name}</span>
+                    </p>
+                  ) : (
+                    <Badge variant="success" className="text-[10px]">Max Tier</Badge>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </div>
+
+              {/* Progress bars — only if there's a next tier */}
+              {tierStatus.nextTier && (() => {
+                const { nextTier, referralCount, totalCompletions } = tierStatus
+                const refPct  = Math.min(100, nextTier.min_referrals  > 0 ? (referralCount   / nextTier.min_referrals)  * 100 : 100)
+                const compPct = Math.min(100, nextTier.min_completions > 0 ? (totalCompletions / nextTier.min_completions) * 100 : 100)
+                return (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">{referralCount}/{nextTier.min_referrals} referrals</p>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bounty-gradient rounded-full transition-all" style={{ width: `${refPct}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">{totalCompletions}/{nextTier.min_completions} tasks completed</p>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${compPct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Recent transactions */}

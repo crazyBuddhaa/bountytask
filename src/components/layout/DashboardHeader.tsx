@@ -1,7 +1,7 @@
 "use client"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Bell, LogOut, User, Settings, Menu, Zap } from "lucide-react"
+import { Bell, LogOut, User, Settings, Menu, Zap, Award } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -13,15 +13,28 @@ import {
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { DashboardSidebar } from "./DashboardSidebar"
 import { getInitials, formatCurrency } from "@/lib/utils"
-import type { UserProfile } from "@/types"
+import type { UserProfile, Tier } from "@/types"
 
 interface DashboardHeaderProps {
   user: UserProfile
   balance: number
   unreadCount?: number
+  currentTier?: Tier | null
 }
 
-export function DashboardHeader({ user, balance, unreadCount = 0 }: DashboardHeaderProps) {
+function tierBadgeClass(name?: string | null) {
+  switch (name?.toLowerCase()) {
+    case "bronze":   return "bg-amber-100 text-amber-800 border-amber-200"
+    case "silver":   return "bg-slate-100 text-slate-700 border-slate-200"
+    case "gold":     return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    case "platinum": return "bg-cyan-100 text-cyan-800 border-cyan-200"
+    case "diamond":  return "bg-blue-100 text-blue-800 border-blue-200"
+    case "elite":    return "bg-purple-100 text-purple-800 border-purple-200"
+    default:         return "bg-muted text-muted-foreground border-border"
+  }
+}
+
+export function DashboardHeader({ user, balance, unreadCount = 0, currentTier }: DashboardHeaderProps) {
   const router = useRouter()
 
   async function handleSignOut() {
@@ -57,6 +70,16 @@ export function DashboardHeader({ user, balance, unreadCount = 0 }: DashboardHea
         </Link>
 
         <div className="flex-1" />
+
+        {/* Tier badge */}
+        {currentTier && (
+          <Link href="/dashboard/referral">
+            <div className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border ${tierBadgeClass(currentTier.name)}`}>
+              <Award className="w-3.5 h-3.5" />
+              {currentTier.name}
+            </div>
+          </Link>
+        )}
 
         {/* Balance pill */}
         <div className="hidden sm:flex items-center gap-2 bg-primary/10 text-primary rounded-full px-4 py-1.5">

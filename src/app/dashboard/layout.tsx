@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getLiveBalance } from "@/lib/ledger"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getUserTierStatus } from "@/lib/tiers"
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"
 import { AdSlot } from "@/components/ads/AdSlot"
@@ -14,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const admin = createAdminClient()
 
-  const [profileResult, balance, notifResult] = await Promise.all([
+  const [profileResult, balance, notifResult, tierStatus] = await Promise.all([
     admin.from("users").select("*").eq("id", user.id).single(),
     getLiveBalance(user.id),
     admin
@@ -22,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("read", false),
+    getUserTierStatus(user.id),
   ])
 
   if (!profileResult.data) redirect("/sign-in")
@@ -33,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="flex min-h-screen bg-muted/30">
       <DashboardSidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} />
+        <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} currentTier={tierStatus.currentTier} />
         <main className="flex-1 p-4 lg:p-6 animate-fade-in space-y-4">
           <AdSlot placement="dashboard" />
           {children}

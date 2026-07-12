@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Camera, User, ShieldCheck, Smartphone } from "lucide-react"
+import { Loader2, Camera, User, ShieldCheck, Smartphone, Award } from "lucide-react"
+import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,13 +13,26 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { uploadFile } from "@/lib/storage"
 import { createClient } from "@/lib/supabase/client"
-import type { UserProfile } from "@/types"
+import type { UserProfile, Tier } from "@/types"
+
+function tierBadgeClass(name?: string | null) {
+  switch (name?.toLowerCase()) {
+    case "bronze":   return "bg-amber-100 text-amber-800 border-amber-200"
+    case "silver":   return "bg-slate-100 text-slate-700 border-slate-200"
+    case "gold":     return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    case "platinum": return "bg-cyan-100 text-cyan-800 border-cyan-200"
+    case "diamond":  return "bg-blue-100 text-blue-800 border-blue-200"
+    case "elite":    return "bg-purple-100 text-purple-800 border-purple-200"
+    default:         return "bg-muted text-muted-foreground border-border"
+  }
+}
 
 export default function ProfilePage() {
   const router = useRouter()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving]   = useState(false)
+  const [profile, setProfile]     = useState<UserProfile | null>(null)
+  const [currentTier, setCurrentTier] = useState<Tier | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [saving, setSaving]       = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -27,16 +41,18 @@ export default function ProfilePage() {
   const [phone, setPhone]         = useState("")
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then(r => r.json())
-      .then(j => {
-        const p = j.data as UserProfile & { balance: number }
-        setProfile(p)
-        setFullName(p?.full_name ?? "")
-        setUsername(p?.username ?? "")
-        setPhone(p?.phone ?? "")
-        setLoading(false)
-      })
+    Promise.all([
+      fetch("/api/profile").then(r => r.json()),
+      fetch("/api/tiers").then(r => r.json()),
+    ]).then(([profileJson, tiersJson]) => {
+      const p = profileJson.data as UserProfile & { balance: number }
+      setProfile(p)
+      setFullName(p?.full_name ?? "")
+      setUsername(p?.username ?? "")
+      setPhone(p?.phone ?? "")
+      setCurrentTier(tiersJson.data?.currentTier ?? null)
+      setLoading(false)
+    })
   }, [])
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -115,11 +131,19 @@ export default function ProfilePage() {
           <div>
             <p className="font-medium">{loading ? <Skeleton className="h-5 w-32" /> : profile?.full_name}</p>
             <p className="text-sm text-muted-foreground">{profile?.email}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant={profile?.role === "admin" ? "default" : "outline"} className="text-[10px] capitalize">
                 {profile?.role ?? "user"}
               </Badge>
               {profile?.kyc_verified && <Badge variant="success" className="text-[10px]">KYC Verified</Badge>}
+              {currentTier && (
+                <Link href="/dashboard/referral">
+                  <Badge className={`text-[10px] border gap-1 cursor-pointer ${tierBadgeClass(currentTier.name)}`}>
+                    <Award className="w-3 h-3" />
+                    Tier {currentTier.id} · {currentTier.name}
+                  </Badge>
+                </Link>
+              )}
             </div>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => fileRef.current?.click()} disabled={uploading}>
               {uploading ? "Uploading..." : "Change photo"}
