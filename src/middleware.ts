@@ -45,6 +45,17 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
   const isLoggedIn = !!user;
 
+  // Long-lived anonymous visitor id used for website traffic analytics
+  // (distinct from the auth session). Assigned once, reused across visits.
+  if (!request.cookies.get("bt_vid")?.value) {
+    response.cookies.set("bt_vid", crypto.randomUUID(), {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 400, // ~13 months
+    });
+  }
+
   // Redirect unauthenticated users away from protected routes
   const isProtected = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
   if (isProtected && !isLoggedIn) {
