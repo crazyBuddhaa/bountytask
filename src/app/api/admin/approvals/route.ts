@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   let query = admin
     .from("task_completions")
-    .select("*, task:tasks(id,title,reward_amount,type), user:users(id,full_name,email,username)", { count: "exact" })
+    // task_completions has two FKs to users (user_id, reviewed_by); the embed is ambiguous
+    // without an explicit FK hint and PostgREST rejects the query, which was silently
+    // surfacing as an empty "0 pending submissions" queue.
+    .select("*, task:tasks(id,title,reward_amount,type), user:users!task_completions_user_id_fkey(id,full_name,email,username)", { count: "exact" })
     .eq("status", "pending")
     .order("submitted_at", { ascending: true })
     .range(from, from + limit - 1)
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
   for (const completionId of ids) {
     const { data: completion } = await admin
       .from("task_completions")
-      .select("*, task:tasks(title,reward_amount), user:users(id,email,full_name)")
+      .select("*, task:tasks(title,reward_amount), user:users!task_completions_user_id_fkey(id,email,full_name)")
       .eq("id", completionId)
       .eq("status", "pending")
       .single()

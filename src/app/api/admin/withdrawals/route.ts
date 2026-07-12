@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   let query = admin
     .from("withdrawals")
-    .select("*, user:users(id,full_name,email), account:withdrawal_accounts(*)", { count: "exact" })
+    // withdrawals has two FKs to users (user_id, reviewed_by); without an explicit FK hint
+    // the embed is ambiguous and PostgREST rejects the query, silently returning no rows.
+    .select("*, user:users!withdrawals_user_id_fkey(id,full_name,email), account:withdrawal_accounts(*)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, from + limit - 1)
 
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
 
   const { data: withdrawal } = await admin
     .from("withdrawals")
-    .select("*, user:users(id,email,full_name), account:withdrawal_accounts(*)")
+    .select("*, user:users!withdrawals_user_id_fkey(id,email,full_name), account:withdrawal_accounts(*)")
     .eq("id", id).single()
   if (!withdrawal) return NextResponse.json({ data: null, error: "Withdrawal not found" }, { status: 404 })
 

@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   let query = admin
     .from("fraud_flags")
-    .select("*, user:users(id,full_name,email)", { count: "exact" })
+    // fraud_flags has two FKs to users (user_id, resolved_by); without an explicit FK hint
+    // the embed is ambiguous and PostgREST rejects the query, silently returning no rows.
+    .select("*, user:users!fraud_flags_user_id_fkey(id,full_name,email)", { count: "exact" })
     .eq("resolved", false)
     .order("created_at", { ascending: false })
     .range(from, from + limit - 1)
