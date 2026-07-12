@@ -1,11 +1,12 @@
 "use client"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone, Banknote } from "lucide-react"
+import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone, Banknote, Megaphone, LayoutTemplate } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 type Settings = {
@@ -17,6 +18,16 @@ type Settings = {
   bank_transfer_bank: string
   phone_verification_enabled: boolean
   min_withdrawal_kobo: number
+  advertiser_submissions_enabled: boolean
+  advertiser_min_budget_kobo: number
+  advertiser_requirements: string
+  advertiser_pricing_info: string
+  advertiser_contact_email: string
+  advertiser_submission_fee_enabled: boolean
+  advertiser_submission_fee_kobo: number
+  ads_enabled: boolean
+  ads_dashboard_snippet: string
+  ads_tasklist_snippet: string
 }
 
 export default function AdminSettingsPage() {
@@ -29,6 +40,16 @@ export default function AdminSettingsPage() {
     bank_transfer_bank: "",
     phone_verification_enabled: false,
     min_withdrawal_kobo: 500000,
+    advertiser_submissions_enabled: false,
+    advertiser_min_budget_kobo: 500000,
+    advertiser_requirements: "",
+    advertiser_pricing_info: "",
+    advertiser_contact_email: "",
+    advertiser_submission_fee_enabled: false,
+    advertiser_submission_fee_kobo: 500000,
+    ads_enabled: false,
+    ads_dashboard_snippet: "",
+    ads_tasklist_snippet: "",
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -47,6 +68,16 @@ export default function AdminSettingsPage() {
             bank_transfer_bank:          data.bank_transfer_bank           ?? "",
             phone_verification_enabled:  data.phone_verification_enabled   ?? false,
             min_withdrawal_kobo:         data.min_withdrawal_kobo          ?? 500000,
+            advertiser_submissions_enabled:    data.advertiser_submissions_enabled    ?? false,
+            advertiser_min_budget_kobo:        data.advertiser_min_budget_kobo         ?? 500000,
+            advertiser_requirements:          data.advertiser_requirements            ?? "",
+            advertiser_pricing_info:          data.advertiser_pricing_info            ?? "",
+            advertiser_contact_email:         data.advertiser_contact_email           ?? "",
+            advertiser_submission_fee_enabled: data.advertiser_submission_fee_enabled ?? false,
+            advertiser_submission_fee_kobo:   data.advertiser_submission_fee_kobo      ?? 500000,
+            ads_enabled:            data.ads_enabled            ?? false,
+            ads_dashboard_snippet:  data.ads_dashboard_snippet  ?? "",
+            ads_tasklist_snippet:   data.ads_tasklist_snippet   ?? "",
           })
         }
       })
@@ -273,6 +304,160 @@ export default function AdminSettingsPage() {
               onCheckedChange={(v) => setSettings((s) => ({ ...s, phone_verification_enabled: v }))}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Advertiser Submissions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Megaphone className="w-4 h-4" /> Advertiser Submissions
+          </CardTitle>
+          <CardDescription>
+            Lets outside businesses submit their own task requests via <code>/advertise</code>. Every
+            submission lands here as a pending lead — nothing goes live until you approve it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Accept advertiser submissions</p>
+              <p className="text-xs text-muted-foreground">Toggle the intake form on or off</p>
+            </div>
+            <Switch
+              checked={settings.advertiser_submissions_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, advertiser_submissions_enabled: v }))}
+            />
+          </div>
+
+          {settings.advertiser_submissions_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="adv_min_budget">Minimum Budget (₦)</Label>
+                <Input
+                  id="adv_min_budget"
+                  type="number"
+                  value={Math.round(settings.advertiser_min_budget_kobo / 100)}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, advertiser_min_budget_kobo: (parseInt(e.target.value) || 0) * 100 }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">Submissions below this budget are rejected automatically.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adv_contact_email">Contact Email</Label>
+                <Input
+                  id="adv_contact_email"
+                  type="email"
+                  placeholder="partners@bountytask.ng"
+                  value={settings.advertiser_contact_email}
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_contact_email: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Shown to advertisers when submissions are closed, or for direct enquiries.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adv_requirements">Requirements</Label>
+                <Textarea
+                  id="adv_requirements"
+                  rows={3}
+                  placeholder="e.g. Tasks must be legal, safe, and verifiable..."
+                  value={settings.advertiser_requirements}
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_requirements: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Displayed on the /advertise page above the form.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adv_pricing">Pricing Details</Label>
+                <Textarea
+                  id="adv_pricing"
+                  rows={3}
+                  placeholder="e.g. Flat-fee tasks vs. CPA/affiliate offers, how billing works..."
+                  value={settings.advertiser_pricing_info}
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_pricing_info: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <p className="text-sm font-medium">Charge a submission fee</p>
+                  <p className="text-xs text-muted-foreground">Advertiser pays via Paystack before the lead reaches review</p>
+                </div>
+                <Switch
+                  checked={settings.advertiser_submission_fee_enabled}
+                  onCheckedChange={(v) => setSettings((s) => ({ ...s, advertiser_submission_fee_enabled: v }))}
+                />
+              </div>
+
+              {settings.advertiser_submission_fee_enabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="adv_fee">Submission Fee (₦)</Label>
+                  <Input
+                    id="adv_fee"
+                    type="number"
+                    value={Math.round(settings.advertiser_submission_fee_kobo / 100)}
+                    onChange={(e) =>
+                      setSettings((s) => ({ ...s, advertiser_submission_fee_kobo: (parseInt(e.target.value) || 0) * 100 }))
+                    }
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* In-App Display Ads */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LayoutTemplate className="w-4 h-4" /> Display Ads
+          </CardTitle>
+          <CardDescription>
+            Paste an ad network snippet (e.g. AdMaven, PropellerAds, AdSense) to run banner ads on
+            worker-facing pages. Leave a field blank to skip that placement.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable display ads</p>
+              <p className="text-xs text-muted-foreground">Toggle all ad placements on or off</p>
+            </div>
+            <Switch
+              checked={settings.ads_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, ads_enabled: v }))}
+            />
+          </div>
+
+          {settings.ads_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="ads_dashboard">Dashboard Placement (HTML/script snippet)</Label>
+                <Textarea
+                  id="ads_dashboard"
+                  rows={3}
+                  placeholder='<script async src="..."></script>'
+                  value={settings.ads_dashboard_snippet}
+                  onChange={(e) => setSettings((s) => ({ ...s, ads_dashboard_snippet: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Shown at the top of the worker dashboard.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ads_tasklist">Task List Placement (HTML/script snippet)</Label>
+                <Textarea
+                  id="ads_tasklist"
+                  rows={3}
+                  placeholder='<script async src="..."></script>'
+                  value={settings.ads_tasklist_snippet}
+                  onChange={(e) => setSettings((s) => ({ ...s, ads_tasklist_snippet: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Shown between the filters and grid on the Tasks page.</p>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

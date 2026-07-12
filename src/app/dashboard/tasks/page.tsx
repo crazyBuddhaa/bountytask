@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { TaskCard } from "@/components/tasks/TaskCard"
 import { TaskCompletionModal } from "@/components/tasks/TaskCompletionModal"
+import { AdSlot } from "@/components/ads/AdSlot"
 import type { Task, TaskCategory } from "@/types"
 
 export default function TasksPage() {
@@ -99,6 +100,8 @@ export default function TasksPage() {
         <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-primary" /> Instant Pay — credited immediately</span>
         <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-amber-500" /> Verified — requires admin review</span>
       </div>
+
+      <AdSlot placement="tasklist" />
 
       {/* Grid */}
       {loading ? (

@@ -5,9 +5,10 @@ import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const links = [
-  { href: "/about", label: "About"   },
-  { href: "/faq",   label: "FAQ"     },
-  { href: "/contact",label: "Contact"},
+  { href: "/about",    label: "About"    },
+  { href: "/faq",      label: "FAQ"      },
+  { href: "/contact",  label: "Contact"  },
+  { href: "/advertise",label: "Advertise"},
 ]
 
 export function PublicHeader() {

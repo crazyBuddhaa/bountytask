@@ -18,6 +18,11 @@ const statusVariant: Record<string, "success" | "pending" | "destructive" | "out
   active: "success", draft: "pending", completed: "outline", archived: "destructive",
 }
 
+function margin(t: Task) {
+  if (t.advertiser_cost_kobo == null) return null
+  return t.advertiser_cost_kobo - t.reward_amount
+}
+
 export default function AdminTasksPage() {
   const [tasks, setTasks]       = useState<Task[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
@@ -111,6 +116,7 @@ export default function AdminTasksPage() {
               <TableHead>Task</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Reward</TableHead>
+              <TableHead>Margin</TableHead>
               <TableHead>Completions</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
@@ -134,6 +140,16 @@ export default function AdminTasksPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-medium tabular-nums">{formatCurrency(t.reward_amount)}</TableCell>
+                  <TableCell className="text-sm tabular-nums">
+                    {margin(t) === null
+                      ? <span className="text-muted-foreground">—</span>
+                      : <span className={margin(t)! >= 0 ? "text-emerald-600" : "text-destructive"}>
+                          {margin(t)! >= 0 ? "+" : ""}{formatCurrency(margin(t)!)}
+                        </span>}
+                    {t.task_source === "advertiser" && (
+                      <p className="text-[10px] text-muted-foreground capitalize">{t.cost_type} · advertiser</p>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm tabular-nums">
                     {t.current_completions.toLocaleString()}
                     {t.max_completions !== null && <span className="text-muted-foreground">/{t.max_completions.toLocaleString()}</span>}
@@ -230,6 +246,27 @@ export default function AdminTasksPage() {
                   <Input id="maxComp" type="number" className="mt-1" placeholder="Unlimited"
                     value={editing.max_completions ?? ""}
                     onChange={e => setEditing(prev => ({ ...prev, max_completions: e.target.value ? parseInt(e.target.value) : null }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Cost Type</Label>
+                  <Select value={editing.cost_type ?? "flat"}
+                    onValueChange={v => setEditing(prev => ({ ...prev, cost_type: v as "flat" | "cpa" }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="flat">Flat (advertiser pre-paid budget)</SelectItem>
+                      <SelectItem value="cpa">CPA (paid per completion)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">Affects the margin calculation only — doesn't change payouts.</p>
+                </div>
+                <div>
+                  <Label htmlFor="advCost">Advertiser Cost (kobo)</Label>
+                  <Input id="advCost" type="number" className="mt-1" placeholder="No external revenue"
+                    value={editing.advertiser_cost_kobo ?? ""}
+                    onChange={e => setEditing(prev => ({ ...prev, advertiser_cost_kobo: e.target.value ? parseInt(e.target.value) : null }))} />
+                  <p className="text-xs text-muted-foreground mt-1">What you're paid per completion. Leave blank for ordinary internal tasks.</p>
                 </div>
               </div>
               <div className="flex gap-3 pt-2">

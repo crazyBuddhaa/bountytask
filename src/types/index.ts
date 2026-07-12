@@ -74,8 +74,40 @@ export interface Task {
   verification_url: string | null;
   created_by: string | null;
   expires_at: string | null;
+  task_source: "internal" | "advertiser";
+  cost_type: "flat" | "cpa";
+  advertiser_cost_kobo: number | null; // platform revenue per completion, in kobo — null for tasks with no external revenue
+  submission_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskSubmission {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string;
+  contact_phone: string | null;
+  task_title: string;
+  description: string;
+  instructions: string | null;
+  category_id: string | null;
+  category?: { id: string; name: string };
+  task_type: TaskType;
+  proposed_reward_kobo: number;
+  desired_completions: number | null;
+  budget_kobo: number;
+  cost_type: "flat" | "cpa";
+  proof_requirements: string | null;
+  verification_url: string | null;
+  payment_reference: string | null;
+  payment_status: "unpaid" | "paid" | "waived";
+  status: "pending" | "approved" | "rejected";
+  admin_notes: string | null;
+  created_task_id: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 }
 
 export interface TaskCompletion {

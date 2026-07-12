@@ -4,6 +4,7 @@ import { getLiveBalance } from "@/lib/ledger"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"
+import { AdSlot } from "@/components/ads/AdSlot"
 import type { UserProfile } from "@/types"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <DashboardSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} />
-        <main className="flex-1 p-4 lg:p-6 animate-fade-in">
+        <main className="flex-1 p-4 lg:p-6 animate-fade-in space-y-4">
+          <AdSlot placement="dashboard" />
           {children}
         </main>
       </div>

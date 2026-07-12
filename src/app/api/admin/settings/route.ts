@@ -16,6 +16,16 @@ const settingsSchema = z.object({
   bank_transfer_bank:          z.string().max(100).optional(),
   phone_verification_enabled:  z.boolean().optional(),
   min_withdrawal_kobo:         z.number().int().min(100, "Minimum withdrawal must be at least ₦1").optional(),
+  advertiser_submissions_enabled:    z.boolean().optional(),
+  advertiser_min_budget_kobo:        z.number().int().positive().optional(),
+  advertiser_requirements:          z.string().max(4000).optional(),
+  advertiser_pricing_info:          z.string().max(4000).optional(),
+  advertiser_contact_email:         z.string().email().optional(),
+  advertiser_submission_fee_enabled: z.boolean().optional(),
+  advertiser_submission_fee_kobo:   z.number().int().positive().optional(),
+  ads_enabled:            z.boolean().optional(),
+  ads_dashboard_snippet:  z.string().max(4000).optional(),
+  ads_tasklist_snippet:   z.string().max(4000).optional(),
 })
 
 async function assertAdmin(userId: string) {
