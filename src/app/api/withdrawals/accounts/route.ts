@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { resolveAccount } from "@/lib/paystack"
 import { auditLog } from "@/lib/audit"
-import { getClientIp } from "@/lib/utils"
+import { getClientIp, namesRoughlyMatch } from "@/lib/utils"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -46,6 +46,24 @@ export async function POST(request: NextRequest) {
     account_name = resolved.account_name
   } catch (e: unknown) {
     return NextResponse.json({ data: null, error: (e as Error).message }, { status: 422 })
+  }
+
+  // The bank account must belong to the same person as the profile — prevents
+  // withdrawing to someone else's account.
+  const { data: profile } = await supabase
+    .from("users")
+    .select("full_name")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.full_name || !namesRoughlyMatch(profile.full_name, account_name)) {
+    return NextResponse.json(
+      {
+        data: null,
+        error: `This bank account is registered to "${account_name}", which doesn't match your profile name "${profile?.full_name ?? "—"}". Withdrawal accounts must be in your own name.`,
+      },
+      { status: 422 }
+    )
   }
 
   const admin = createAdminClient()

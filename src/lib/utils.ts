@@ -46,6 +46,24 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+/**
+ * Loosely compares two person names for a fraud check (e.g. withdrawal bank
+ * account name vs. profile full name). Tolerant of case, extra whitespace,
+ * and name order/middle-name differences — passes as long as every word in
+ * the shorter name appears somewhere in the longer name.
+ */
+export function namesRoughlyMatch(a: string, b: string): boolean {
+  const normalize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/).filter(Boolean)
+
+  const wordsA = normalize(a)
+  const wordsB = normalize(b)
+  if (wordsA.length === 0 || wordsB.length === 0) return false
+
+  const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA]
+  return shorter.every((word) => longer.includes(word))
+}
+
 export function slugify(str: string): string {
   return str
     .toLowerCase()

@@ -58,6 +58,7 @@ export default function ProfilePage() {
       if (!res.ok) { toast.error(json.error); return }
       setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)
       toast.success("Avatar updated!")
+      router.refresh()
     } catch {
       toast.error("Upload failed. Please try again.")
     } finally {
@@ -77,6 +78,7 @@ export default function ProfilePage() {
     setProfile(prev => prev ? { ...prev, ...json.data } : prev)
     toast.success("Profile saved!")
     setSaving(false)
+    router.refresh()
   }
 
   const initials = profile?.full_name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() ?? "?"
