@@ -12,6 +12,24 @@ async function assertAdmin(userId: string) {
   return data && ["admin", "super_admin"].includes(data.role)
 }
 
+// Whitelist of real, writable `tasks` columns. Clients may also send read-only/joined
+// fields (e.g. `category` from a `category:task_categories(...)` select) — passing those
+// straight to Supabase's insert()/update() causes "Could not find the '<field>' column of
+// 'tasks' in the schema cache". Always sanitize server-side, independent of what the client sends.
+const EDITABLE_TASK_FIELDS = [
+  "title", "description", "instructions", "category_id", "type", "status",
+  "reward_amount", "max_completions", "requires_proof", "proof_instructions",
+  "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
+] as const
+
+function sanitizeTaskBody(body: Record<string, unknown>) {
+  const clean: Record<string, unknown> = {}
+  for (const key of EDITABLE_TASK_FIELDS) {
+    if (key in body) clean[key] = body[key]
+  }
+  return clean
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -43,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
   if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const body = await request.json()
+  const body = sanitizeTaskBody(await request.json())
   const admin = createAdminClient()
   const { data, error } = await admin.from("tasks").insert({ ...body, created_by: user.id }).select().single()
   if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
