@@ -23,6 +23,7 @@ export type NotificationType =
   | "referral_bonus"
   | "signup_bonus"
   | "fraud_flag"
+  | "admin_broadcast"
   | "general";
 
 // ─── Database Row Types ───────────────────────────────────────────────────────

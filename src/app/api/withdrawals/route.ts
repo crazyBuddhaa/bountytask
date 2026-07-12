@@ -5,16 +5,14 @@ import { appendLedger, assertSufficientBalance } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
-import { needsWithdrawalVerification, needsPhoneVerification } from "@/lib/verification"
+import { needsWithdrawalVerification, needsPhoneVerification, getMinWithdrawalKobo } from "@/lib/verification"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
 
-const MIN_WITHDRAWAL = 500_000 // ₦5,000 in kobo
-
 const requestSchema = z.object({
   account_id: z.string().uuid(),
-  amount: z.number().int().min(MIN_WITHDRAWAL, `Minimum withdrawal is ₦${MIN_WITHDRAWAL / 100}`),
+  amount: z.number().int(),
 })
 
 export async function GET(request: NextRequest) {
@@ -48,6 +46,14 @@ export async function POST(request: NextRequest) {
 
   const { account_id, amount } = parsed.data
   const admin = createAdminClient()
+
+  const minWithdrawal = await getMinWithdrawalKobo()
+  if (amount < minWithdrawal) {
+    return NextResponse.json(
+      { data: null, error: `Minimum withdrawal is ₦${(minWithdrawal / 100).toLocaleString("en-NG")}` },
+      { status: 400 }
+    )
+  }
 
   // One-time verification fee gate — checked here, not at signup.
   if (await needsWithdrawalVerification(user.id)) {

@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone } from "lucide-react"
+import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone, Banknote } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +16,7 @@ type Settings = {
   bank_transfer_number: string
   bank_transfer_bank: string
   phone_verification_enabled: boolean
+  min_withdrawal_kobo: number
 }
 
 export default function AdminSettingsPage() {
@@ -27,6 +28,7 @@ export default function AdminSettingsPage() {
     bank_transfer_number: "",
     bank_transfer_bank: "",
     phone_verification_enabled: false,
+    min_withdrawal_kobo: 500000,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -44,6 +46,7 @@ export default function AdminSettingsPage() {
             bank_transfer_number:        data.bank_transfer_number         ?? "",
             bank_transfer_bank:          data.bank_transfer_bank           ?? "",
             phone_verification_enabled:  data.phone_verification_enabled   ?? false,
+            min_withdrawal_kobo:         data.min_withdrawal_kobo          ?? 500000,
           })
         }
       })
@@ -83,9 +86,44 @@ export default function AdminSettingsPage() {
           <Settings2 className="w-6 h-6" /> Platform Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Configure the withdrawal verification fee, payment method, and phone verification.
+          Configure the minimum withdrawal, verification fee, payment method, and phone verification.
         </p>
       </div>
+
+      {/* Minimum Withdrawal */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Banknote className="w-4 h-4" /> Minimum Withdrawal
+          </CardTitle>
+          <CardDescription>
+            The smallest amount a user is allowed to withdraw in a single request.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="min_withdrawal">Minimum Amount (₦)</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm">₦</span>
+            <Input
+              id="min_withdrawal"
+              type="number"
+              min={1}
+              step={100}
+              value={Math.round(settings.min_withdrawal_kobo / 100)}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  min_withdrawal_kobo: Math.round(Number(e.target.value) * 100),
+                }))
+              }
+              className="w-40"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Currently ₦{Math.round(settings.min_withdrawal_kobo / 100).toLocaleString("en-NG")}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Verification Fee Toggle */}
       <Card>

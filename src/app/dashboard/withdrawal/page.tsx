@@ -48,7 +48,8 @@ export default function WithdrawalPage() {
   const [amount, setAmount]             = useState("")
   const [submittingWithdrawal, setSubmittingWithdrawal] = useState(false)
 
-  const MIN_NGN = 5000
+  const [minKobo, setMinKobo] = useState(500_000)
+  const MIN_NGN = Math.round(minKobo / 100)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -66,6 +67,7 @@ export default function WithdrawalPage() {
       (!!ver.data?.fee_enabled && !bal.data?.kyc_verified) ||
       (!!ver.data?.phone_verification_enabled && !bal.data?.phone_verified)
     )
+    if (ver.data?.min_withdrawal_kobo) setMinKobo(ver.data.min_withdrawal_kobo)
     setLoading(false)
   }, [])
 

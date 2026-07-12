@@ -160,6 +160,78 @@ export async function notifyVerificationRejected(
   })
 }
 
+export type BroadcastChannel = "in_app" | "email";
+
+/**
+ * Send an admin-authored notification to one user or every user, via
+ * in-app notification, email, or both. Returns how many recipients
+ * were reached so the admin UI can confirm the send.
+ */
+export async function sendAdminNotification({
+  target,
+  userId,
+  title,
+  message,
+  channels,
+}: {
+  target: "all" | "user";
+  userId?: string;
+  title: string;
+  message: string;
+  channels: BroadcastChannel[];
+}): Promise<{ recipientCount: number }> {
+  const admin = createAdminClient();
+
+  let recipients: { id: string; email: string }[] = [];
+  if (target === "user") {
+    if (!userId) throw new Error("userId is required when target is 'user'");
+    const { data } = await admin.from("users").select("id, email").eq("id", userId).single();
+    if (!data) throw new Error("User not found");
+    recipients = [data];
+  } else {
+    const { data } = await admin.from("users").select("id, email").eq("is_active", true);
+    recipients = data ?? [];
+  }
+
+  const wantsInApp = channels.includes("in_app");
+  const wantsEmail = channels.includes("email");
+
+  if (wantsInApp && recipients.length > 0) {
+    const rows = recipients.map((r) => ({
+      user_id: r.id,
+      type: "admin_broadcast" as const,
+      title,
+      message,
+      read: false,
+    }));
+    // Insert in batches to stay well within request size limits.
+    const BATCH = 500;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      await admin.from("notifications").insert(rows.slice(i, i + BATCH));
+    }
+  }
+
+  if (wantsEmail) {
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#7c3aed">${title}</h2>
+        <p style="white-space:pre-wrap">${message}</p>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria</p>
+      </div>
+    `;
+    // Fire sequentially in small batches to avoid hammering the email API.
+    const BATCH = 20;
+    for (let i = 0; i < recipients.length; i += BATCH) {
+      await Promise.all(
+        recipients.slice(i, i + BATCH).map((r) => sendEmail({ to: r.email, subject: title, html }))
+      );
+    }
+  }
+
+  return { recipientCount: recipients.length };
+}
+
 /** Notify withdrawal status change */
 export async function notifyWithdrawalUpdate(
   userId: string,

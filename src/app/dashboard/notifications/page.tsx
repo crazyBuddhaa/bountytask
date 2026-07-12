@@ -14,6 +14,7 @@ const typeIcons: Record<string, string> = {
   task_rejected:        "❌",
   withdrawal_update:    "💸",
   referral_bonus:       "🎁",
+  admin_broadcast:      "📣",
   general:              "🔔",
 }
 

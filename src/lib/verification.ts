@@ -8,6 +8,7 @@ export type VerificationSettings = {
   bank_number: string
   bank_account_name: string
   phone_verification_enabled: boolean
+  min_withdrawal_kobo: number
 }
 
 /**
@@ -29,6 +30,7 @@ export async function getVerificationSettings(): Promise<VerificationSettings> {
       "bank_transfer_number",
       "bank_transfer_bank",
       "phone_verification_enabled",
+      "min_withdrawal_kobo",
     ])
 
   const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
@@ -41,7 +43,14 @@ export async function getVerificationSettings(): Promise<VerificationSettings> {
     bank_number:                 s.bank_transfer_number            ?? "",
     bank_account_name:           s.bank_transfer_name              ?? "",
     phone_verification_enabled:  s.phone_verification_enabled      ?? false,
+    min_withdrawal_kobo:         s.min_withdrawal_kobo             ?? 500_000,
   }
+}
+
+/** Minimum withdrawal amount in kobo, configurable by admins via platform_settings. */
+export async function getMinWithdrawalKobo(): Promise<number> {
+  const settings = await getVerificationSettings()
+  return settings.min_withdrawal_kobo
 }
 
 /** True if this user still needs to pay the verification fee before withdrawing. */

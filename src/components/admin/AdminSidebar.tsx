@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, Users, ListTodo, ClipboardCheck,
   Banknote, Shield, FileText, BookOpen, BarChart2,
-  Settings, UserCheck, LogOut,
+  Settings, UserCheck, LogOut, Megaphone,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -20,6 +20,7 @@ const links = [
   { href: "/admin/audit-logs",            label: "Audit Logs",            icon: FileText        },
   { href: "/admin/ledger",                label: "Ledger",                icon: BookOpen        },
   { href: "/admin/reports",               label: "Reports",               icon: BarChart2       },
+  { href: "/admin/notifications",         label: "Notifications",         icon: Megaphone       },
   { href: "/admin/settings",             label: "Settings",              icon: Settings        },
 ]
 

@@ -15,6 +15,7 @@ const settingsSchema = z.object({
   bank_transfer_number:        z.string().max(20).optional(),
   bank_transfer_bank:          z.string().max(100).optional(),
   phone_verification_enabled:  z.boolean().optional(),
+  min_withdrawal_kobo:         z.number().int().min(100, "Minimum withdrawal must be at least ₦1").optional(),
 })
 
 async function assertAdmin(userId: string) {
