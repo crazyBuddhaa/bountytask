@@ -21,11 +21,17 @@ interface Stats {
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/admin/stats")
       .then(r => r.json())
-      .then(j => { setStats(j.data); setLoading(false) })
+      .then(j => {
+        if (j.error) { setLoadError(j.error); return }
+        setStats(j.data)
+      })
+      .catch(() => setLoadError("Could not reach the server."))
+      .finally(() => setLoading(false))
   }, [])
 
   const cards = stats ? [
@@ -43,6 +49,12 @@ export default function AdminOverviewPage() {
         <h1 className="text-2xl font-bold">Admin Overview</h1>
         <p className="text-muted-foreground text-sm mt-1">Platform-wide statistics from get_platform_stats().</p>
       </div>
+
+      {loadError && !loading && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Couldn&apos;t load platform stats: {loadError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {loading

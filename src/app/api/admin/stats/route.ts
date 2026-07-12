@@ -17,6 +17,10 @@ export async function GET() {
   if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
   const admin = createAdminClient()
-  const { data } = await admin.rpc("get_platform_stats")
+  const { data, error } = await admin.rpc("get_platform_stats")
+  if (error) {
+    console.error("get_platform_stats RPC error:", error)
+    return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ data, error: null })
 }

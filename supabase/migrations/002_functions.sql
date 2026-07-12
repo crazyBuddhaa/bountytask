@@ -114,19 +114,24 @@ create trigger on_auth_user_created
   for each row execute function handle_new_user();
 
 -- ─── Admin dashboard stats function ──────────────────────────
+-- Field names/units here must match the `Stats` interface consumed by
+-- src/app/admin/page.tsx (all money fields in kobo, suffixed `_kobo`).
 create or replace function get_platform_stats()
 returns json
 language sql
 stable
 security definer
-as $$
+as $
   select json_build_object(
-    'total_users',          (select count(*) from public.users where role = 'user'),
-    'active_tasks',         (select count(*) from public.tasks where status = 'active'),
-    'pending_completions',  (select count(*) from public.task_completions where status = 'pending'),
-    'pending_withdrawals',  (select count(*) from public.withdrawals where status = 'pending'),
-    'total_ledger_credits', (select coalesce(sum(delta), 0) from public.ledger where type = 'credit'),
-    'total_ledger_debits',  (select coalesce(abs(sum(delta)), 0) from public.ledger where type = 'debit'),
-    'open_fraud_flags',     (select count(*) from public.fraud_flags where resolved = false)
+    'total_users',              (select count(*) from public.users where role = 'user'),
+    'active_users',             (select count(*) from public.users where role = 'user' and is_active = true),
+    'total_tasks',              (select count(*) from public.tasks),
+    'active_tasks',             (select count(*) from public.tasks where status = 'active'),
+    'total_completions',        (select count(*) from public.task_completions),
+    'pending_completions',      (select count(*) from public.task_completions where status = 'pending'),
+    'total_withdrawn_kobo',     (select coalesce(sum(amount), 0) from public.withdrawals where status = 'paid'),
+    'pending_withdrawals_kobo', (select coalesce(sum(amount), 0) from public.withdrawals where status in ('pending','under_review')),
+    'total_fraud_flags',        (select count(*) from public.fraud_flags where resolved = false),
+    'total_ledger_credits_kobo',(select coalesce(sum(delta), 0) from public.ledger where type = 'credit')
   );
-$$;
+$;
