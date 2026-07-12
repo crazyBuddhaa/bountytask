@@ -225,6 +225,13 @@ export default function AdminTasksPage() {
                         onChange={e => setEditing(prev => ({ ...prev, [field]: e.target.value }))} />}
                 </div>
               ))}
+              <div>
+                <Label htmlFor="verificationUrl">Task Link</Label>
+                <Input id="verificationUrl" className="mt-1" placeholder="https://..."
+                  value={editing.verification_url ?? ""}
+                  onChange={e => setEditing(prev => ({ ...prev, verification_url: e.target.value }))} />
+                <p className="text-xs text-muted-foreground mt-1">The URL users are sent to complete this task (e.g. the page to follow, sign up, or download).</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Type</Label>
