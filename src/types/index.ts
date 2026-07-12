@@ -42,6 +42,7 @@ export interface UserProfile {
   is_email_verified: boolean;
   kyc_verified: boolean;
   phone_verified: boolean;
+  full_name_locked: boolean;
   created_at: string;
   updated_at: string;
 }

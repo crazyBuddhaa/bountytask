@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Loader2, Camera, User } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Loader2, Camera, User, ShieldCheck, Smartphone } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +15,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { UserProfile } from "@/types"
 
 export default function ProfilePage() {
+  const router = useRouter()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
@@ -137,7 +139,14 @@ export default function ProfilePage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name" />
+                  <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)}
+                    placeholder="Your full name" disabled={!!profile?.full_name_locked}
+                    className={profile?.full_name_locked ? "bg-muted text-muted-foreground" : undefined} />
+                  <p className="text-xs text-muted-foreground">
+                    {profile?.full_name_locked
+                      ? "Your name has already been changed once and is now locked. Contact support if you need to update it again."
+                      : "You can change this once. Choose carefully — it locks after your next save."}
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="username">Username <span className="text-muted-foreground text-xs">(optional)</span></Label>
@@ -155,6 +164,14 @@ export default function ProfilePage() {
               <div className="space-y-1.5">
                 <Label htmlFor="phone">Phone Number <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+234 800 000 0000" type="tel" />
+                {profile?.phone_verified ? (
+                  <Badge variant="success" className="text-[10px] gap-1"><Smartphone className="w-3 h-3" />Phone Verified</Badge>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="mt-1"
+                    onClick={() => router.push("/dashboard/verify")}>
+                    <Smartphone className="w-3.5 h-3.5" />Verify Phone Number
+                  </Button>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Referral Code</Label>
@@ -186,6 +203,32 @@ export default function ProfilePage() {
               {loading ? <Skeleton className="h-5 w-24 mt-1" /> : <p className="font-medium mt-1">{value}</p>}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Account activation */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Account Activation</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : profile?.kyc_verified ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="success" className="gap-1"><ShieldCheck className="w-3 h-3" />Activated</Badge>
+              <p className="text-sm text-muted-foreground">Your account is activated by admin — you're clear to withdraw.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Activate your account ahead of your first withdrawal. This is reviewed and approved by an admin.
+              </p>
+              <Button variant="gradient" onClick={() => router.push("/dashboard/verify")}>
+                <ShieldCheck className="w-4 h-4" />Activate Account
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
