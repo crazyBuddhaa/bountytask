@@ -120,7 +120,7 @@ export default function AdminTasksPage() {
               <TableHead>Completions</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead />
+              <TableHead className="sticky right-0 bg-background" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -158,7 +158,7 @@ export default function AdminTasksPage() {
                     <Badge variant={statusVariant[t.status] ?? "outline"} className="capitalize text-[10px]">{t.status}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(t.created_at)}</TableCell>
-                  <TableCell>
+                  <TableCell className="sticky right-0 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.1)]">
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(t)}>
                         <Pencil className="w-3.5 h-3.5" />

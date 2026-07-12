@@ -86,7 +86,7 @@ export default function AdminTaskSubmissionsPage() {
               <TableHead>Payment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Submitted</TableHead>
-              <TableHead />
+              <TableHead className="sticky right-0 bg-background" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -117,7 +117,7 @@ export default function AdminTaskSubmissionsPage() {
                     <Badge variant={statusVariant[s.status]} className="capitalize text-[10px]">{s.status}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(s.created_at)}</TableCell>
-                  <TableCell>
+                  <TableCell className="sticky right-0 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.1)]">
                     <Button variant="outline" size="sm" onClick={() => setReviewing(s)}>Review</Button>
                   </TableCell>
                 </TableRow>
