@@ -23,7 +23,7 @@ const links = [
   { href: "/admin/settings",             label: "Settings",              icon: Settings        },
 ]
 
-export function AdminSidebar() {
+export function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname()
   const router   = useRouter()
 
@@ -34,7 +34,9 @@ export function AdminSidebar() {
   }
 
   return (
-    <aside className="w-56 shrink-0 hidden lg:flex flex-col bg-card border-r border-border h-screen sticky top-0">
+    <aside
+      className={`w-56 shrink-0 ${mobile ? "flex" : "hidden lg:flex"} flex-col bg-card border-r border-border h-screen sticky top-0`}
+    >
       {/* Brand */}
       <div className="h-16 flex items-center px-5 border-b border-border">
         <div className="w-7 h-7 rounded-lg bounty-gradient mr-2.5" />
