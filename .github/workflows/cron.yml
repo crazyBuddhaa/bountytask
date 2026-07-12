@@ -9,6 +9,7 @@ jobs:
   process-tasks:
     name: Close expired tasks
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - name: Call cron endpoint
         run: |
