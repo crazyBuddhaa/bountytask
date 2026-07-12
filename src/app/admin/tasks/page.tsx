@@ -59,13 +59,31 @@ export default function AdminTasksPage() {
       })
   }, [])
 
+  // Only these keys are real, writable columns on `tasks`. `editing` also carries
+  // read-only/joined fields (e.g. the `category` object joined from task_categories,
+  // current_completions, created_at, ...) that must never be sent back on save —
+  // Supabase's update() rejects unknown columns with a schema-cache error.
+  const EDITABLE_TASK_FIELDS = [
+    "title", "description", "instructions", "category_id", "type", "status",
+    "reward_amount", "max_completions", "requires_proof", "proof_instructions",
+    "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
+  ] as const
+
+  function toTaskPayload(t: Partial<Task>) {
+    const payload: Record<string, unknown> = {}
+    for (const key of EDITABLE_TASK_FIELDS) {
+      if (key in t) payload[key] = (t as Record<string, unknown>)[key]
+    }
+    return payload
+  }
+
   async function handleSave() {
     if (!editing) return
     setSaving(true)
     const isNew = !editing.id
     const url   = isNew ? "/api/admin/tasks" : `/api/admin/tasks/${editing.id}`
     const method = isNew ? "POST" : "PATCH"
-    const res   = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(editing) })
+    const res   = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(toTaskPayload(editing)) })
     const json  = await res.json()
     if (!res.ok) { toast.error(json.error); setSaving(false); return }
     toast.success(isNew ? "Task created!" : "Task updated!")
