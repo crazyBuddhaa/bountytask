@@ -40,6 +40,7 @@ export interface UserProfile {
   is_active: boolean;
   is_email_verified: boolean;
   kyc_verified: boolean;
+  phone_verified: boolean;
   created_at: string;
   updated_at: string;
 }

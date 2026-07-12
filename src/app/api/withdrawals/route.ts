@@ -5,7 +5,7 @@ import { appendLedger, assertSufficientBalance } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
-import { needsWithdrawalVerification } from "@/lib/verification"
+import { needsWithdrawalVerification, needsPhoneVerification } from "@/lib/verification"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +53,14 @@ export async function POST(request: NextRequest) {
   if (await needsWithdrawalVerification(user.id)) {
     return NextResponse.json(
       { data: null, error: "Complete verification before withdrawing.", code: "VERIFICATION_REQUIRED" },
+      { status: 403 }
+    )
+  }
+
+  // Phone verification gate — also checked here, not at signup.
+  if (await needsPhoneVerification(user.id)) {
+    return NextResponse.json(
+      { data: null, error: "Verify your phone number before withdrawing.", code: "PHONE_VERIFICATION_REQUIRED" },
       { status: 403 }
     )
   }

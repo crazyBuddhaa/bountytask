@@ -14,6 +14,7 @@ const settingsSchema = z.object({
   bank_transfer_name:          z.string().max(100).optional(),
   bank_transfer_number:        z.string().max(20).optional(),
   bank_transfer_bank:          z.string().max(100).optional(),
+  phone_verification_enabled:  z.boolean().optional(),
 })
 
 async function assertAdmin(userId: string) {

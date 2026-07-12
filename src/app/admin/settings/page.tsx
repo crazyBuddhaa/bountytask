@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Save, Settings2, CreditCard, Building2 } from "lucide-react"
+import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,6 +15,7 @@ type Settings = {
   bank_transfer_name: string
   bank_transfer_number: string
   bank_transfer_bank: string
+  phone_verification_enabled: boolean
 }
 
 export default function AdminSettingsPage() {
@@ -25,6 +26,7 @@ export default function AdminSettingsPage() {
     bank_transfer_name: "",
     bank_transfer_number: "",
     bank_transfer_bank: "",
+    phone_verification_enabled: false,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -41,6 +43,7 @@ export default function AdminSettingsPage() {
             bank_transfer_name:          data.bank_transfer_name           ?? "",
             bank_transfer_number:        data.bank_transfer_number         ?? "",
             bank_transfer_bank:          data.bank_transfer_bank           ?? "",
+            phone_verification_enabled:  data.phone_verification_enabled   ?? false,
           })
         }
       })
@@ -80,7 +83,7 @@ export default function AdminSettingsPage() {
           <Settings2 className="w-6 h-6" /> Platform Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Configure the withdrawal verification fee and payment method.
+          Configure the withdrawal verification fee, payment method, and phone verification.
         </p>
       </div>
 
@@ -206,6 +209,32 @@ export default function AdminSettingsPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Phone Verification Toggle */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className="w-4 h-4" /> Phone Verification
+          </CardTitle>
+          <CardDescription>
+            When enabled, users must verify a phone number via SMS code before their first
+            withdrawal. Registration itself always stays free. Requires TEXTBEE_API_KEY and
+            TEXTBEE_DEVICE_ID to be set in the hosting environment.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Require phone verification</p>
+              <p className="text-xs text-muted-foreground">Toggle to enable or disable globally</p>
+            </div>
+            <Switch
+              checked={settings.phone_verification_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, phone_verification_enabled: v }))}
+            />
+          </div>
         </CardContent>
       </Card>
 

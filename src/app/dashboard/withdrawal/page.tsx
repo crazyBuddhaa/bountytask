@@ -62,7 +62,10 @@ export default function WithdrawalPage() {
     setBalance(bal.data?.balance ?? 0)
     setAccounts(acc.data ?? [])
     setWithdrawals(wd.data ?? [])
-    setNeedsVerification(!!ver.data?.fee_enabled && !bal.data?.kyc_verified)
+    setNeedsVerification(
+      (!!ver.data?.fee_enabled && !bal.data?.kyc_verified) ||
+      (!!ver.data?.phone_verification_enabled && !bal.data?.phone_verified)
+    )
     setLoading(false)
   }, [])
 
@@ -141,7 +144,7 @@ export default function WithdrawalPage() {
     })
     const json = await res.json()
     if (!res.ok) {
-      if (json.code === "VERIFICATION_REQUIRED") setNeedsVerification(true)
+      if (json.code === "VERIFICATION_REQUIRED" || json.code === "PHONE_VERIFICATION_REQUIRED") setNeedsVerification(true)
       toast.error(json.error); setSubmittingWithdrawal(false); return
     }
     toast.success("Withdrawal request submitted! We'll process it within 1–2 business days.")

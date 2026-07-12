@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CreditCard, Building2, Loader2, ShieldCheck } from "lucide-react"
+import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,21 +16,37 @@ type VerificationSettings = {
   bank_name: string
   bank_number: string
   bank_account_name: string
+  phone_verification_enabled: boolean
 }
 
 export default function VerifyPage() {
   const router = useRouter()
   const [settings, setSettings] = useState<VerificationSettings | null>(null)
+  const [kycVerified, setKycVerified] = useState(false)
+  const [phoneVerified, setPhoneVerified] = useState(false)
   const [loading, setLoading] = useState(true)
   const [reference, setReference] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
+  // Phone verification
+  const [phone, setPhone] = useState("")
+  const [code, setCode] = useState("")
+  const [phoneStep, setPhoneStep] = useState<"input" | "sent">("input")
+  const [sendingCode, setSendingCode] = useState(false)
+  const [confirmingCode, setConfirmingCode] = useState(false)
+
   useEffect(() => {
-    fetch("/api/settings/verification")
-      .then((r) => r.json())
-      .then(({ data }) => setSettings(data))
+    Promise.all([
+      fetch("/api/settings/verification").then((r) => r.json()),
+      fetch("/api/profile").then((r) => r.json()),
+    ])
+      .then(([ver, prof]) => {
+        setSettings(ver.data)
+        setKycVerified(!!prof.data?.kyc_verified)
+        setPhoneVerified(!!prof.data?.phone_verified)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -65,8 +81,8 @@ export default function VerifyPage() {
         const json = await res.json()
         setPaying(false)
         if (json.error) { toast.error(json.error); return }
-        toast.success("You're verified! You can now withdraw.")
-        router.push("/dashboard/withdrawal")
+        setKycVerified(true)
+        toast.success("You're verified!")
       },
       onClose: () => setPaying(false),
     }).openIframe()
@@ -87,6 +103,36 @@ export default function VerifyPage() {
     toast.success("Submitted! An admin will verify your transfer within 24 hours.")
   }
 
+  async function handleSendCode() {
+    if (!phone.trim()) { toast.error("Enter your phone number"); return }
+    setSendingCode(true)
+    const res = await fetch("/api/verification/phone/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone.trim() }),
+    })
+    const json = await res.json()
+    setSendingCode(false)
+    if (json.error) { toast.error(json.error); return }
+    setPhoneStep("sent")
+    toast.success("Code sent! Check your phone.")
+  }
+
+  async function handleConfirmCode() {
+    if (!/^\d{6}$/.test(code.trim())) { toast.error("Enter the 6-digit code"); return }
+    setConfirmingCode(true)
+    const res = await fetch("/api/verification/phone/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim() }),
+    })
+    const json = await res.json()
+    setConfirmingCode(false)
+    if (json.error) { toast.error(json.error); return }
+    setPhoneVerified(true)
+    toast.success("Phone verified!")
+  }
+
   if (loading) {
     return (
       <div className="max-w-lg space-y-4">
@@ -96,8 +142,11 @@ export default function VerifyPage() {
     )
   }
 
-  // Fee got disabled while the user was on this page (or navigated here directly)
-  if (!settings?.fee_enabled) {
+  const needsFee = !!settings?.fee_enabled && !kycVerified
+  const needsPhone = !!settings?.phone_verification_enabled && !phoneVerified
+
+  // Nothing (or nothing left) to verify
+  if (!needsFee && !needsPhone) {
     return (
       <div className="max-w-lg">
         <Card>
@@ -114,11 +163,11 @@ export default function VerifyPage() {
     )
   }
 
-  const feeNaira = Math.round(settings.fee_amount / 100)
+  const feeNaira = Math.round((settings?.fee_amount ?? 0) / 100)
 
   return (
     <div className="max-w-lg space-y-6">
-      {settings.payment_method === "paystack" && (
+      {needsFee && settings?.payment_method === "paystack" && (
         // eslint-disable-next-line @next/next/no-sync-scripts
         <script src="https://js.paystack.co/v1/inline.js" />
       )}
@@ -128,69 +177,143 @@ export default function VerifyPage() {
           <ShieldCheck className="w-6 h-6 text-primary" /> Verify to Withdraw
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          A one-time ₦{feeNaira.toLocaleString("en-NG")} fee confirms you're a real person before your
-          first withdrawal. This only happens once.
+          Complete the steps below before your first withdrawal. This only happens once.
         </p>
       </div>
 
-      {settings.payment_method === "paystack" ? (
+      {needsFee && (
+        settings!.payment_method === "paystack" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="w-4 h-4" /> Pay with Paystack
+              </CardTitle>
+              <CardDescription>
+                A one-time ₦{feeNaira.toLocaleString("en-NG")} fee confirms you're a real person.
+                Instant — you can withdraw immediately after payment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="gradient" className="w-full" onClick={handlePaystackPayment} disabled={paying}>
+                {paying && <Loader2 className="animate-spin" />}
+                Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="w-4 h-4" /> Bank Transfer
+              </CardTitle>
+              <CardDescription>
+                A one-time ₦{feeNaira.toLocaleString("en-NG")} fee confirms you're a real person.
+                An admin reviews your transfer, usually within 24 hours.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {submitted ? (
+                <div className="text-center py-6">
+                  <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-amber-500" />
+                  <p className="font-medium">Request submitted</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    We'll email you once your transfer is verified.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+                    <p>
+                      Transfer <strong>₦{feeNaira.toLocaleString("en-NG")}</strong> to:
+                    </p>
+                    <p className="font-medium">{settings!.bank_account_name}</p>
+                    <p>{settings!.bank_number} · {settings!.bank_name}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reference">Transfer Reference / Narration</Label>
+                    <Input
+                      id="reference"
+                      placeholder="e.g. TRF20260712ABC"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                    />
+                  </div>
+                  <Button variant="gradient" className="w-full" onClick={handleBankTransferSubmit} disabled={submitting}>
+                    {submitting && <Loader2 className="animate-spin" />}
+                    Submit for Verification
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )
+      )}
+
+      {needsPhone && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <CreditCard className="w-4 h-4" /> Pay with Paystack
+              <Smartphone className="w-4 h-4" /> Verify Your Phone
             </CardTitle>
-            <CardDescription>Instant — you can withdraw immediately after payment.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="gradient" className="w-full" onClick={handlePaystackPayment} disabled={paying}>
-              {paying && <Loader2 className="animate-spin" />}
-              Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Building2 className="w-4 h-4" /> Bank Transfer
-            </CardTitle>
-            <CardDescription>An admin reviews your transfer, usually within 24 hours.</CardDescription>
+            <CardDescription>
+              We'll text you a 6-digit code to confirm your number.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {submitted ? (
-              <div className="text-center py-6">
-                <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-amber-500" />
-                <p className="font-medium">Request submitted</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  We'll email you once your transfer is verified.
-                </p>
-              </div>
+            {phoneStep === "input" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    placeholder="+2348012345678"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Include your country code, e.g. +234...</p>
+                </div>
+                <Button variant="gradient" className="w-full" onClick={handleSendCode} disabled={sendingCode}>
+                  {sendingCode && <Loader2 className="animate-spin" />}
+                  Send Code
+                </Button>
+              </>
             ) : (
               <>
-                <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
-                  <p>
-                    Transfer <strong>₦{feeNaira.toLocaleString("en-NG")}</strong> to:
-                  </p>
-                  <p className="font-medium">{settings.bank_account_name}</p>
-                  <p>{settings.bank_number} · {settings.bank_name}</p>
-                </div>
                 <div className="space-y-2">
-                  <Label htmlFor="reference">Transfer Reference / Narration</Label>
+                  <Label htmlFor="code">Verification Code</Label>
                   <Input
-                    id="reference"
-                    placeholder="e.g. TRF20260712ABC"
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
+                    id="code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Sent to {phone}. Didn't get it?{" "}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={() => { setPhoneStep("input"); setCode("") }}
+                    >
+                      Try a different number
+                    </button>
+                  </p>
                 </div>
-                <Button variant="gradient" className="w-full" onClick={handleBankTransferSubmit} disabled={submitting}>
-                  {submitting && <Loader2 className="animate-spin" />}
-                  Submit for Verification
+                <Button variant="gradient" className="w-full" onClick={handleConfirmCode} disabled={confirmingCode}>
+                  {confirmingCode && <Loader2 className="animate-spin" />}
+                  Confirm Code
                 </Button>
               </>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {!needsFee && !needsPhone && (
+        <Button className="w-full" onClick={() => router.push("/dashboard/withdrawal")}>
+          Go to Withdrawals
+        </Button>
       )}
     </div>
   )
