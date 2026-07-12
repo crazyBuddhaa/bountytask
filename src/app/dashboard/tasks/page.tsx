@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { Search, Filter, Zap, Clock, CheckCircle } from "lucide-react"
+import { Search, Filter, Zap, Clock, CheckCircle, Gauge } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,12 @@ import { TaskCompletionModal } from "@/components/tasks/TaskCompletionModal"
 import { AdSlot } from "@/components/ads/AdSlot"
 import type { Task, TaskCategory } from "@/types"
 
+interface TierUsage {
+  currentTier: { id: number; name: string } | null
+  tasksCompletedToday: number
+  dailyLimit: number
+}
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [categories, setCategories] = useState<TaskCategory[]>([])
@@ -22,6 +28,7 @@ export default function TasksPage() {
   const [category, setCategory] = useState("")
   const [type, setType] = useState("")
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [tierUsage, setTierUsage] = useState<TierUsage | null>(null)
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
@@ -48,6 +55,12 @@ export default function TasksPage() {
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
 
+  const fetchTierUsage = useCallback(() => {
+    fetch("/api/tiers").then(r => r.json()).then(j => setTierUsage(j.data ?? null))
+  }, [])
+
+  useEffect(() => { fetchTierUsage() }, [fetchTierUsage])
+
   async function handleComplete(taskId: string, proof?: { url?: string; text?: string }) {
     const fp = await getFingerprint()
     const res = await fetch(`/api/tasks/${taskId}/complete`, {
@@ -59,8 +72,11 @@ export default function TasksPage() {
     if (!res.ok) { toast.error(json.error); return false }
     toast.success(json.data.status === "approved" ? "Task completed! Credits added." : "Submission received! Pending review.")
     fetchTasks()
+    fetchTierUsage()
     return true
   }
+
+  const limitReached = !!tierUsage && tierUsage.tasksCompletedToday >= tierUsage.dailyLimit
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -69,7 +85,25 @@ export default function TasksPage() {
           <h1 className="text-2xl font-bold">Available Tasks</h1>
           <p className="text-muted-foreground text-sm mt-1">{total} tasks available</p>
         </div>
+        {tierUsage?.currentTier && (
+          <div
+            className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border ${
+              limitReached ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border bg-muted/50"
+            }`}
+          >
+            <Gauge className="w-4 h-4" />
+            <span className="font-medium">{tierUsage.tasksCompletedToday}/{tierUsage.dailyLimit}</span>
+            <span className="text-muted-foreground">tasks today · Tier {tierUsage.currentTier.id} ({tierUsage.currentTier.name})</span>
+          </div>
+        )}
       </div>
+
+      {limitReached && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-sm px-4 py-3">
+          You've reached your daily task limit for Tier {tierUsage?.currentTier?.id}. Invite more friends on the{" "}
+          <a href="/dashboard/referral" className="underline font-medium">Referral page</a> to unlock a higher tier and limit, or come back tomorrow.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

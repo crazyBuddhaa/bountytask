@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, Users, ListTodo, ClipboardCheck,
   Banknote, Shield, FileText, BookOpen, BarChart2,
-  Settings, UserCheck, LogOut, Megaphone, Handshake,
+  Settings, UserCheck, LogOut, Megaphone, Handshake, Layers,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 const links = [
   { href: "/admin",                       label: "Overview",              icon: LayoutDashboard },
   { href: "/admin/users",                 label: "Users",                 icon: Users           },
+  { href: "/admin/tiers",                 label: "Tiers",                 icon: Layers          },
   { href: "/admin/tasks",                 label: "Tasks",                 icon: ListTodo        },
   { href: "/admin/task-submissions",      label: "Advertiser Requests",   icon: Handshake       },
   { href: "/admin/approvals",             label: "Approvals",             icon: ClipboardCheck  },

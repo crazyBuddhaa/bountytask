@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { appendLedger } from "@/lib/ledger";
 import { createNotification } from "@/lib/notifications";
+import { recalcUserTier } from "@/lib/tiers";
 
 /**
  * Credit the signup bonus (and process a pending referral code) for a
@@ -117,6 +118,9 @@ export async function processReferral(
     .from("users")
     .update({ referred_by: referrer.id })
     .eq("id", referredUserId);
+
+  // Onboarding a new person can push the referrer up a tier.
+  await recalcUserTier(referrer.id);
 }
 
 /** Signup bonus for new users */

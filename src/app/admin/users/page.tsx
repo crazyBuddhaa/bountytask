@@ -15,7 +15,7 @@ import { formatCurrency, formatDate } from "@/lib/utils"
 
 interface AdminUser {
   id: string; full_name: string; email: string; username: string | null
-  role: string; is_active: boolean; kyc_verified: boolean
+  role: string; is_active: boolean; kyc_verified: boolean; tier: number
   balance: number; created_at: string
 }
 
@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  async function handleSave(userId: string, updates: Partial<{ role: string; is_active: boolean }>) {
+  async function handleSave(userId: string, updates: Partial<{ role: string; is_active: boolean; tier: number }>) {
     setSaving(true)
     const res  = await fetch(`/api/admin/users/${userId}`, {
       method: "PATCH",
@@ -93,6 +93,7 @@ export default function AdminUsersPage() {
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Tier</TableHead>
               <TableHead>Balance</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
@@ -102,7 +103,7 @@ export default function AdminUsersPage() {
           <TableBody>
             {loading
               ? Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
+                <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
               ))
               : users.map(u => (
                 <TableRow key={u.id}>
@@ -114,6 +115,7 @@ export default function AdminUsersPage() {
                     <Badge variant={u.role === "super_admin" ? "default" : u.role === "admin" ? "outline" : "secondary"}
                       className="capitalize text-[10px]">{u.role.replace("_", " ")}</Badge>
                   </TableCell>
+                  <TableCell><Badge variant="outline" className="text-[10px]">Tier {u.tier}</Badge></TableCell>
                   <TableCell className="font-medium tabular-nums">{formatCurrency(u.balance)}</TableCell>
                   <TableCell>
                     <Badge variant={u.is_active ? "success" : "destructive"} className="text-[10px]">
@@ -176,10 +178,24 @@ export default function AdminUsersPage() {
                   Deactivating will flag this user and block all activity.
                 </p>
               )}
+              <div>
+                <Label>Tier (manual override)</Label>
+                <Select defaultValue={String(editing.tier)}
+                  onValueChange={v => setEditing(prev => prev ? { ...prev, tier: parseInt(v) } : prev)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map(t => <SelectItem key={t} value={String(t)}>Tier {t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tiers normally rise automatically from referrals. A manual raise here is never
+                  reverted, but future referral activity can still raise it further.
+                </p>
+              </div>
               <div className="flex gap-3 pt-1">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
                 <Button variant="gradient" className="flex-1" disabled={saving}
-                  onClick={() => handleSave(editing.id, { role: editing.role, is_active: editing.is_active })}>
+                  onClick={() => handleSave(editing.id, { role: editing.role, is_active: editing.is_active, tier: editing.tier })}>
                   Save
                 </Button>
               </div>

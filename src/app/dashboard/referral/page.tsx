@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { Copy, Check, Users, Gift, Share2, Trophy } from "lucide-react"
+import { Copy, Check, Users, Gift, Share2, Trophy, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import type { Tier } from "@/types"
 
 interface ReferralData {
   referral_code: string
@@ -25,8 +26,18 @@ interface ReferralData {
   }>
 }
 
+interface TierStatus {
+  tiers: Tier[]
+  currentTier: Tier | null
+  nextTier: Tier | null
+  referralCount: number
+  tasksCompletedToday: number
+  dailyLimit: number
+}
+
 export default function ReferralPage() {
   const [data, setData]       = useState<ReferralData | null>(null)
+  const [tierStatus, setTierStatus] = useState<TierStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied]   = useState<"code" | "url" | null>(null)
 
@@ -34,6 +45,9 @@ export default function ReferralPage() {
     fetch("/api/referrals")
       .then(r => r.json())
       .then(j => { setData(j.data); setLoading(false) })
+    fetch("/api/tiers")
+      .then(r => r.json())
+      .then(j => setTierStatus(j.data))
   }, [])
 
   async function copy(value: string, type: "code" | "url") {
@@ -85,6 +99,76 @@ export default function ReferralPage() {
           </Card>
         ))}
       </div>
+
+      {/* Tier status */}
+      <Card className="border-primary/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" /> Your Tier
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!tierStatus ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Badge className="bounty-gradient text-white text-xs mb-1">
+                    Tier {tierStatus.currentTier?.id} · {tierStatus.currentTier?.name}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">{tierStatus.currentTier?.perks}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold">
+                    {tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit} tasks today
+                  </p>
+                  <p className="text-xs text-muted-foreground">Daily task limit</p>
+                </div>
+              </div>
+
+              {tierStatus.nextTier && (
+                <div>
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>{tierStatus.referralCount} referred</span>
+                    <span>
+                      {Math.max(tierStatus.nextTier.min_referrals - tierStatus.referralCount, 0)} more to reach{" "}
+                      {tierStatus.nextTier.name}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bounty-gradient rounded-full"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (tierStatus.referralCount / Math.max(tierStatus.nextTier.min_referrals, 1)) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid sm:grid-cols-3 gap-2 pt-1">
+                {tierStatus.tiers.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`rounded-lg border p-2.5 text-xs ${
+                      t.id === tierStatus.currentTier?.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border"
+                    }`}
+                  >
+                    <p className="font-semibold">{t.id}. {t.name}</p>
+                    <p className="text-muted-foreground">{t.min_referrals}+ referrals · {t.daily_task_limit}/day</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Referral code card */}
       <Card className="border-primary/20">

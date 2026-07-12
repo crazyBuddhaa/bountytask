@@ -19,6 +19,9 @@ const updateSchema = z.object({
   role: z.enum(["user", "admin", "super_admin"]).optional(),
   is_active: z.boolean().optional(),
   kyc_verified: z.boolean().optional(),
+  // Manual tier override — takes effect immediately, but a later referral
+  // recalculation will never drop it back below this value automatically.
+  tier: z.number().int().min(1).max(6).optional(),
 })
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {

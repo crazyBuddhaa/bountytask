@@ -43,7 +43,17 @@ export interface UserProfile {
   kyc_verified: boolean;
   phone_verified: boolean;
   full_name_locked: boolean;
+  tier: number;
   created_at: string;
+  updated_at: string;
+}
+
+export interface Tier {
+  id: number;
+  name: string;
+  min_referrals: number;
+  daily_task_limit: number;
+  perks: string;
   updated_at: string;
 }
 

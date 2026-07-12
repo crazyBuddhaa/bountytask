@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { creditReferralBonus } from "@/lib/referrals"
 import { flagUser, checkTaskCompletionRate, hasCompletedTask, recordDevice } from "@/lib/fraud"
+import { checkDailyTaskLimit } from "@/lib/tiers"
 import { notifyTaskApproved } from "@/lib/notifications"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
@@ -46,14 +47,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Fraud checks
-  const [alreadyDone, rateLimited] = await Promise.all([
+  const [alreadyDone, rateLimited, dailyLimit] = await Promise.all([
     hasCompletedTask(user.id, taskId),
     checkTaskCompletionRate(user.id),
+    checkDailyTaskLimit(user.id),
   ])
   if (alreadyDone) return NextResponse.json({ data: null, error: "You have already submitted this task" }, { status: 409 })
   if (rateLimited) {
     await flagUser({ userId: user.id, reason: "Exceeded task completion rate limit (10/hr)", severity: "medium" })
     return NextResponse.json({ data: null, error: "Too many submissions. Please wait before trying again." }, { status: 429 })
+  }
+  if (dailyLimit.limited) {
+    return NextResponse.json({
+      data: null,
+      error: `You've reached your tier's daily task limit (${dailyLimit.used}/${dailyLimit.limit}). Invite more friends to unlock a higher limit, or try again tomorrow.`,
+      code: "DAILY_LIMIT_REACHED",
+    }, { status: 429 })
   }
 
   // Record device
