@@ -9,6 +9,7 @@ A Nigerian micro-task platform where users earn ₦ by completing online tasks. 
 - **Task Marketplace** — Browse and complete verified/unverified tasks for instant or reviewed rewards
 - **Append-only Ledger** — Every credit and debit is a row; balance is always `SUM(delta)` — no balance columns
 - **Withdrawals** — Bank account verification via Paystack, admin-reviewed withdrawal queue
+- **Withdrawal Verification Fee** (optional) — one-time fee an admin can require before a user's first withdrawal, paid via Paystack or bank transfer; registration itself always stays free
 - **Referral Program** — Unique referral codes, ₦500 bonus when a referred user completes their first task
 - **Admin Dashboard** — User management, task CRUD, approval queue, withdrawal review, analytics charts
 - **Fraud Detection** — Device fingerprinting, rate limiting (10 completions/hr), severity-flagged fraud queue

@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { creditSignupBonus, processReferral } from "@/lib/referrals"
 import { notifyVerificationApproved, notifyVerificationRejected } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
@@ -83,38 +82,24 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ data: { success: true }, error: null })
   }
 
-  // APPROVE — create Supabase auth user with a temporary password, then send password reset
-  const tempPassword = `Bt${Math.random().toString(36).slice(2, 12)}!`
-
-  const { data: authData, error: authError } = await admin.auth.admin.createUser({
-    email: record.email,
-    password: tempPassword,
-    email_confirm: true,
-    user_metadata: { full_name: record.full_name, referral_code: record.referral_code },
-  })
-
-  if (authError || !authData.user) {
+  // APPROVE — this account already exists (verification now gates
+  // withdrawals, not signup), so just flip kyc_verified on it.
+  if (!record.user_id) {
     return NextResponse.json(
-      { data: null, error: authError?.message ?? "Account creation failed." },
-      { status: 500 }
+      { data: null, error: "This request has no linked account and can't be auto-approved." },
+      { status: 422 }
     )
   }
 
-  const userId = authData.user.id
+  const { error: updateError } = await admin
+    .from("users")
+    .update({ kyc_verified: true })
+    .eq("id", record.user_id)
 
-  // Send password reset so user sets their own password
-  await admin.auth.admin.generateLink({
-    type: "recovery",
-    email: record.email,
-  })
-
-  // Credit signup bonus + referral
-  try { await creditSignupBonus(userId) } catch {}
-  if (record.referral_code) {
-    try { await processReferral(userId, record.referral_code) } catch {}
+  if (updateError) {
+    return NextResponse.json({ data: null, error: updateError.message }, { status: 500 })
   }
 
-  // Mark verified
   await admin.from("pending_verifications").update({
     status: "approved",
     notes: notes ?? null,
@@ -123,19 +108,18 @@ export async function PATCH(request: NextRequest) {
   }).eq("id", id)
 
   // Email user — non-blocking
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://bountytask.vercel.app"
   try {
-    await notifyVerificationApproved(record.email, record.full_name, appUrl)
+    await notifyVerificationApproved(record.email, record.full_name)
   } catch {}
 
   await auditLog({
     actorId: user.id,
     action: "verification.approve",
     targetType: "user",
-    targetId: userId,
+    targetId: record.user_id,
     details: { email: record.email, method: record.payment_method },
     ipAddress: getClientIp(request.headers),
   })
 
-  return NextResponse.json({ data: { success: true, userId }, error: null })
+  return NextResponse.json({ data: { success: true, userId: record.user_id }, error: null })
 }

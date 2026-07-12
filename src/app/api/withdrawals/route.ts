@@ -5,6 +5,7 @@ import { appendLedger, assertSufficientBalance } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { needsWithdrawalVerification } from "@/lib/verification"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest) {
 
   const { account_id, amount } = parsed.data
   const admin = createAdminClient()
+
+  // One-time verification fee gate — checked here, not at signup.
+  if (await needsWithdrawalVerification(user.id)) {
+    return NextResponse.json(
+      { data: null, error: "Complete verification before withdrawing.", code: "VERIFICATION_REQUIRED" },
+      { status: 403 }
+    )
+  }
 
   // Verify account belongs to user and is verified
   const { data: account } = await admin

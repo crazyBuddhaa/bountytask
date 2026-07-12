@@ -80,16 +80,17 @@ export default function AdminSettingsPage() {
           <Settings2 className="w-6 h-6" /> Platform Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Configure registration verification fee and payment method.
+          Configure the withdrawal verification fee and payment method.
         </p>
       </div>
 
       {/* Verification Fee Toggle */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Registration Verification Fee</CardTitle>
+          <CardTitle className="text-base">Withdrawal Verification Fee</CardTitle>
           <CardDescription>
-            When enabled, new users must pay this fee before their account is created.
+            When enabled, users must pay this one-time fee before their first withdrawal.
+            Registration itself always stays free.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -136,7 +137,7 @@ export default function AdminSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Payment Method</CardTitle>
           <CardDescription>
-            How new users will pay the verification fee.
+            How users will pay the verification fee before withdrawing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

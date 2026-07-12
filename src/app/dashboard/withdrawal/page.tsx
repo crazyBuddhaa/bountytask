@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { Plus, Trash2, Star, Banknote, Clock, CheckCircle2, XCircle, Loader2, CreditCard } from "lucide-react"
+import Link from "next/link"
+import { Plus, Trash2, Star, Banknote, Clock, CheckCircle2, XCircle, Loader2, CreditCard, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,6 +32,7 @@ export default function WithdrawalPage() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
   const [banks, setBanks]             = useState<Bank[]>([])
   const [loading, setLoading]         = useState(true)
+  const [needsVerification, setNeedsVerification] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showWithdrawForm, setShowWithdrawForm] = useState(false)
 
@@ -50,15 +52,17 @@ export default function WithdrawalPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [balRes, accRes, wdRes] = await Promise.all([
+    const [balRes, accRes, wdRes, verRes] = await Promise.all([
       fetch("/api/profile"),
       fetch("/api/withdrawals/accounts"),
       fetch("/api/withdrawals?limit=10"),
+      fetch("/api/settings/verification"),
     ])
-    const [bal, acc, wd] = await Promise.all([balRes.json(), accRes.json(), wdRes.json()])
+    const [bal, acc, wd, ver] = await Promise.all([balRes.json(), accRes.json(), wdRes.json(), verRes.json()])
     setBalance(bal.data?.balance ?? 0)
     setAccounts(acc.data ?? [])
     setWithdrawals(wd.data ?? [])
+    setNeedsVerification(!!ver.data?.fee_enabled && !bal.data?.kyc_verified)
     setLoading(false)
   }, [])
 
@@ -136,7 +140,10 @@ export default function WithdrawalPage() {
       body: JSON.stringify({ account_id: selectedAccountId, amount: kobo }),
     })
     const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setSubmittingWithdrawal(false); return }
+    if (!res.ok) {
+      if (json.code === "VERIFICATION_REQUIRED") setNeedsVerification(true)
+      toast.error(json.error); setSubmittingWithdrawal(false); return
+    }
     toast.success("Withdrawal request submitted! We'll process it within 1–2 business days.")
     setShowWithdrawForm(false)
     setAmount(""); setSelectedAccountId("")
@@ -155,11 +162,29 @@ export default function WithdrawalPage() {
           <Button variant="outline" size="sm" onClick={() => setShowAddAccount(true)}>
             <Plus className="w-4 h-4" /> Add Account
           </Button>
-          <Button variant="gradient" size="sm" onClick={() => setShowWithdrawForm(true)} disabled={accounts.length === 0}>
-            <Banknote className="w-4 h-4" /> Withdraw
-          </Button>
+          {needsVerification ? (
+            <Button variant="gradient" size="sm" asChild>
+              <Link href="/dashboard/verify"><ShieldAlert className="w-4 h-4" /> Verify to Withdraw</Link>
+            </Button>
+          ) : (
+            <Button variant="gradient" size="sm" onClick={() => setShowWithdrawForm(true)} disabled={accounts.length === 0}>
+              <Banknote className="w-4 h-4" /> Withdraw
+            </Button>
+          )}
         </div>
       </div>
+
+      {needsVerification && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 flex items-start gap-3 text-sm">
+          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">One-time verification required before you can withdraw</p>
+            <p className="text-xs mt-0.5">
+              <Link href="/dashboard/verify" className="underline font-medium">Verify now</Link> — it only takes a minute.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Balance card */}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">

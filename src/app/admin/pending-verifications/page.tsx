@@ -59,7 +59,7 @@ export default function PendingVerificationsPage() {
     if (json.error) {
       toast.error(json.error)
     } else {
-      toast.success(action === "approve" ? "Account created — password reset email sent" : "Request rejected")
+      toast.success(action === "approve" ? "User verified — withdrawals unlocked" : "Request rejected")
       setSelected(null)
       setAction(null)
       setNotes("")
@@ -74,7 +74,7 @@ export default function PendingVerificationsPage() {
         <div>
           <h1 className="text-2xl font-bold">Pending Verifications</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Bank transfer registration requests awaiting manual review.
+            Bank transfer withdrawal-verification requests awaiting manual review.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => fetchRecords(filter)}>
@@ -179,12 +179,12 @@ export default function PendingVerificationsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {action === "approve" ? "Approve Registration" : "Reject Registration"}
+              {action === "approve" ? "Approve Verification" : "Reject Verification"}
             </DialogTitle>
             <DialogDescription>
               {action === "approve"
-                ? `Create an account for ${selected?.email}. A password-reset email will be sent automatically.`
-                : `Reject the registration request from ${selected?.email}.`}
+                ? `Mark ${selected?.email} as verified so they can withdraw. A confirmation email will be sent.`
+                : `Reject the verification request from ${selected?.email}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -206,7 +206,7 @@ export default function PendingVerificationsPage() {
               disabled={acting}
             >
               {acting && <Loader2 className="animate-spin" />}
-              {action === "approve" ? "Approve & Create Account" : "Reject"}
+              {action === "approve" ? "Approve & Verify User" : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>
