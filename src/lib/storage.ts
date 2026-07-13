@@ -1,63 +1,29 @@
-import { createClient } from "@/lib/supabase/client";
-
-export type StorageBucket = "avatars" | "task-proofs";
-
 /**
- * Upload a file to Supabase Storage from the browser.
- * Returns the public URL (for avatars) or the storage path (for proofs).
+ * Client-side helpers for uploading files. Both routes post multipart
+ * form-data to an authenticated Next.js API route, which uploads to
+ * Cloudinary server-side — the browser never sees Cloudinary credentials.
  */
-export async function uploadFile(
-  bucket: StorageBucket,
-  userId: string,
-  file: File,
-  pathSuffix?: string
-): Promise<string> {
-  const supabase = createClient();
-  const ext = file.name.split(".").pop() ?? "bin";
-  const suffix = pathSuffix ?? Date.now().toString();
-  const path = `${userId}/${suffix}.${ext}`;
 
-  const { error } = await supabase.storage.from(bucket).upload(path, file, {
-    upsert: true,
-    contentType: file.type,
-  });
-
-  if (error) throw new Error(`Upload failed: ${error.message}`);
-
-  if (bucket === "avatars") {
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return data.publicUrl;
+async function postFile(url: string, form: FormData): Promise<string> {
+  const res = await fetch(url, { method: "POST", body: form })
+  const json = await res.json().catch(() => null)
+  if (!res.ok || !json?.data?.url) {
+    throw new Error(json?.error ?? "Upload failed. Please try again.")
   }
-
-  return path; // For private buckets return path, fetch signed URL separately
+  return json.data.url as string
 }
 
-/**
- * Get a signed URL for a private file (e.g. task proof).
- * Expires in 1 hour.
- */
-export async function getSignedUrl(
-  bucket: StorageBucket,
-  path: string,
-  expiresInSeconds = 3600
-): Promise<string> {
-  const supabase = createClient();
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresInSeconds);
-
-  if (error || !data) throw new Error("Could not generate signed URL");
-  return data.signedUrl;
+/** Uploads a profile photo. Returns the public Cloudinary URL. */
+export async function uploadAvatar(file: File): Promise<string> {
+  const form = new FormData()
+  form.append("file", file)
+  return postFile("/api/upload/avatar", form)
 }
 
-/**
- * Delete a file from storage.
- */
-export async function deleteFile(
-  bucket: StorageBucket,
-  path: string
-): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) throw new Error(`Delete failed: ${error.message}`);
+/** Uploads task-completion proof for the given task. Returns a viewable URL. */
+export async function uploadTaskProof(file: File, taskId: string): Promise<string> {
+  const form = new FormData()
+  form.append("file", file)
+  form.append("task_id", taskId)
+  return postFile("/api/upload/task-proof", form)
 }

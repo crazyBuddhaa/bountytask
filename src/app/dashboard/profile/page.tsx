@@ -11,8 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { uploadFile } from "@/lib/storage"
-import { createClient } from "@/lib/supabase/client"
+import { uploadAvatar } from "@/lib/storage"
 import type { UserProfile, Tier } from "@/types"
 
 function tierBadgeClass(name?: string | null) {
@@ -61,10 +60,7 @@ export default function ProfilePage() {
     if (file.size > 2 * 1024 * 1024) { toast.error("Avatar must be under 2 MB"); return }
     setUploading(true)
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const url = await uploadFile("avatars", user.id, file)
+      const url = await uploadAvatar(file)
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

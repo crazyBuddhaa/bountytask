@@ -7,8 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/utils"
-import { uploadFile } from "@/lib/storage"
-import { createClient } from "@/lib/supabase/client"
+import { uploadTaskProof } from "@/lib/storage"
 import type { Task } from "@/types"
 
 interface TaskCompletionModalProps {
@@ -30,9 +29,7 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
     if (proofFile) {
       setUploading(true)
       try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) proofUrl = await uploadFile("task-proofs", user.id, proofFile, task.id)
+        proofUrl = await uploadTaskProof(proofFile, task.id)
       } catch {
         setUploading(false)
         setSubmitting(false)
