@@ -138,26 +138,43 @@ export async function resolveAccount(
   accountNumber: string,
   bankCode: string
 ): Promise<PaystackResolveResponse> {
-  const url = `${RAPIDAPI_BASE}/?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`;
+  // The underlying provider's route is `/verify` (confirmed against its
+  // canonical API, which this RapidAPI listing proxies) — not the bare host
+  // root. Hitting the wrong path silently returns a non-JSON error page,
+  // which looks like "nothing happens" in the UI instead of a clear error.
+  const url = `${RAPIDAPI_BASE}/verify?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`;
 
-  const res = await fetch(url, {
-    headers: rapidApiHeaders(),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: rapidApiHeaders(),
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Could not reach the account verification service");
+  }
 
-  const json = await res.json();
+  let json: Record<string, unknown>;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error("Account verification service returned an unexpected response");
+  }
 
   // The provider returns account_name (sometimes nested under `data`) on
-  // success, and an `error`/`message` field on failure.
-  const data = json.data ?? json;
-  const accountName: string | undefined = data.account_name ?? data.accountName;
+  // success, and an `error`/`message` field (or non-"success" status) on
+  // failure.
+  const data = (json.data ?? json) as Record<string, unknown>;
+  const accountName = (data.account_name ?? data.accountName) as string | undefined;
+  const status = data.status as string | undefined;
 
-  if (!res.ok || !accountName) {
-    throw new Error(json.message ?? json.error ?? "Account verification failed");
+  if (!res.ok || !accountName || (status && status !== "success")) {
+    const message = (json.message ?? json.error ?? data.message) as string | undefined;
+    throw new Error(message ?? "Account verification failed");
   }
 
   return {
-    account_number: data.account_number ?? accountNumber,
+    account_number: (data.account_number as string | undefined) ?? accountNumber,
     account_name: accountName,
     bank_id: 0,
   };
