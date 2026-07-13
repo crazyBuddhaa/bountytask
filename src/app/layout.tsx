@@ -28,6 +28,9 @@ export const metadata: Metadata = {
     title: "BountyTask — Earn ₦ Completing Tasks",
     description: "Complete tasks, earn Naira. Nigeria's #1 task-to-earn platform.",
   },
+  other: {
+    "google-adsense-account": "ca-pub-3580627557521419",
+  },
 };
 
 export const viewport: Viewport = {
