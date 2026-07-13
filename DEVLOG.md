@@ -512,6 +512,22 @@ If "still loading" persists after this deploy with no browser extension/ad-block
 
 ---
 
+## ✅ On-screen diagnostics — DevTools not available on mobile
+**Date:** 2026-07-13
+
+### Found
+Reporter confirmed no visible blocker and can't access browser DevTools on their mobile device to inspect the `inline.js` request. Needed a way to surface the actual failure reason directly on-screen instead.
+
+### Built
+- `src/app/dashboard/verify/page.tsx`, `src/app/advertise/page.tsx` — alongside the existing poll fallback, run a parallel `fetch(url, { mode: "no-cors" })` probe against `js.paystack.co/v1/inline.js` as soon as the Paystack card mounts. Because that CDN sends no `Access-Control-Allow-Origin` header, a *normal* `fetch()` would always throw here (CORS-opaque failure) even when the `<script>` tag itself loads fine — that would be a false positive. `no-cors` mode sidesteps that: it only rejects on a genuine network-layer failure (DNS block, connection refused/timeout, an extension/firewall killing the request outright).
+- The probe's result (or exact browser-thrown error message) is rendered as small monospace text under the error banner when `paystackScriptStatus` becomes `"error"` — readable directly off the screen, no DevTools required. Distinguishes "network truly unreachable" (probe rejected) from "script loaded but never initialized `PaystackPop`" (probe resolved, but the 10s poll still timed out) — the latter would point at something happening after the script executes, not a load failure.
+
+### Verify
+- `npx tsc --noEmit` passes clean.
+- Logic reviewed for the three outcomes: probe resolves + `PaystackPop` appears → normal ready path, diagnostic text never surfaces; probe rejects → error text shows the exact thrown message; probe resolves but `PaystackPop` never appears within 10s → error text says so explicitly, redirecting suspicion away from pure network blocking.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|

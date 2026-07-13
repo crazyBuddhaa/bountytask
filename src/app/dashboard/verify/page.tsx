@@ -40,6 +40,7 @@ export default function VerifyPage() {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [paystackDiagnostic, setPaystackDiagnostic] = useState<string | null>(null)
 
   // Phone verification
   const [phone, setPhone] = useState("")
@@ -70,15 +71,38 @@ export default function VerifyPage() {
   // UI always reaches a definite ready/error state. Kept independent of
   // `needsFee`/`payment_method` (computed further below, after an early
   // return) so this hook's own deps stay stable across renders.
+  //
+  // In parallel, run a `no-cors` fetch probe against the same URL. js.paystack.co
+  // sends no CORS headers, so a *normal* fetch() always throws here even when
+  // the <script> tag loads fine — that would be a false positive. `no-cors`
+  // mode sidesteps that: it only rejects on a genuine network-layer failure
+  // (DNS block, connection refused/timeout, an extension/firewall killing the
+  // request outright), not on missing CORS headers. That distinction — plus
+  // showing the exact result on-screen — lets us tell "network truly
+  // unreachable" apart from "loaded but didn't initialize" without needing
+  // browser DevTools, which aren't available on mobile.
   const needsPaystackScript = !!settings && settings.fee_enabled && !kycVerified && settings.payment_method === "paystack"
   useEffect(() => {
     if (needsPaystackScript && paystackScriptStatus === "loading") {
       const start = Date.now()
+
+      fetch("https://js.paystack.co/v1/inline.js", { mode: "no-cors", cache: "no-store" })
+        .then(() => setPaystackDiagnostic((d) => d ?? "Network probe: reached js.paystack.co OK."))
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          setPaystackDiagnostic(`Network probe: could not reach js.paystack.co — "${msg}". This points to a network-level block (carrier/DNS filtering, VPN, or firewall), not the app.`)
+        })
+
       const poll = setInterval(() => {
         if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
           setPaystackScriptStatus("ready")
           clearInterval(poll)
         } else if (Date.now() - start > 10_000) {
+          setPaystackDiagnostic((d) =>
+            d?.startsWith("Network probe: reached")
+              ? `${d} Script loaded but never initialized PaystackPop after 10s — likely blocked/stripped mid-load rather than a total network failure.`
+              : d ?? "Timed out after 10s with no network probe result."
+          )
           setPaystackScriptStatus("error")
           clearInterval(poll)
         }
@@ -266,13 +290,20 @@ export default function VerifyPage() {
                   : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify</>}
               </Button>
               {paystackScriptStatus === "error" && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 shrink-0" />
-                  Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
-                  <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
-                    reload the page
-                  </button>.
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
+                    <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
+                      reload the page
+                    </button>.
+                  </p>
+                  {paystackDiagnostic && (
+                    <p className="text-[11px] text-muted-foreground font-mono leading-snug break-words">
+                      {paystackDiagnostic}
+                    </p>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

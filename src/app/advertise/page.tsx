@@ -40,6 +40,7 @@ export default function AdvertisePage() {
   const [pendingPayment, setPendingPayment] = useState<{ submissionId: string; feeAmount: number } | null>(null)
   const [paying, setPaying] = useState(false)
   const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [paystackDiagnostic, setPaystackDiagnostic] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/advertiser/settings")
@@ -48,18 +49,32 @@ export default function AdvertisePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // See src/app/dashboard/verify/page.tsx for why this poll exists: some
-  // conditions stall the inline.js request without ever firing next/script's
-  // onLoad/onError, which would otherwise leave the button stuck "loading"
-  // forever with no path to a ready/error state.
+  // See src/app/dashboard/verify/page.tsx for the full rationale: a poll
+  // fallback guarantees the button never spins forever even if next/script's
+  // onLoad/onError never fire, and a `no-cors` fetch probe (immune to the
+  // false-positive a normal fetch() gets from js.paystack.co's missing CORS
+  // headers) surfaces the real network result on-screen — no DevTools needed.
   useEffect(() => {
     if (pendingPayment && paystackScriptStatus === "loading") {
       const start = Date.now()
+
+      fetch("https://js.paystack.co/v1/inline.js", { mode: "no-cors", cache: "no-store" })
+        .then(() => setPaystackDiagnostic((d) => d ?? "Network probe: reached js.paystack.co OK."))
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          setPaystackDiagnostic(`Network probe: could not reach js.paystack.co — "${msg}". This points to a network-level block (carrier/DNS filtering, VPN, or firewall), not the app.`)
+        })
+
       const poll = setInterval(() => {
         if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
           setPaystackScriptStatus("ready")
           clearInterval(poll)
         } else if (Date.now() - start > 10_000) {
+          setPaystackDiagnostic((d) =>
+            d?.startsWith("Network probe: reached")
+              ? `${d} Script loaded but never initialized PaystackPop after 10s — likely blocked/stripped mid-load rather than a total network failure.`
+              : d ?? "Timed out after 10s with no network probe result."
+          )
           setPaystackScriptStatus("error")
           clearInterval(poll)
         }
@@ -210,13 +225,20 @@ export default function AdvertisePage() {
                     : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Submit</>}
                 </Button>
                 {paystackScriptStatus === "error" && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
-                    <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
-                      reload the page
-                    </button>.
-                  </p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
+                      <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
+                        reload the page
+                      </button>.
+                    </p>
+                    {paystackDiagnostic && (
+                      <p className="text-[11px] text-muted-foreground font-mono leading-snug break-words">
+                        {paystackDiagnostic}
+                      </p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
