@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
       currency: "NGN",
       reference,
       callback_url: `${request.nextUrl.origin}/dashboard/verify`,
-      metadata: { purpose: "withdrawal_verification_fee" },
+      // user_id travels in metadata so the webhook (server-to-server,
+      // no session) can still confirm this payment and flip kyc_verified
+      // even if the browser never makes it back to callback_url.
+      metadata: { purpose: "withdrawal_verification_fee", user_id: user.id },
     }),
   })
   const initJson = await initRes.json().catch(() => null)
