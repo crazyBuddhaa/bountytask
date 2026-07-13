@@ -73,10 +73,14 @@ async function getAccessToken(): Promise<string> {
   const json = (await res.json()) as {
     access_token?: string;
     expires_in?: number;
+    error?: string;
+    error_description?: string;
   };
 
   if (!res.ok || !json.access_token) {
-    throw new Error("Failed to authenticate with Flutterwave");
+    throw new Error(
+      `Failed to authenticate with Flutterwave: ${json.error_description ?? json.error ?? res.status}`
+    );
   }
 
   cachedToken = {
@@ -99,8 +103,15 @@ async function authHeaders() {
 
 interface FlutterwaveEnvelope<T> {
   status: string;
-  message: string;
-  data: T;
+  message?: string;
+  data?: T;
+  // Failure responses nest the message here instead of top-level `message`,
+  // e.g. {"status":"failed","error":{"type":"UNAUTHORIZED","code":"10401","message":"Unauthorized"}}
+  error?: { type?: string; code?: string; message?: string };
+}
+
+function flutterwaveErrorMessage(json: FlutterwaveEnvelope<unknown>, fallback: string): string {
+  return json.error?.message ?? json.message ?? fallback;
 }
 
 /** Fetch the list of Nigerian banks (name + code) from Flutterwave. */
@@ -115,7 +126,7 @@ export async function fetchBanks(): Promise<BankOption[]> {
   >;
 
   if (!res.ok || json.status !== "success" || !Array.isArray(json.data)) {
-    throw new Error(json.message ?? "Failed to fetch bank list");
+    throw new Error(flutterwaveErrorMessage(json, "Failed to fetch bank list"));
   }
 
   return json.data.map((b, i) => ({ id: i, code: b.code, name: b.name }));
@@ -140,7 +151,7 @@ export async function resolveAccount(
   }>;
 
   if (!res.ok || json.status !== "success" || !json.data?.account_name) {
-    throw new Error(json.message ?? "Account verification failed");
+    throw new Error(flutterwaveErrorMessage(json, "Account verification failed"));
   }
 
   return {
