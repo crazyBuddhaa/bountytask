@@ -10,6 +10,54 @@ const schema = z.object({
   payment_reference: z.string().min(1, "Enter your transfer reference"),
 })
 
+/** Returns the current user's pending verification request, if any. */
+export async function GET() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
+
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from("pending_verifications")
+    .select("id, status, payment_reference, created_at")
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .maybeSingle()
+
+  return NextResponse.json({ data: data ?? null, error: null })
+}
+
+/** Cancels the current user's pending verification request. */
+export async function DELETE() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const { data: pending } = await admin
+    .from("pending_verifications")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .maybeSingle()
+
+  if (!pending) {
+    return NextResponse.json({ data: null, error: "No pending request found." }, { status: 404 })
+  }
+
+  const { error } = await admin
+    .from("pending_verifications")
+    .update({ status: "rejected", notes: "Cancelled by user" })
+    .eq("id", pending.id)
+
+  if (error) {
+    return NextResponse.json({ data: null, error: "Failed to cancel request." }, { status: 500 })
+  }
+
+  return NextResponse.json({ data: { success: true }, error: null })
+}
+
 /**
  * Submits a bank-transfer verification request for the currently signed-in
  * user (fee gates withdrawals, not signup). Admin reviews it under

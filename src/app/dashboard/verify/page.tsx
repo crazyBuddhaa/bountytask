@@ -2,12 +2,13 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone } from "lucide-react"
+import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone, Clock, AlertCircle, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 
 type VerificationSettings = {
   fee_enabled: boolean
@@ -19,6 +20,13 @@ type VerificationSettings = {
   phone_verification_enabled: boolean
 }
 
+type PendingRequest = {
+  id: string
+  status: string
+  payment_reference: string
+  created_at: string
+}
+
 export default function VerifyPage() {
   const router = useRouter()
   const [settings, setSettings] = useState<VerificationSettings | null>(null)
@@ -28,7 +36,8 @@ export default function VerifyPage() {
   const [reference, setReference] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   // Phone verification
   const [phone, setPhone] = useState("")
@@ -41,14 +50,27 @@ export default function VerifyPage() {
     Promise.all([
       fetch("/api/settings/verification").then((r) => r.json()),
       fetch("/api/profile").then((r) => r.json()),
+      fetch("/api/verification/request").then((r) => r.json()),
     ])
-      .then(([ver, prof]) => {
+      .then(([ver, prof, pending]) => {
         setSettings(ver.data)
         setKycVerified(!!prof.data?.kyc_verified)
         setPhoneVerified(!!prof.data?.phone_verified)
+        setPendingRequest(pending.data ?? null)
       })
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleCancelRequest() {
+    setCancelling(true)
+    const res = await fetch("/api/verification/request", { method: "DELETE" })
+    const json = await res.json()
+    setCancelling(false)
+    if (json.error) { toast.error(json.error); return }
+    setPendingRequest(null)
+    setReference("")
+    toast.success("Verification request cancelled. You can submit a new one.")
+  }
 
   async function handlePaystackPayment() {
     if (!settings) return
@@ -99,7 +121,7 @@ export default function VerifyPage() {
     const json = await res.json()
     setSubmitting(false)
     if (json.error) { toast.error(json.error); return }
-    setSubmitted(true)
+    setPendingRequest({ id: "", status: "pending", payment_reference: reference.trim(), created_at: new Date().toISOString() })
     toast.success("Submitted! An admin will verify your transfer within 24 hours.")
   }
 
@@ -212,14 +234,46 @@ export default function VerifyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {submitted ? (
-                <div className="text-center py-6">
-                  <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-amber-500" />
-                  <p className="font-medium">Request submitted</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    We'll email you once your transfer is verified.
-                  </p>
-                </div>
+              {pendingRequest ? (
+                <>
+                  {/* Pending state */}
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm text-amber-900">Pending Verification</p>
+                        <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200 border">Under Review</Badge>
+                      </div>
+                      <p className="text-xs text-amber-700">
+                        Your request was submitted and is awaiting admin review — usually within 24 hours.
+                      </p>
+                      <p className="text-xs text-amber-700 font-mono mt-1">
+                        Reference: <span className="font-semibold">{pendingRequest.payment_reference}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Duplicate reference warning */}
+                  <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700">
+                      <span className="font-semibold">Note:</span> If you cancel and resubmit, you must use a{" "}
+                      <span className="font-semibold">different transaction reference</span>. The same reference
+                      cannot be used twice.
+                    </p>
+                  </div>
+
+                  {/* Cancel button */}
+                  <Button
+                    variant="outline"
+                    className="w-full border-destructive/40 text-destructive hover:bg-destructive/5"
+                    onClick={handleCancelRequest}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
+                    Cancel &amp; Submit a New Request
+                  </Button>
+                </>
               ) : (
                 <>
                   <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
@@ -237,6 +291,10 @@ export default function VerifyPage() {
                       value={reference}
                       onChange={(e) => setReference(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      Use the exact reference shown in your bank app. The same reference cannot be used twice.
+                    </p>
                   </div>
                   <Button variant="gradient" className="w-full" onClick={handleBankTransferSubmit} disabled={submitting}>
                     {submitting && <Loader2 className="animate-spin" />}
