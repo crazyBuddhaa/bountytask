@@ -53,8 +53,8 @@ export default function AdminTiersPage() {
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Users level up automatically when they reach a tier's referral threshold <em>or</em> its
-          task-completion threshold — whichever comes first. Adjust thresholds, daily limits, and
-          perks for each tier below.
+          completion threshold — whichever comes first. Completions include both regular tasks and
+          ad/offer-wall tasks. Adjust thresholds, daily limits, and perks for each tier below.
         </p>
       </div>
 
@@ -95,12 +95,12 @@ export default function AdminTiersPage() {
                   <p className="text-xs text-muted-foreground">Referral-based path to this tier.</p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor={`min-comp-${tier.id}`}>Min. Tasks Completed to Unlock</Label>
+                  <Label htmlFor={`min-comp-${tier.id}`}>Min. Completions to Unlock</Label>
                   <Input id={`min-comp-${tier.id}`} type="number" min={0}
                     value={tier.min_completions}
                     disabled={tier.id === 1}
                     onChange={(e) => update(tier.id, { min_completions: parseInt(e.target.value) || 0 })} />
-                  <p className="text-xs text-muted-foreground">Task-completion path to this tier.</p>
+                  <p className="text-xs text-muted-foreground">Task- or ad-completion path to this tier (tasks + ads combined).</p>
                 </div>
               </div>
 

@@ -163,7 +163,7 @@ export default async function DashboardPage() {
                 {/* Centre: daily limit progress */}
                 <div className="hidden sm:block text-center shrink-0">
                   <p className="text-sm font-bold">{tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit}</p>
-                  <p className="text-[10px] text-muted-foreground">tasks today</p>
+                  <p className="text-[10px] text-muted-foreground">today (tasks & ads)</p>
                 </div>
 
                 {/* Right: next tier nudge */}
@@ -193,7 +193,7 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">{totalCompletions}/{nextTier.min_completions} tasks completed</p>
+                      <p className="text-[10px] text-muted-foreground mb-1">{totalCompletions}/{nextTier.min_completions} completions (tasks & ads)</p>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${compPct}%` }} />
                       </div>

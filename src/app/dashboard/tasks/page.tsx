@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TaskCard } from "@/components/tasks/TaskCard"
+import { AdTaskCard } from "@/components/tasks/AdTaskCard"
 import { TaskCompletionModal } from "@/components/tasks/TaskCompletionModal"
 import { AdSlot } from "@/components/ads/AdSlot"
 import type { Task, TaskCategory } from "@/types"
+import type { AdTaskStatus } from "@/lib/ad-providers"
 
 interface TierUsage {
   currentTier: { id: number; name: string } | null
@@ -21,6 +23,7 @@ interface TierUsage {
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [categories, setCategories] = useState<TaskCategory[]>([])
+  const [adTasks, setAdTasks] = useState<AdTaskStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -35,7 +38,7 @@ export default function TasksPage() {
     const params = new URLSearchParams({ page: page.toString(), limit: "20" })
     if (search) params.set("search", search)
     if (category) params.set("category", category)
-    if (type) params.set("type", type)
+    if (type && type !== "ads") params.set("type", type)
 
     const res = await fetch(`/api/tasks?${params}`)
     const json = await res.json()
@@ -54,6 +57,12 @@ export default function TasksPage() {
   }, [])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
+
+  useEffect(() => {
+    fetch("/api/ad-tasks/status")
+      .then(r => r.json())
+      .then(json => setAdTasks(json.data ?? []))
+  }, [])
 
   const fetchTierUsage = useCallback(() => {
     fetch("/api/tiers").then(r => r.json()).then(j => setTierUsage(j.data ?? null))
@@ -78,12 +87,25 @@ export default function TasksPage() {
 
   const limitReached = !!tierUsage && tierUsage.tasksCompletedToday >= tierUsage.dailyLimit
 
+  // Ad-task cards only make sense on page 1, with no category selected (they
+  // aren't categorized), and matching whatever the user searched for.
+  const visibleAdTasks =
+    page !== 1 || (category && category !== "") || (type && type !== "ads")
+      ? []
+      : adTasks.filter(t => {
+          if (!search) return true
+          const q = search.toLowerCase()
+          return t.title.toLowerCase().includes(q) || t.poweredBy.toLowerCase().includes(q)
+        })
+
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Available Tasks</h1>
-          <p className="text-muted-foreground text-sm mt-1">{total} tasks available</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            {type === "ads" ? visibleAdTasks.length : total + visibleAdTasks.length} tasks available
+          </p>
         </div>
         {tierUsage?.currentTier && (
           <div
@@ -93,7 +115,7 @@ export default function TasksPage() {
           >
             <Gauge className="w-4 h-4" />
             <span className="font-medium">{tierUsage.tasksCompletedToday}/{tierUsage.dailyLimit}</span>
-            <span className="text-muted-foreground">tasks today · Tier {tierUsage.currentTier.id} ({tierUsage.currentTier.name})</span>
+            <span className="text-muted-foreground">today (tasks & ads) · Tier {tierUsage.currentTier.id} ({tierUsage.currentTier.name})</span>
           </div>
         )}
       </div>
@@ -125,6 +147,7 @@ export default function TasksPage() {
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="unverified">Instant Pay</SelectItem>
             <SelectItem value="verified">Verified</SelectItem>
+            <SelectItem value="ads">Ads &amp; Offers</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -142,14 +165,17 @@ export default function TasksPage() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52" />)}
         </div>
-      ) : tasks.length === 0 ? (
+      ) : visibleAdTasks.length === 0 && tasks.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Filter className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p>No tasks found. Try adjusting your filters.</p>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tasks.map(task => (
+          {visibleAdTasks.map(adTask => (
+            <AdTaskCard key={adTask.provider} task={adTask} />
+          ))}
+          {type !== "ads" && tasks.map(task => (
             <TaskCard key={task.id} task={task} onClaim={() => setSelectedTask(task)} />
           ))}
         </div>

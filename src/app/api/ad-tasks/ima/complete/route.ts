@@ -23,6 +23,7 @@ import {
   recordAdCompletion,
   isAdSessionDuplicate,
 } from "@/lib/ad-providers"
+import { checkDailyTaskLimit } from "@/lib/tiers"
 
 export const dynamic = "force-dynamic"
 
@@ -70,6 +71,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: "Daily cap reached",
       cap: { used: cap.used, cap: cap.cap },
+    }, { status: 429 })
+  }
+
+  // Platform-wide tier daily limit — tasks + ads share the same daily budget
+  const tierLimit = await checkDailyTaskLimit(user.id)
+  if (tierLimit.limited) {
+    return NextResponse.json({
+      error: `You've reached your tier's daily task limit (${tierLimit.used}/${tierLimit.limit}). Invite more friends or complete more tasks to unlock a higher limit, or try again tomorrow.`,
+      code: "DAILY_LIMIT_REACHED",
     }, { status: 429 })
   }
 

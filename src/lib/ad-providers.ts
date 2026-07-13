@@ -14,6 +14,11 @@ import { createHmac, createHash, timingSafeEqual } from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
+import { recalcUserTier } from "@/lib/tiers"
+import { getAyetSettings } from "@/lib/ayet"
+import { getCpxSettings } from "@/lib/cpx"
+import { getHideoutSettings } from "@/lib/hideout"
+import { getLootablySettings } from "@/lib/lootably"
 
 export type AdProvider = "ima" | "hideout" | "lootably" | "ayet" | "cpx"
 export type AdType = "video" | "survey" | "offer" | "mixed"
@@ -133,6 +138,9 @@ export async function recordAdCompletion({
     message: `₦${naira} credited for completing a ${providerLabel[provider]}.`,
     refId: ledgerEntry.id,
   })
+
+  // Ad completions count toward tier advancement the same as regular tasks.
+  await recalcUserTier(userId)
 
   return ledgerEntry
 }
@@ -316,4 +324,100 @@ export async function getAdProviderSettings() {
       secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
     },
   }
+}
+
+export interface AdTaskStatus {
+  provider: AdProvider
+  title: string
+  description: string
+  href: string
+  poweredBy: string
+  /** Fixed reward in kobo, or null when the reward varies per offer (set by the ad network). */
+  rewardKobo: number | null
+  dailyCap: number
+  usedToday: number
+  capReached: boolean
+}
+
+/**
+ * Ad-task cards for the Available Tasks grid — one entry per provider that
+ * is enabled AND fully configured, with today's usage against its cap.
+ * Only enabled providers are returned; disabled/unconfigured ones are
+ * omitted entirely rather than shown as "coming soon" in the main grid.
+ */
+export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
+  const [ima, hideout, lootably, ayet, cpx] = await Promise.all([
+    getAdProviderSettings().then((s) => s.ima),
+    getHideoutSettings(),
+    getLootablySettings(),
+    getAyetSettings(),
+    getCpxSettings(),
+  ])
+
+  const candidates: Omit<AdTaskStatus, "usedToday" | "capReached">[] = []
+
+  if (ima.enabled && ima.adTagUrl) {
+    candidates.push({
+      provider: "ima",
+      title: "Watch a Video Ad",
+      description: "Watch a short rewarded video ad to completion for an instant payout.",
+      href: "/dashboard/tasks/watch-ad",
+      poweredBy: "Google IMA",
+      rewardKobo: ima.rewardKobo,
+      dailyCap: ima.dailyCap,
+    })
+  }
+  if (hideout.enabled && hideout.publisherId && hideout.secret) {
+    candidates.push({
+      provider: "hideout",
+      title: "Watch Videos",
+      description: "Watch a batch of short videos through HideoutTV for an instant payout.",
+      href: "/dashboard/tasks/watch-videos",
+      poweredBy: "HideoutTV",
+      rewardKobo: hideout.rewardKobo,
+      dailyCap: hideout.dailyCap,
+    })
+  }
+  if (lootably.enabled && lootably.apiKey && lootably.secret) {
+    candidates.push({
+      provider: "lootably",
+      title: "Offers & Rewards",
+      description: "Complete offers, games, and surveys from the Lootably rewards wall.",
+      href: "/dashboard/tasks/mixed-offers",
+      poweredBy: "Lootably",
+      rewardKobo: null,
+      dailyCap: lootably.dailyCap,
+    })
+  }
+  if (ayet.enabled && ayet.placementKey && ayet.secretKey) {
+    candidates.push({
+      provider: "ayet",
+      title: "Surveys & Offers",
+      description: "Complete surveys, sign-ups, and offers from verified advertisers.",
+      href: "/dashboard/tasks/offers",
+      poweredBy: "Ayet Studios",
+      rewardKobo: null,
+      dailyCap: ayet.dailyCap,
+    })
+  }
+  if (cpx.enabled && cpx.appId && cpx.secureHashKey) {
+    candidates.push({
+      provider: "cpx",
+      title: "Take a Survey",
+      description: "Answer a short survey via CPX Research for an instant payout.",
+      href: "/dashboard/tasks/surveys",
+      poweredBy: "CPX Research",
+      rewardKobo: null,
+      dailyCap: cpx.dailyCap,
+    })
+  }
+
+  const withUsage = await Promise.all(
+    candidates.map(async (c) => {
+      const usedToday = await getAdCompletionsTodayCount(userId, c.provider)
+      return { ...c, usedToday, capReached: usedToday >= c.dailyCap }
+    })
+  )
+
+  return withUsage
 }

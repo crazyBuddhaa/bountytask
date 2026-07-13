@@ -17,6 +17,7 @@ import {
   checkAdDailyCap,
   recordAdCompletion,
 } from "@/lib/ad-providers"
+import { checkDailyTaskLimit } from "@/lib/tiers"
 
 export const dynamic = "force-dynamic"
 
@@ -46,10 +47,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, duplicate: true })
   }
 
-  // Daily cap
+  // Provider-specific daily cap
   const cap = await checkAdDailyCap(userId, "hideout", settings.dailyCap)
   if (cap.limited) {
     return NextResponse.json({ error: "Daily cap reached" }, { status: 429 })
+  }
+
+  // Platform-wide tier daily limit — tasks + ads share the same daily budget
+  const tierLimit = await checkDailyTaskLimit(userId)
+  if (tierLimit.limited) {
+    return NextResponse.json({ error: "Daily platform limit reached" }, { status: 429 })
   }
 
   const result = await recordAdCompletion({

@@ -15,7 +15,6 @@ export const getAllTiers = unstable_cache(
 
 /**
  * Total approved task completions for a user (all-time, not just today).
- * Used for task-based tier advancement.
  */
 export async function getTotalApprovedCompletions(userId: string): Promise<number> {
   const admin = createAdminClient();
@@ -25,6 +24,33 @@ export async function getTotalApprovedCompletions(userId: string): Promise<numbe
     .eq("user_id", userId)
     .eq("status", "approved");
   return count ?? 0;
+}
+
+/**
+ * Total completed ad/offer-wall tasks for a user (all-time, all providers).
+ * Every row in ad_task_logs is already a confirmed, credited completion —
+ * there is no pending/approved state for ads, unlike regular task_completions.
+ */
+export async function getTotalAdCompletions(userId: string): Promise<number> {
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("ad_task_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  return count ?? 0;
+}
+
+/**
+ * Combined completion count used for tier advancement: regular approved task
+ * completions PLUS completed ad/offer-wall tasks. Ads count the same as
+ * regular tasks toward the "min_completions" tier threshold.
+ */
+export async function getTotalCompletionsForTier(userId: string): Promise<number> {
+  const [taskCompletions, adCompletions] = await Promise.all([
+    getTotalApprovedCompletions(userId),
+    getTotalAdCompletions(userId),
+  ]);
+  return taskCompletions + adCompletions;
 }
 
 /**
@@ -55,7 +81,7 @@ export async function recalcUserTier(userId: string): Promise<number> {
 
   const [{ count: referralCount }, completionCount, tiers, { data: current }] = await Promise.all([
     admin.from("referrals").select("id", { count: "exact", head: true }).eq("referrer_id", userId),
-    getTotalApprovedCompletions(userId),
+    getTotalCompletionsForTier(userId),
     getAllTiers(),
     admin.from("users").select("tier").eq("id", userId).single(),
   ]);
@@ -71,7 +97,7 @@ export async function recalcUserTier(userId: string): Promise<number> {
   return newTier;
 }
 
-/** Number of tasks a user has completed (approved) since UTC midnight today. */
+/** Number of regular tasks a user has completed (approved) since UTC midnight today. */
 export async function getTasksCompletedToday(userId: string): Promise<number> {
   const admin = createAdminClient();
   const startOfDay = new Date();
@@ -87,14 +113,50 @@ export async function getTasksCompletedToday(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Whether a user has hit their tier's daily task-completion limit. */
+/** Number of ad/offer-wall tasks (any provider) a user has completed since UTC midnight today. */
+export async function getAdCompletionsToday(userId: string): Promise<number> {
+  const admin = createAdminClient();
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+
+  const { count } = await admin
+    .from("ad_task_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("completed_at", startOfDay.toISOString());
+
+  return count ?? 0;
+}
+
+/**
+ * Combined completions today: regular tasks + ad/offer-wall tasks (all
+ * providers). This is the number the tier's daily_task_limit is enforced
+ * against — ads count against the same platform-wide daily budget, on top
+ * of whatever cap each individual ad provider already applies.
+ */
+export async function getTotalCompletionsToday(userId: string): Promise<number> {
+  const [tasks, ads] = await Promise.all([
+    getTasksCompletedToday(userId),
+    getAdCompletionsToday(userId),
+  ]);
+  return tasks + ads;
+}
+
+/**
+ * Whether a user has hit their tier's daily task-completion limit.
+ * Counts BOTH regular task completions and ad/offer-wall completions —
+ * ads and tasks draw from the same daily budget. Each ad provider also
+ * enforces its own separate `*_daily_cap` on top of this (see
+ * `checkAdDailyCap` in `ad-providers.ts`); a completion must clear both
+ * limits.
+ */
 export async function checkDailyTaskLimit(
   userId: string
 ): Promise<{ limited: boolean; used: number; limit: number }> {
   const admin = createAdminClient();
   const [{ data: profile }, used] = await Promise.all([
     admin.from("users").select("tier").eq("id", userId).single(),
-    getTasksCompletedToday(userId),
+    getTotalCompletionsToday(userId),
   ]);
 
   const { data: tier } = await admin
@@ -109,7 +171,7 @@ export async function checkDailyTaskLimit(
 
 /**
  * Full tier snapshot for a user: current tier, referral count, total approved
- * completions, next tier thresholds, and today's usage.
+ * completions, next tier thresholds, and today's combined (tasks + ads) usage.
  */
 export async function getUserTierStatus(userId: string) {
   const admin = createAdminClient();
@@ -118,8 +180,8 @@ export async function getUserTierStatus(userId: string) {
       getAllTiers(),
       admin.from("referrals").select("id", { count: "exact", head: true }).eq("referrer_id", userId),
       admin.from("users").select("tier").eq("id", userId).single(),
-      getTasksCompletedToday(userId),
-      getTotalApprovedCompletions(userId),
+      getTotalCompletionsToday(userId),
+      getTotalCompletionsForTier(userId),
     ]);
 
   const currentTierId = profile?.tier ?? 1;

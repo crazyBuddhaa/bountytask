@@ -124,9 +124,9 @@ export default function ReferralPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold">
-                    {tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit} tasks today
+                    {tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit} today
                   </p>
-                  <p className="text-xs text-muted-foreground">Daily task limit</p>
+                  <p className="text-xs text-muted-foreground">Daily limit (tasks & ads)</p>
                 </div>
               </div>
 
@@ -175,14 +175,14 @@ export default function ReferralPage() {
                       </div>
                     </div>
 
-                    {/* Task completion path */}
+                    {/* Task + ad completion path */}
                     <div>
                       <div className="flex justify-between text-xs text-muted-foreground mb-1">
                         <span className="flex items-center gap-1">
-                          <CheckSquare className="w-3 h-3" /> {totalCompletions} task{totalCompletions !== 1 ? "s" : ""} completed
+                          <CheckSquare className="w-3 h-3" /> {totalCompletions} completion{totalCompletions !== 1 ? "s" : ""} (tasks & ads)
                         </span>
                         <span>
-                          {compLeft > 0 ? `${compLeft} more task${compLeft !== 1 ? "s" : ""} needed` : "✓ threshold met"}
+                          {compLeft > 0 ? `${compLeft} more needed` : "✓ threshold met"}
                         </span>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -208,7 +208,7 @@ export default function ReferralPage() {
                   >
                     <p className="font-semibold">{t.id}. {t.name}</p>
                     <p className="text-muted-foreground">{t.min_referrals}+ referrals</p>
-                    <p className="text-muted-foreground">{t.min_completions}+ tasks · {t.daily_task_limit}/day</p>
+                    <p className="text-muted-foreground">{t.min_completions}+ completions · {t.daily_task_limit}/day</p>
                   </div>
                 ))}
               </div>
