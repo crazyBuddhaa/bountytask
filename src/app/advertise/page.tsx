@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
-import { Loader2, Megaphone, Mail, CheckCircle2 } from "lucide-react"
+import Script from "next/script"
+import { Loader2, Megaphone, Mail, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
@@ -38,6 +39,7 @@ export default function AdvertisePage() {
   const [done, setDone] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<{ submissionId: string; feeAmount: number } | null>(null)
   const [paying, setPaying] = useState(false)
+  const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
 
   useEffect(() => {
     fetch("/api/advertiser/settings")
@@ -45,6 +47,26 @@ export default function AdvertisePage() {
       .then(({ data }) => setSettings(data))
       .finally(() => setLoading(false))
   }, [])
+
+  // See src/app/dashboard/verify/page.tsx for why this poll exists: some
+  // conditions stall the inline.js request without ever firing next/script's
+  // onLoad/onError, which would otherwise leave the button stuck "loading"
+  // forever with no path to a ready/error state.
+  useEffect(() => {
+    if (pendingPayment && paystackScriptStatus === "loading") {
+      const start = Date.now()
+      const poll = setInterval(() => {
+        if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
+          setPaystackScriptStatus("ready")
+          clearInterval(poll)
+        } else if (Date.now() - start > 10_000) {
+          setPaystackScriptStatus("error")
+          clearInterval(poll)
+        }
+      }, 300)
+      return () => clearInterval(poll)
+    }
+  }, [pendingPayment, paystackScriptStatus])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,6 +104,14 @@ export default function AdvertisePage() {
 
   async function handlePaystackPayment() {
     if (!pendingPayment) return
+    if (paystackScriptStatus !== "ready") {
+      toast.error(
+        paystackScriptStatus === "error"
+          ? "Couldn't load Paystack. Check your connection or disable ad/script blockers for this site, then try again."
+          : "Still loading Paystack — try again in a second."
+      )
+      return
+    }
     const PaystackPop = (window as unknown as {
       PaystackPop?: { setup: (opts: Record<string, unknown>) => { openIframe: () => void } }
     }).PaystackPop
@@ -154,8 +184,12 @@ export default function AdvertisePage() {
           </Card>
         ) : pendingPayment ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-            <script src="https://js.paystack.co/v1/inline.js" />
+            <Script
+              src="https://js.paystack.co/v1/inline.js"
+              strategy="afterInteractive"
+              onReady={() => setPaystackScriptStatus("ready")}
+              onError={() => setPaystackScriptStatus("error")}
+            />
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">One more step — submission fee</CardTitle>
@@ -163,11 +197,27 @@ export default function AdvertisePage() {
                   A ₦{feeNaira.toLocaleString("en-NG")} fee confirms your submission and moves it into our review queue.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button variant="gradient" className="w-full" onClick={handlePaystackPayment} disabled={paying}>
-                  {paying && <Loader2 className="animate-spin" />}
-                  Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Submit
+              <CardContent className="space-y-2">
+                <Button
+                  variant="gradient"
+                  className="w-full"
+                  onClick={handlePaystackPayment}
+                  disabled={paying || paystackScriptStatus === "loading"}
+                >
+                  {(paying || paystackScriptStatus === "loading") && <Loader2 className="animate-spin" />}
+                  {paystackScriptStatus === "loading"
+                    ? "Loading Paystack…"
+                    : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Submit</>}
                 </Button>
+                {paystackScriptStatus === "error" && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
+                    <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
+                      reload the page
+                    </button>.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </>

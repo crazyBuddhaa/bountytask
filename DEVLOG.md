@@ -496,6 +496,22 @@ Reported: after the previous fix, the Pay button just showed "Loading Paystack�
 
 ---
 
+## Audit — Paystack inline.js loading, all entry points
+**Date:** 2026-07-13
+
+### Found
+`src/app/advertise/page.tsx`'s payment step still had the original raw, unhardened `<script src="https://js.paystack.co/v1/inline.js" />` (same class of bug already fixed on `/dashboard/verify`) — no load/error/stall handling at all.
+
+Separately verified (from outside this environment) that `https://js.paystack.co/v1/inline.js` itself returns `200` in ~110ms with no CORS/network issue, and the deployed app has no `Content-Security-Policy` header anywhere (`vercel.json` only sets `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy` — none of which block script loading). So a generic network/CSP block is not the cause; the remaining unknown is what happens in-browser on the reporter's specific device once the page is authenticated and rendered, which can't be reproduced from this sandbox (route is auth-gated, headless tools here can't complete Supabase login).
+
+### Built
+- `src/app/advertise/page.tsx` — applied the same fix as `/dashboard/verify`: `next/script` with `onReady`/`onError` driving a `paystackScriptStatus` state, button disabled + "Loading Paystack…" until ready, inline error message + reload link if the script fails, and the same 10s `window.PaystackPop` poll fallback so the button can never spin forever even if load/error events don't fire.
+
+### Open question for next session
+If "still loading" persists after this deploy with no browser extension/ad-blocker involved, the next diagnostic step is the reporter's own browser DevTools → Network tab on `/dashboard/verify`: filter for `inline.js` and report its status (pending / blocked / failed / 200) and the browser Console tab for any thrown JS error on that page load. That is the one piece of information this sandbox cannot obtain (route requires an authenticated session), and would immediately tell us whether the request is even leaving the browser, being blocked by something other than a visible extension (e.g. carrier/DNS-level filtering, corporate network policy, browser privacy mode), or failing later inside `PaystackPop.setup()` itself.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|
