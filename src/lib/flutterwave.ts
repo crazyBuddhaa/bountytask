@@ -140,7 +140,10 @@ export async function resolveAccount(
   const res = await fetch(`${API_BASE}/banks/account-resolve`, {
     method: "POST",
     headers: await authHeaders(),
-    body: JSON.stringify({ account: { code: bankCode, number: accountNumber } }),
+    body: JSON.stringify({
+      currency: "NGN",
+      account: { code: bankCode, number: accountNumber },
+    }),
     cache: "no-store",
   });
 
