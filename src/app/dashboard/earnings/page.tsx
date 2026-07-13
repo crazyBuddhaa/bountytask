@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import type { LedgerEntry } from "@/types"
+import { AdSlot } from "@/components/ads/AdSlot"
 
 const refTypeLabels: Record<string, string> = {
   task_reward:         "Task Reward",
@@ -99,6 +100,8 @@ export default function EarningsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AdSlot placement="earnings" />
 
       {/* Ledger table */}
       <Card>
