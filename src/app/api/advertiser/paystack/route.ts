@@ -46,12 +46,37 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient()
+
+  // This route is public and has no session to tie a reference to, so a real
+  // successful reference could otherwise be replayed across many submission_ids
+  // to mark them all "paid" from a single payment. idx_task_submissions_payment_reference_unique
+  // is the atomic guard: only one submission can ever hold a given reference.
+  const { data: existing } = await admin
+    .from("task_submissions")
+    .select("id")
+    .eq("payment_reference", reference)
+    .maybeSingle()
+  if (existing) {
+    return NextResponse.json(
+      { data: null, error: "This payment reference has already been used." },
+      { status: 409 }
+    )
+  }
+
   const { error } = await admin
     .from("task_submissions")
     .update({ payment_status: "paid", payment_reference: reference })
     .eq("id", submission_id)
 
-  if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+  if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { data: null, error: "This payment reference has already been used." },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+  }
 
   await auditLog({
     action: "advertiser.submission.paystack.confirm",

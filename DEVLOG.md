@@ -426,6 +426,28 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
+## ✅ Security fix — Paystack reference replay in both payment routes
+**Date:** 2026-07-13
+
+### Found
+While reviewing `/api/verification/paystack` and `/api/advertiser/paystack` ahead of switching to live Paystack keys: both routes verified a `reference` against Paystack's `/transaction/verify/:reference` endpoint and, on `status: "success"`, immediately marked something paid/verified — but neither route recorded that the reference had been consumed. A Paystack reference stays `"success"` forever once a real transaction completes, so:
+- `verification/paystack` — any authenticated user submitting a reference that *anyone* had ever paid successfully (their own past payment, a friend's, one scraped from a receipt) got `kyc_verified = true` for free, repeatably.
+- `advertiser/paystack` — this route has no auth by design (advertiser leads are unauthenticated). A single real payment's reference could be replayed across unlimited `submission_id`s, marking every one of them `"paid"`.
+
+### Built
+- `supabase/migrations/20260717_paystack_reference_dedup.sql`:
+  - `idx_task_submissions_payment_reference_unique` — partial unique index on `task_submissions.payment_reference WHERE payment_reference IS NOT NULL` (unpaid rows stay NULL and unaffected).
+  - `paystack_verification_references` table (`reference` PK, `user_id`, `created_at`) — `kyc_verified` is a bare boolean with nowhere to record which reference paid for it, so verification dedup needed its own table rather than a column constraint. RLS enabled, service-role-only (same pattern as `phone_verification_codes`).
+- `src/app/api/verification/paystack/route.ts` — inserts into `paystack_verification_references` *before* flipping `kyc_verified`; a `23505` conflict (reference already claimed) returns `409` instead of re-verifying.
+- `src/app/api/advertiser/paystack/route.ts` — checks for an existing row with the same `payment_reference` before updating, plus a `23505` catch on the update itself as a race-condition backstop; both paths return `409` with "This payment reference has already been used."
+
+### Verify
+- Submit the same successful reference twice to `/api/verification/paystack` (two different sessions, or the same session twice) → second call returns `409`, first call's `kyc_verified` change stands.
+- Submit the same reference for two different `submission_id`s to `/api/advertiser/paystack` → second call returns `409`; only the first submission is marked `"paid"`.
+- `npx tsc --noEmit` passes clean with no new type errors.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|

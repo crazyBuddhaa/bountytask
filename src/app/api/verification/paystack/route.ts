@@ -59,6 +59,26 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient()
+
+  // Claim this reference before acting on it. A successful Paystack reference
+  // stays "success" forever — without this, the same reference (the caller's
+  // own from an earlier payment, or anyone else's) could be replayed to verify
+  // any number of accounts for free. The PK insert is the atomic check: if
+  // another request already claimed this reference, the insert conflicts and
+  // we reject instead of double-verifying.
+  const { error: claimError } = await admin
+    .from("paystack_verification_references")
+    .insert({ reference, user_id: user.id })
+  if (claimError) {
+    if (claimError.code === "23505") {
+      return NextResponse.json(
+        { data: null, error: "This payment reference has already been used." },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ data: null, error: claimError.message }, { status: 500 })
+  }
+
   const { error } = await admin.from("users").update({ kyc_verified: true }).eq("id", user.id)
   if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
 
