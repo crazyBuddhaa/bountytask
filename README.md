@@ -69,8 +69,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server only) |
 | `NEXT_PUBLIC_APP_URL` | Full app URL (e.g. `https://bountytask.vercel.app`) |
-| `RAPIDAPI_KEY` | RapidAPI key for bank account number verification |
-| `RAPIDAPI_HOST` | RapidAPI host header (optional, has a default) |
+| `FLUTTERWAVE_SECRET_KEY` | Flutterwave secret key for bank list + account number verification |
 | `PAYSTACK_SECRET_KEY` | Paystack secret key (verification-fee + advertiser payments only — not used for bank verification) |
 | `RESEND_API_KEY` | Resend API key for transactional email |
 | `ADMIN_EMAIL` | Email address for admin notifications |
@@ -127,7 +126,7 @@ src/
 │   ├── fraud.ts         # flagUser, rate limiting, device checks
 │   ├── referrals.ts     # processReferral, bonus crediting
 │   ├── notifications.ts # in-app + email notifications
-│   ├── rapidapi.ts      # bank list + account number verification (RapidAPI)
+│   ├── flutterwave.ts   # bank list + account number verification (Flutterwave)
 │   ├── paystack.ts      # verification-fee + advertiser payments (kept for future use)
 │   ├── audit.ts         # auditLog (append-only)
 │   └── storage.ts       # avatar + proof file uploads
@@ -145,4 +144,4 @@ supabase/
 - **Amounts in kobo** — All monetary values stored as integers in kobo (1 NGN = 100 kobo) to avoid floating-point errors.
 - **Two task types** — `unverified` tasks credit immediately on submission; `verified` tasks require admin approval before credit.
 - **Three Supabase clients** — `client.ts` (browser, anon key), `server.ts` (RSC/actions, anon key + cookie session), `admin.ts` (service role, bypasses RLS for trusted server writes).
-- **RapidAPI for bank account verification** — Bank accounts are verified via the RapidAPI "Nigeria Bank Account validation" endpoint; actual payouts remain manual (admin marks `paid` after transferring externally). Paystack is retained in the codebase (`src/lib/paystack.ts`) for the withdrawal verification-fee and advertiser payment flows only.
+- **Flutterwave for bank account verification** — Bank accounts are verified via Flutterwave's bank list + account resolve API; actual payouts remain manual (admin marks `paid` after transferring externally). Paystack is retained in the codebase (`src/lib/paystack.ts`) for the withdrawal verification-fee and advertiser payment flows only.

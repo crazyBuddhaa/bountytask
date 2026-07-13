@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { resolveAccount } from "@/lib/rapidapi"
+import { resolveAccount } from "@/lib/flutterwave"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'

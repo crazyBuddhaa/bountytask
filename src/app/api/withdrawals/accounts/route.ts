@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { resolveAccount } from "@/lib/rapidapi"
+import { resolveAccount } from "@/lib/flutterwave"
 import { auditLog } from "@/lib/audit"
 import { getClientIp, namesRoughlyMatch } from "@/lib/utils"
 import { z } from "zod"
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   const { bank_code, bank_name, account_number } = parsed.data
 
-  // Verify via RapidAPI (Nigeria Bank Account validation)
+  // Verify via Flutterwave
   let account_name: string
   try {
     const resolved = await resolveAccount(account_number, bank_code)

@@ -386,20 +386,21 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
-## ✅ Post-launch — Bank Verification Provider Switch (RapidAPI)
+## ✅ Post-launch — Bank Verification Provider Switch (RapidAPI, then Flutterwave)
 **Date:** 2026-07-13
 
 ### Built
-- `src/lib/rapidapi.ts` — new provider for bank account number verification: `fetchBanks()` (bundled static list of 86 Nigerian banks/PSBs/MFBs with CBN codes) and `resolveAccount()` (calls the RapidAPI "Nigeria Bank Account validation" endpoint using `RAPIDAPI_KEY` / `RAPIDAPI_HOST`).
-- Moved `src/app/api/paystack/{banks,resolve}` → `src/app/api/bank-verification/{banks,resolve}`, now backed by `rapidapi.ts`.
-- `src/app/api/withdrawals/accounts/route.ts` — `resolveAccount` import switched from `@/lib/paystack` to `@/lib/rapidapi`.
+- Initially moved bank account verification from Paystack to a RapidAPI provider ("Nigeria Bank Account validation"). In production this provider proved unreliable — intermittent `504` timeouts and `404 Endpoint '/login' does not exist` errors, reproducible even against the provider's own example request. Removed it entirely.
+- `src/lib/flutterwave.ts` — new provider for bank verification: `fetchBanks()` (`GET /v3/banks/NG`) and `resolveAccount()` (`POST /v3/accounts/resolve`) against Flutterwave's documented API, using `FLUTTERWAVE_SECRET_KEY`.
+- Moved `src/app/api/paystack/{banks,resolve}` → `src/app/api/bank-verification/{banks,resolve}`, now backed by `flutterwave.ts`.
+- `src/app/api/withdrawals/accounts/route.ts` — `resolveAccount` import switched from `@/lib/paystack` to `@/lib/flutterwave`.
 - `src/app/dashboard/withdrawal/page.tsx` — bank list + account resolution calls updated to the new `/api/bank-verification/*` routes.
-- `.env.example` / `README.md` — documented `RAPIDAPI_KEY` / `RAPIDAPI_HOST`; clarified `PAYSTACK_SECRET_KEY` is now only used for the withdrawal verification fee and advertiser payments.
+- `.env.example` / `README.md` — documented `FLUTTERWAVE_SECRET_KEY`; clarified `PAYSTACK_SECRET_KEY` is now only used for the withdrawal verification fee and advertiser payments.
 - `src/lib/paystack.ts` left untouched — kept as-is for those two payment flows and as a future fallback/alternate verification provider.
 
 ### Verify
-- Add a bank account on `/dashboard/withdrawal` → account name resolves via RapidAPI, not Paystack.
-- `GET /api/bank-verification/banks` returns the bundled bank list without hitting any external API.
+- Add a bank account on `/dashboard/withdrawal` → account name resolves via Flutterwave, not Paystack or RapidAPI.
+- `GET /api/bank-verification/banks` returns Flutterwave's live NG bank list.
 - Withdrawal verification-fee flow (`/api/verification/paystack`) and advertiser payments (`/api/advertiser/paystack`) still work unchanged — they never touched account verification.
 
 ---

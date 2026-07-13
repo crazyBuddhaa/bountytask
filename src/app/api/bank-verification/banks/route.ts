@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { fetchBanks } from "@/lib/rapidapi"
+import { fetchBanks } from "@/lib/flutterwave"
 
 export const revalidate = 3600 // Cache 1hr at edge
 
