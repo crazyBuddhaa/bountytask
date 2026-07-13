@@ -282,15 +282,6 @@ export interface PaystackResolveResponse {
   bank_id: number;
 }
 
-// ─── Bank Verification (Flutterwave) Types ─────────────────────────────────────
-
-/** Bank shape used for the bank-select dropdown + account resolution. */
-export interface BankOption {
-  id: number;
-  name: string;
-  code: string;
-}
-
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 /** Naira amount (human-readable) from kobo */

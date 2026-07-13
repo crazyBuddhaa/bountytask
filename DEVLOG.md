@@ -405,6 +405,27 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ---
 
+## ✅ Post-launch — Dropped Flutterwave, Reinstated Paystack for Bank Verification
+**Date:** 2026-07-13
+
+### Built
+- Removed `src/lib/flutterwave.ts` entirely — the OAuth2 client-credentials flow, in-memory bearer token cache, and Flutterwave-specific envelope parsing are gone.
+- `src/app/api/bank-verification/{banks,resolve}/route.ts` and `src/app/api/withdrawals/accounts/route.ts` — `resolveAccount`/`fetchBanks` imports switched back to `@/lib/paystack` (unchanged since Stage 4; never removed).
+- Kept the `/api/bank-verification/*` route paths as-is (no frontend changes needed) rather than reverting to the older `/api/paystack/*` paths — `src/app/dashboard/withdrawal/page.tsx` already calls these and needs no edits.
+- `src/types/index.ts` — removed the unused `BankOption` type that existed only for the Flutterwave bank list shape; `PaystackBank`/`PaystackResolveResponse` (already in place) cover the full bank-verification surface again.
+- `.env.example` / `README.md` — removed all `FLUTTERWAVE_*` documentation; `PAYSTACK_SECRET_KEY` is now documented as the single provider for bank list, account resolution, the withdrawal verification fee, and advertiser payments.
+
+### Why
+- Flutterwave's v4 API added OAuth2 token-exchange complexity and a second provider to operate, without resolving anything Paystack couldn't already do reliably for bank verification. Paystack was never actually broken — only the abandoned RapidAPI provider was. Consolidating back onto one payments provider (Paystack) reduces the number of external dependencies, secrets, and failure modes to reason about.
+
+### Verify
+- Add a bank account on `/dashboard/withdrawal` → account name resolves via Paystack (`GET/POST https://api.paystack.co/bank/...`), not Flutterwave.
+- `GET /api/bank-verification/banks` returns Paystack's cached (1hr) NG bank list.
+- `FLUTTERWAVE_CLIENT_ID` / `FLUTTERWAVE_CLIENT_SECRET` / `FLUTTERWAVE_ENV` are no longer referenced anywhere in the codebase.
+- Withdrawal verification-fee flow (`/api/verification/paystack`) and advertiser payments (`/api/advertiser/paystack`) continue to work unchanged.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|

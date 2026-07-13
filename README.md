@@ -69,10 +69,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server only) |
 | `NEXT_PUBLIC_APP_URL` | Full app URL (e.g. `https://bountytask.vercel.app`) |
-| `FLUTTERWAVE_CLIENT_ID` | Flutterwave v4 Client ID (OAuth2 client-credentials) for bank list + account number verification |
-| `FLUTTERWAVE_CLIENT_SECRET` | Flutterwave v4 Client Secret (OAuth2 client-credentials) |
-| `FLUTTERWAVE_ENV` | `production` (default) or `sandbox` |
-| `PAYSTACK_SECRET_KEY` | Paystack secret key (verification-fee + advertiser payments only — not used for bank verification) |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key — used for bank list + account verification, the withdrawal verification-fee, and advertiser payments |
+| `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` | Paystack public key — only needed if the withdrawal verification fee's payment method is set to "paystack" |
 | `RESEND_API_KEY` | Resend API key for transactional email |
 | `ADMIN_EMAIL` | Email address for admin notifications |
 | `CRON_SECRET` | Secret string to authenticate cron job requests |
@@ -128,8 +126,7 @@ src/
 │   ├── fraud.ts         # flagUser, rate limiting, device checks
 │   ├── referrals.ts     # processReferral, bonus crediting
 │   ├── notifications.ts # in-app + email notifications
-│   ├── flutterwave.ts   # bank list + account number verification (Flutterwave)
-│   ├── paystack.ts      # verification-fee + advertiser payments (kept for future use)
+│   ├── paystack.ts      # bank list, account number verification, verification-fee + advertiser payments
 │   ├── audit.ts         # auditLog (append-only)
 │   └── storage.ts       # avatar + proof file uploads
 ├── types/index.ts       # All domain types
@@ -146,4 +143,4 @@ supabase/
 - **Amounts in kobo** — All monetary values stored as integers in kobo (1 NGN = 100 kobo) to avoid floating-point errors.
 - **Two task types** — `unverified` tasks credit immediately on submission; `verified` tasks require admin approval before credit.
 - **Three Supabase clients** — `client.ts` (browser, anon key), `server.ts` (RSC/actions, anon key + cookie session), `admin.ts` (service role, bypasses RLS for trusted server writes).
-- **Flutterwave for bank account verification** — Bank accounts are verified via Flutterwave's bank list + account resolve API; actual payouts remain manual (admin marks `paid` after transferring externally). Paystack is retained in the codebase (`src/lib/paystack.ts`) for the withdrawal verification-fee and advertiser payment flows only.
+- **Paystack for bank account verification** — Bank accounts are verified via Paystack's bank list + account resolve API; actual payouts remain manual (admin marks `paid` after transferring externally). The same `src/lib/paystack.ts` module also powers the withdrawal verification-fee and advertiser payment flows.
