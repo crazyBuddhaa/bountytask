@@ -1,9 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { revalidateTag } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
+
+// Keys that getVerificationSettings() (src/lib/verification.ts) reads and
+// caches under this tag with a 5-minute TTL. Without revalidating on write,
+// admin changes to these keys (e.g. switching the withdrawal-verification
+// payment method) can appear to silently not apply for up to 5 minutes.
+const VERIFICATION_SETTINGS_KEYS = new Set([
+  "verification_fee_enabled",
+  "verification_fee_amount",
+  "verification_payment_method",
+  "bank_transfer_name",
+  "bank_transfer_number",
+  "bank_transfer_bank",
+  "phone_verification_enabled",
+  "min_withdrawal_kobo",
+])
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +83,10 @@ export async function PATCH(request: NextRequest) {
       { key, value, updated_at: new Date().toISOString(), updated_by: user.id },
       { onConflict: "key" }
     )
+  }
+
+  if (entries.some(([key]) => VERIFICATION_SETTINGS_KEYS.has(key))) {
+    revalidateTag("verification-settings")
   }
 
   await auditLog({

@@ -448,6 +448,22 @@ While reviewing `/api/verification/paystack` and `/api/advertiser/paystack` ahea
 
 ---
 
+## ✅ Fix — admin verification-settings changes not applying (stale 5-minute cache)
+**Date:** 2026-07-13
+
+### Found
+Reported: switching the withdrawal-verification payment method to "Paystack" in Admin Settings kept showing the Bank Transfer flow on `/dashboard/verify`. `getVerificationSettings()` (`src/lib/verification.ts`) wraps its Supabase read in `unstable_cache(..., { revalidate: 300, tags: ["verification-settings"] })`, but `PATCH /api/admin/settings` only upserted `platform_settings` rows — it never called `revalidateTag("verification-settings")`. Every read (including `/api/settings/verification`, which `/dashboard/verify` calls) kept serving the pre-change cached value for up to 5 minutes after a save.
+
+### Built
+- `src/app/api/admin/settings/route.ts` — after the upsert loop, calls `revalidateTag("verification-settings")` whenever the write touched any of the keys `getVerificationSettings()` reads (`verification_fee_enabled`, `verification_fee_amount`, `verification_payment_method`, `bank_transfer_name`, `bank_transfer_number`, `bank_transfer_bank`, `phone_verification_enabled`, `min_withdrawal_kobo`).
+- Confirmed `getAdvertiserSettings()` / `getAdsSettings()` (`src/lib/advertiser.ts`) hit Supabase directly on every call with no caching layer — they were never affected by this bug, no changes needed there.
+
+### Verify
+- Change `verification_payment_method` in Admin Settings → reload `/dashboard/verify` immediately → Paystack flow shows right away, no 5-minute wait.
+- `npx tsc --noEmit` passes clean.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|
