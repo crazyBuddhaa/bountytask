@@ -282,6 +282,14 @@ export interface PaystackResolveResponse {
   bank_id: number;
 }
 
+// ─── Bank Verification (RapidAPI) Types ────────────────────────────────────────
+
+/** Minimal bank shape used for the bank-select dropdown + account resolution. */
+export interface BankOption {
+  name: string;
+  code: string;
+}
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 /** Naira amount (human-readable) from kobo */
