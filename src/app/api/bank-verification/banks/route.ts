@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { fetchBanks } from "@/lib/paystack"
+import { fetchBanks } from "@/lib/rapidapi"
 
 export const revalidate = 3600 // Cache 1hr at edge
 

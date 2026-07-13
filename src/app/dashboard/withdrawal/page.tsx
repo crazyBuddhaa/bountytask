@@ -73,7 +73,7 @@ export default function WithdrawalPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => {
-    fetch("/api/paystack/banks")
+    fetch("/api/bank-verification/banks")
       .then(r => r.json())
       .then(j => setBanks(j.data ?? []))
   }, [])
@@ -84,7 +84,7 @@ export default function WithdrawalPage() {
     let cancelled = false
     const timer = setTimeout(async () => {
       setResolving(true)
-      const res  = await fetch("/api/paystack/resolve", {
+      const res  = await fetch("/api/bank-verification/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_number: accountNumber, bank_code: bankCode }),
