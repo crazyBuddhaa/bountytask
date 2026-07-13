@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Script from "next/script"
 import { toast } from "sonner"
 import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone, Clock, AlertCircle, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,6 +39,7 @@ export default function VerifyPage() {
   const [paying, setPaying] = useState(false)
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
 
   // Phone verification
   const [phone, setPhone] = useState("")
@@ -74,6 +76,14 @@ export default function VerifyPage() {
 
   async function handlePaystackPayment() {
     if (!settings) return
+    if (paystackScriptStatus !== "ready") {
+      toast.error(
+        paystackScriptStatus === "error"
+          ? "Couldn't load Paystack. Check your connection or disable ad/script blockers for this site, then try again."
+          : "Still loading Paystack — try again in a second."
+      )
+      return
+    }
     const PaystackPop = (window as unknown as {
       PaystackPop?: { setup: (opts: Record<string, unknown>) => { openIframe: () => void } }
     }).PaystackPop
@@ -190,8 +200,12 @@ export default function VerifyPage() {
   return (
     <div className="max-w-lg space-y-6">
       {needsFee && settings?.payment_method === "paystack" && (
-        // eslint-disable-next-line @next/next/no-sync-scripts
-        <script src="https://js.paystack.co/v1/inline.js" />
+        <Script
+          src="https://js.paystack.co/v1/inline.js"
+          strategy="afterInteractive"
+          onReady={() => setPaystackScriptStatus("ready")}
+          onError={() => setPaystackScriptStatus("error")}
+        />
       )}
 
       <div>
@@ -215,11 +229,27 @@ export default function VerifyPage() {
                 Instant — you can withdraw immediately after payment.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button variant="gradient" className="w-full" onClick={handlePaystackPayment} disabled={paying}>
-                {paying && <Loader2 className="animate-spin" />}
-                Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify
+            <CardContent className="space-y-2">
+              <Button
+                variant="gradient"
+                className="w-full"
+                onClick={handlePaystackPayment}
+                disabled={paying || paystackScriptStatus === "loading"}
+              >
+                {(paying || paystackScriptStatus === "loading") && <Loader2 className="animate-spin" />}
+                {paystackScriptStatus === "loading"
+                  ? "Loading Paystack…"
+                  : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify</>}
               </Button>
+              {paystackScriptStatus === "error" && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
+                  <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
+                    reload the page
+                  </button>.
+                </p>
+              )}
             </CardContent>
           </Card>
         ) : (

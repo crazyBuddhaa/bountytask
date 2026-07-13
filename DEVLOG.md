@@ -464,6 +464,23 @@ Reported: switching the withdrawal-verification payment method to "Paystack" in 
 
 ---
 
+## ✅ Fix — "Paystack not loaded" error on withdrawal-verification page
+**Date:** 2026-07-13
+
+### Found
+Reported: after the fee card correctly switched to "Pay with Paystack", tapping the button sometimes showed "Paystack not loaded. Refresh and try again." The inline SDK was mounted as a raw JSX `<script src="https://js.paystack.co/v1/inline.js" />`, added to the DOM only after `settings` loaded (client-side, post-hydration). There was no load/error signal — `handlePaystackPayment` just checked `window.PaystackPop` once at click time, so a click before the script finished fetching (slow network, or a script/ad blocker holding it up) always failed, with no way to tell the two cases apart or retry without a full reload.
+
+### Built
+- `src/app/dashboard/verify/page.tsx` — swapped the raw `<script>` tag for `next/script`'s `<Script strategy="afterInteractive">`, with `onReady`/`onError` driving a `paystackScriptStatus` state (`"loading" | "ready" | "error"`).
+- Pay button now disables and shows "Loading Paystack…" until the SDK actually fires `onReady`, instead of racing the click.
+- On `onError` (blocked/failed request), shows an inline message telling the user to check their connection or disable ad/script blockers for the site, with a one-tap "reload the page" retry — no more generic unexplained failure.
+
+### Verify
+- `npx tsc --noEmit` passes clean (fresh `npm install`, 493 packages, no errors).
+- Manually confirmed the button stays disabled during the loading window and flips to the error state (with retry) when `onError` fires; can't fully simulate a live blocked-script network condition from this environment, but the state machine covers both the load-race and outright load-failure cases that produced the original bug.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|
