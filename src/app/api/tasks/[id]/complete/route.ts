@@ -36,6 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .from("tasks").select("*, category:task_categories(name)").eq("id", taskId).single()
   if (taskErr || !task) return NextResponse.json({ data: null, error: "Task not found" }, { status: 404 })
   if (task.status !== "active") return NextResponse.json({ data: null, error: "Task is not active" }, { status: 400 })
+  if (task.created_by === user.id) return NextResponse.json({ data: null, error: "You cannot complete your own task" }, { status: 403 })
   if (task.expires_at && new Date(task.expires_at) < new Date()) {
     return NextResponse.json({ data: null, error: "Task has expired" }, { status: 400 })
   }

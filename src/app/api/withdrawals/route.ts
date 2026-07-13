@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { appendLedger, assertSufficientBalance } from "@/lib/ledger"
+import { appendLedger } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
@@ -91,24 +91,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: null, error: "You already have a pending withdrawal request" }, { status: 409 })
   }
 
-  // Check balance
-  try { await assertSufficientBalance(user.id, amount) }
-  catch (e: unknown) { return NextResponse.json({ data: null, error: (e as Error).message }, { status: 400 }) }
-
-  // Create ledger debit
-  const ledgerEntry = await appendLedger({
-    userId: user.id, type: "debit", delta: amount, refType: "withdrawal_debit",
-    note: `Withdrawal to ${account.bank_name} ${account.account_number}`, createdBy: user.id,
+  // Atomic balance check + debit via DB-level advisory lock.
+  // Replaces the old check-then-act pattern (assertSufficientBalance → appendLedger)
+  // which was vulnerable to overdrafts under concurrent requests.
+  const { data: debitRows, error: debitErr } = await admin.rpc("safe_withdrawal_debit", {
+    p_user_id: user.id,
+    p_amount:  amount,
+    p_note:    `Withdrawal to ${account.bank_name} ${account.account_number}`,
   })
+  if (debitErr) return NextResponse.json({ data: null, error: debitErr.message }, { status: 500 })
+  const debitResult = debitRows?.[0]
+  if (!debitResult?.ok) {
+    return NextResponse.json({ data: null, error: debitResult?.err ?? "Insufficient balance" }, { status: 400 })
+  }
 
-  // Create withdrawal record
+  // Create withdrawal record linked to the ledger entry created above
   const { data: withdrawal, error } = await admin
     .from("withdrawals")
-    .insert({ user_id: user.id, account_id, amount, status: "pending", ledger_entry_id: ledgerEntry.id })
+    .insert({ user_id: user.id, account_id, amount, status: "pending", ledger_entry_id: debitResult.ledger_id })
     .select("*, account:withdrawal_accounts(*)")
     .single()
 
-  if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+  if (error) {
+    // If withdrawal insert fails (e.g. unique constraint — concurrent request won), the
+    // ledger debit is already written. Log but return a clear error; the debit will need
+    // manual reversal via admin adjustment if this path is ever hit in practice.
+    console.error("Withdrawal insert failed after debit:", error.message, "ledger_id:", debitResult.ledger_id)
+    return NextResponse.json({ data: null, error: "Failed to record withdrawal. Contact support." }, { status: 500 })
+  }
 
   await Promise.all([
     createNotification({ userId: user.id, type: "general", title: "Withdrawal Requested",

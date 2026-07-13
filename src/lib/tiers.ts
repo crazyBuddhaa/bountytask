@@ -1,12 +1,17 @@
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Tier } from "@/types";
 
-/** All 6 tiers, ordered lowest to highest. */
-export async function getAllTiers(): Promise<Tier[]> {
-  const admin = createAdminClient();
-  const { data } = await admin.from("tiers").select("*").order("id", { ascending: true });
-  return data ?? [];
-}
+/** All 6 tiers, ordered lowest to highest. Cached for 5 minutes — changes rarely. */
+export const getAllTiers = unstable_cache(
+  async (): Promise<Tier[]> => {
+    const admin = createAdminClient();
+    const { data } = await admin.from("tiers").select("*").order("id", { ascending: true });
+    return data ?? [];
+  },
+  ["all-tiers"],
+  { revalidate: 300, tags: ["tiers"] }
+);
 
 /**
  * Total approved task completions for a user (all-time, not just today).
