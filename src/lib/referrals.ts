@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { appendLedger } from "@/lib/ledger";
 import { createNotification } from "@/lib/notifications";
 import { recalcUserTier } from "@/lib/tiers";
+import { getVerificationSettings } from "@/lib/verification";
 
 /**
  * Credit the signup bonus (and process a pending referral code) for a
@@ -38,7 +39,6 @@ export async function creditSignupBonusIfNew(
 /** Referral signup bonus in kobo */
 export const REFERRAL_BONUS_KOBO = 50_000; // ₦500
 
-/** Credit referral bonus to referrer after referred user's first task approval */
 export async function creditReferralBonus(referredUserId: string) {
   const supabase = createAdminClient();
 
@@ -50,6 +50,20 @@ export async function creditReferralBonus(referredUserId: string) {
     .single();
 
   if (!referral || referral.bonus_credited) return; // already credited or no referral
+
+  // If admin verification is enabled, the referred user must be kyc_verified
+  // before the referral bonus is paid. This handles two paths:
+  //  - User verified first, completes task after → bonus fires here (verified = true)
+  //  - User completes task first, gets verified later → bonus fires from KYC approval route
+  const settings = await getVerificationSettings();
+  if (settings.fee_enabled) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("kyc_verified")
+      .eq("id", referredUserId)
+      .single();
+    if (!profile?.kyc_verified) return;
+  }
 
   // Credit referrer
   const ledgerEntry = await appendLedger({
@@ -81,7 +95,20 @@ export async function creditReferralBonus(referredUserId: string) {
   });
 }
 
-/** Create referral record when a new user signs up with a referral code */
+/**
+ * Credit the ₦500 referral bonus to the referrer when their referred user
+ * completes their first approved task.
+ *
+ * Gate: if admin verification is ON (fee_enabled), the referred user must
+ * also be kyc_verified before the bonus is paid. This prevents rewarding
+ * referrals from users who never activated their account.
+ * When verification is OFF, the bonus fires on first task completion alone.
+ *
+ * This function is called in two places:
+ *  1. task complete / admin approval routes — fires after each approval
+ *  2. admin KYC approval — re-fires for users who completed a task first
+ *     but weren't verified yet at that time
+ */
 export async function processReferral(
   referredUserId: string,
   referralCode: string

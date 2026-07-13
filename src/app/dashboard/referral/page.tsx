@@ -16,13 +16,15 @@ interface ReferralData {
   total_referred: number
   total_credited: number
   total_earned_kobo: number
+  referral_bonus_kobo: number
+  signup_bonus_kobo: number
   referrals: Array<{
     id: string
     bonus_credited: boolean
     bonus_amount: number
     credited_at: string | null
     created_at: string
-    referred: { full_name: string; username: string; created_at: string } | null
+    referred: { full_name: string; username: string; created_at: string; kyc_verified: boolean } | null
   }>
 }
 
@@ -73,8 +75,8 @@ export default function ReferralPage() {
       <div>
         <h1 className="text-2xl font-bold">Referral Program</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Earn <span className="font-semibold text-primary">₦500</span> for every friend who joins and completes their first task.
-          Your friend gets a <span className="font-semibold text-primary">₦200</span> signup bonus too.
+          Earn <span className="font-semibold text-primary">{data ? formatCurrency(data.referral_bonus_kobo) : "₦500"}</span> for every friend who joins and activates their account.
+          Your friend gets a <span className="font-semibold text-primary">{data ? formatCurrency(data.signup_bonus_kobo) : "₦200"}</span> signup bonus too.
         </p>
       </div>
 
@@ -272,8 +274,8 @@ export default function ReferralPage() {
           <div className="grid sm:grid-cols-3 gap-4">
             {[
               { step: "1", title: "Share your link", desc: "Send your unique referral code or link to friends via WhatsApp, Twitter, or direct message." },
-              { step: "2", title: "Friend signs up", desc: "Your friend registers using your code and immediately receives a ₦200 signup bonus." },
-              { step: "3", title: "Both get paid", desc: "Once they complete their first task, you receive a ₦500 referral bonus in your ledger." },
+              { step: "2", title: "Friend signs up", desc: `Your friend registers using your code and immediately receives a ${data ? formatCurrency(data.signup_bonus_kobo) : "₦200"} signup bonus.` },
+              { step: "3", title: "Both get paid", desc: `Once they activate their account and complete their first task, you receive a ${data ? formatCurrency(data.referral_bonus_kobo) : "₦500"} referral bonus.` },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-3">
                 <div className="w-7 h-7 rounded-full bounty-gradient flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -313,7 +315,15 @@ export default function ReferralPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.referrals.map(r => (
+                {data.referrals.map(r => {
+                  const activated = !!r.referred?.kyc_verified
+                  const statusLabel = r.bonus_credited
+                    ? "Credited"
+                    : !activated
+                    ? "Awaiting activation"
+                    : "Awaiting first task"
+                  const statusVariant = r.bonus_credited ? "success" : "pending"
+                  return (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium text-sm">
                       {r.referred?.full_name ?? "—"}
@@ -326,12 +336,13 @@ export default function ReferralPage() {
                       {r.bonus_credited ? <span className="text-emerald-600">+{formatCurrency(r.bonus_amount)}</span> : "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={r.bonus_credited ? "success" : "pending"} className="text-[10px]">
-                        {r.bonus_credited ? "Credited" : "Awaiting first task"}
+                      <Badge variant={statusVariant} className="text-[10px]">
+                        {statusLabel}
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           )}

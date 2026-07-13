@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { notifyVerificationApproved, notifyVerificationRejected } from "@/lib/notifications"
+import { creditReferralBonus } from "@/lib/referrals"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
@@ -110,6 +111,12 @@ export async function PATCH(request: NextRequest) {
   // Email user — non-blocking
   try {
     await notifyVerificationApproved(record.email, record.full_name)
+  } catch {}
+
+  // Credit referral bonus if this user was referred and has completed a task.
+  // (creditReferralBonus is idempotent and no-ops if already credited or no referral)
+  try {
+    await creditReferralBonus(record.user_id)
   } catch {}
 
   await auditLog({

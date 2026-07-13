@@ -1,11 +1,11 @@
 "use client"
-import { Suspense } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, User, Mail, Lock, Gift } from "lucide-react"
+import { Loader2, User, Mail, Lock, Gift, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -23,31 +23,56 @@ type FormData = z.infer<typeof schema>
 function RegisterForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const defaultRef   = searchParams.get("ref") ?? ""
+  const defaultRef   = searchParams.get("ref")?.toUpperCase() ?? ""
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } =
     useForm<FormData>({
       resolver: zodResolver(schema),
       defaultValues: { referral_code: defaultRef },
     })
 
+  // Referral code live validation
+  const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "invalid">(
+    defaultRef ? "checking" : "idle"
+  )
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refCode = watch("referral_code")
+
+  useEffect(() => {
+    const code = refCode?.trim().toUpperCase() ?? ""
+    if (!code) { setCodeStatus("idle"); return }
+
+    setCodeStatus("checking")
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code)}`)
+        const json = await res.json()
+        setCodeStatus(json.valid ? "valid" : "invalid")
+      } catch {
+        setCodeStatus("idle")
+      }
+    }, 500)
+  }, [refCode])
+
   async function onSubmit(data: FormData) {
+    // Block submission if the code typed is invalid
+    if (codeStatus === "invalid") {
+      toast.error("That referral code doesn't exist. Clear it or enter a valid one.")
+      return
+    }
     try {
       const supabase = createClient()
       const { data: signUpData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          data: { full_name: data.full_name, referral_code: data.referral_code || undefined },
+          data: { full_name: data.full_name, referral_code: data.referral_code?.trim().toUpperCase() || undefined },
           emailRedirectTo: `${window.location.origin}/api/auth/callback`,
         },
       })
       if (error) { toast.error(error.message); return }
 
-      // Credit the welcome bonus right away. Don't rely on the user ever
-      // clicking a confirmation-email link (email confirmation may be off
-      // for this project, or the email may not arrive) — the callback
-      // route still handles it too, but only as an idempotent fallback.
       if (signUpData.user) {
         try {
           await fetch("/api/auth/credit-signup-bonus", {
@@ -55,12 +80,11 @@ function RegisterForm() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               user_id: signUpData.user.id,
-              referral_code: data.referral_code || undefined,
+              referral_code: data.referral_code?.trim().toUpperCase() || undefined,
             }),
           })
         } catch {
-          // Non-fatal — the /api/auth/callback path will still credit it
-          // once the account is confirmed/used for the first time.
+          // Non-fatal — /api/auth/callback handles it as idempotent fallback
         }
       }
 
@@ -112,11 +136,27 @@ function RegisterForm() {
           </Label>
           <div className="relative">
             <Gift className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input id="referral_code" placeholder="e.g. ABC12345" className="pl-9 uppercase" {...register("referral_code")} />
+            <Input
+              id="referral_code"
+              placeholder="e.g. ABC12345"
+              className={`pl-9 pr-9 uppercase tracking-widest ${
+                codeStatus === "valid" ? "border-emerald-500 focus-visible:ring-emerald-500" :
+                codeStatus === "invalid" ? "border-destructive focus-visible:ring-destructive" : ""
+              }`}
+              {...register("referral_code")}
+            />
+            {/* Status indicator */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {codeStatus === "checking" && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+              {codeStatus === "valid"    && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+              {codeStatus === "invalid"  && <XCircle className="w-4 h-4 text-destructive" />}
+            </div>
           </div>
+          {codeStatus === "valid"   && <p className="text-xs text-emerald-600">✓ Valid referral code — you&apos;ll both get a bonus!</p>}
+          {codeStatus === "invalid" && <p className="text-xs text-destructive">This referral code doesn&apos;t exist. Clear it to continue without one.</p>}
         </div>
 
-        <Button type="submit" variant="gradient" className="w-full" disabled={isSubmitting}>
+        <Button type="submit" variant="gradient" className="w-full" disabled={isSubmitting || codeStatus === "checking"}>
           {isSubmitting && <Loader2 className="animate-spin" />}
           Create Account — Get ₦200 Bonus
         </Button>
