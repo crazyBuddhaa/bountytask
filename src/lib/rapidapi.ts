@@ -25,6 +25,7 @@ function rapidApiHeaders() {
   if (!key) throw new Error("RAPIDAPI_KEY is not configured");
 
   return {
+    "Content-Type": "application/json",
     "X-RapidAPI-Key": key,
     "X-RapidAPI-Host": RAPIDAPI_HOST,
   };
@@ -138,11 +139,9 @@ export async function resolveAccount(
   accountNumber: string,
   bankCode: string
 ): Promise<PaystackResolveResponse> {
-  // The underlying provider's route is `/verify` (confirmed against its
-  // canonical API, which this RapidAPI listing proxies) — not the bare host
-  // root. Hitting the wrong path silently returns a non-JSON error page,
-  // which looks like "nothing happens" in the UI instead of a clear error.
-  const url = `${RAPIDAPI_BASE}/verify?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`;
+  // Confirmed against the RapidAPI dashboard's own example request: this
+  // provider is called at the bare host root, not a `/verify` sub-path.
+  const url = `${RAPIDAPI_BASE}/?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`;
 
   let res: Response;
   try {
