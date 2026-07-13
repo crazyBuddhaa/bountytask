@@ -1,7 +1,6 @@
 "use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import Script from "next/script"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone, Clock, AlertCircle, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -29,7 +28,21 @@ type PendingRequest = {
 }
 
 export default function VerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-lg space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    }>
+      <VerifyPageInner />
+    </Suspense>
+  )
+}
+
+function VerifyPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [settings, setSettings] = useState<VerificationSettings | null>(null)
   const [kycVerified, setKycVerified] = useState(false)
   const [phoneVerified, setPhoneVerified] = useState(false)
@@ -37,10 +50,9 @@ export default function VerifyPage() {
   const [reference, setReference] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null)
   const [cancelling, setCancelling] = useState(false)
-  const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [paystackDiagnostic, setPaystackDiagnostic] = useState<string | null>(null)
 
   // Phone verification
   const [phone, setPhone] = useState("")
@@ -64,52 +76,33 @@ export default function VerifyPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Some ad/script/tracker blockers silently stall the request (never firing
-  // Script's onLoad *or* onError), which used to leave the "Loading
-  // Paystack..." button spinning forever with no way out. Poll for the
-  // global the SDK defines and give up after a timeout either way, so the
-  // UI always reaches a definite ready/error state. Kept independent of
-  // `needsFee`/`payment_method` (computed further below, after an early
-  // return) so this hook's own deps stay stable across renders.
-  //
-  // In parallel, run a `no-cors` fetch probe against the same URL. js.paystack.co
-  // sends no CORS headers, so a *normal* fetch() always throws here even when
-  // the <script> tag loads fine — that would be a false positive. `no-cors`
-  // mode sidesteps that: it only rejects on a genuine network-layer failure
-  // (DNS block, connection refused/timeout, an extension/firewall killing the
-  // request outright), not on missing CORS headers. That distinction — plus
-  // showing the exact result on-screen — lets us tell "network truly
-  // unreachable" apart from "loaded but didn't initialize" without needing
-  // browser DevTools, which aren't available on mobile.
-  const needsPaystackScript = !!settings && settings.fee_enabled && !kycVerified && settings.payment_method === "paystack"
+  // Paystack redirects back here with `reference`/`trxref` in the query
+  // string after checkout. This is the counterpart to the redirect kicked
+  // off in handlePaystackPayment below — confirm the payment server-side and
+  // clean the URL either way so a refresh doesn't re-trigger verification.
   useEffect(() => {
-    if (needsPaystackScript && paystackScriptStatus === "loading") {
-      const start = Date.now()
+    const ref = searchParams.get("reference") ?? searchParams.get("trxref")
+    if (!ref) return
 
-      fetch("https://js.paystack.co/v1/inline.js", { mode: "no-cors", cache: "no-store" })
-        .then(() => setPaystackDiagnostic((d) => d ?? "Network probe: reached js.paystack.co OK."))
-        .catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e)
-          setPaystackDiagnostic(`Network probe: could not reach js.paystack.co — "${msg}". This points to a network-level block (carrier/DNS filtering, VPN, or firewall), not the app.`)
-        })
-
-      const poll = setInterval(() => {
-        if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
-          setPaystackScriptStatus("ready")
-          clearInterval(poll)
-        } else if (Date.now() - start > 10_000) {
-          setPaystackDiagnostic((d) =>
-            d?.startsWith("Network probe: reached")
-              ? `${d} Script loaded but never initialized PaystackPop after 10s — likely blocked/stripped mid-load rather than a total network failure.`
-              : d ?? "Timed out after 10s with no network probe result."
-          )
-          setPaystackScriptStatus("error")
-          clearInterval(poll)
-        }
-      }, 300)
-      return () => clearInterval(poll)
-    }
-  }, [needsPaystackScript, paystackScriptStatus])
+    setConfirming(true)
+    fetch("/api/verification/paystack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference: ref }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) { toast.error(json.error); return }
+        setKycVerified(true)
+        toast.success("You're verified!")
+      })
+      .finally(() => {
+        setConfirming(false)
+        router.replace("/dashboard/verify")
+      })
+    // Only ever run once per landed reference — router.replace strips it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   async function handleCancelRequest() {
     setCancelling(true)
@@ -122,50 +115,24 @@ export default function VerifyPage() {
     toast.success("Verification request cancelled. You can submit a new one.")
   }
 
+  // Redirects to Paystack's own hosted checkout page instead of opening an
+  // in-page iframe via inline.js. The inline flow depends on a third-party
+  // script executing inside our page and a checkout iframe reading its own
+  // storage — both silently broken by ad-blockers and third-party-cookie
+  // blocking with no recoverable error (see DEVLOG for the history of
+  // partial fixes to that). A full-page redirect has neither dependency:
+  // the browser just navigates to Paystack's domain like any other link.
   async function handlePaystackPayment() {
     if (!settings) return
-    if (paystackScriptStatus !== "ready") {
-      toast.error(
-        paystackScriptStatus === "error"
-          ? "Couldn't load Paystack. Check your connection or disable ad/script blockers for this site, then try again."
-          : "Still loading Paystack — try again in a second."
-      )
+    setPaying(true)
+    const res = await fetch("/api/verification/paystack/initialize", { method: "POST" })
+    const json = await res.json()
+    if (json.error || !json.data?.authorization_url) {
+      setPaying(false)
+      toast.error(json.error ?? "Could not start payment. Try again.")
       return
     }
-    const PaystackPop = (window as unknown as {
-      PaystackPop?: { setup: (opts: Record<string, unknown>) => { openIframe: () => void } }
-    }).PaystackPop
-    if (!PaystackPop) { toast.error("Paystack not loaded. Refresh and try again."); return }
-
-    const profileRes = await fetch("/api/profile")
-    const profileJson = await profileRes.json()
-    const email = profileJson.data?.email
-    if (!email) { toast.error("Could not load your profile. Refresh and try again."); return }
-
-    setPaying(true)
-    const ref = `verify_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-
-    PaystackPop.setup({
-      key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "",
-      email,
-      amount: settings.fee_amount,
-      currency: "NGN",
-      ref,
-      metadata: { purpose: "withdrawal_verification_fee" },
-      callback: async (resp: { reference: string }) => {
-        const res = await fetch("/api/verification/paystack", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reference: resp.reference }),
-        })
-        const json = await res.json()
-        setPaying(false)
-        if (json.error) { toast.error(json.error); return }
-        setKycVerified(true)
-        toast.success("You're verified!")
-      },
-      onClose: () => setPaying(false),
-    }).openIframe()
+    window.location.href = json.data.authorization_url
   }
 
   async function handleBankTransferSubmit() {
@@ -247,15 +214,6 @@ export default function VerifyPage() {
 
   return (
     <div className="max-w-lg space-y-6">
-      {needsFee && settings?.payment_method === "paystack" && (
-        <Script
-          src="https://js.paystack.co/v1/inline.js"
-          strategy="afterInteractive"
-          onReady={() => setPaystackScriptStatus("ready")}
-          onError={() => setPaystackScriptStatus("error")}
-        />
-      )}
-
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <ShieldCheck className="w-6 h-6 text-primary" /> Verify to Withdraw
@@ -282,29 +240,18 @@ export default function VerifyPage() {
                 variant="gradient"
                 className="w-full"
                 onClick={handlePaystackPayment}
-                disabled={paying || paystackScriptStatus === "loading"}
+                disabled={paying || confirming}
               >
-                {(paying || paystackScriptStatus === "loading") && <Loader2 className="animate-spin" />}
-                {paystackScriptStatus === "loading"
-                  ? "Loading Paystack…"
+                {(paying || confirming) && <Loader2 className="animate-spin" />}
+                {confirming
+                  ? "Confirming payment…"
+                  : paying
+                  ? "Redirecting to Paystack…"
                   : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Verify</>}
               </Button>
-              {paystackScriptStatus === "error" && (
-                <div className="space-y-1.5">
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
-                    <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
-                      reload the page
-                    </button>.
-                  </p>
-                  {paystackDiagnostic && (
-                    <p className="text-[11px] text-muted-foreground font-mono leading-snug break-words">
-                      {paystackDiagnostic}
-                    </p>
-                  )}
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground">
+                You&apos;ll be redirected to Paystack&apos;s secure checkout, then brought back here automatically.
+              </p>
             </CardContent>
           </Card>
         ) : (

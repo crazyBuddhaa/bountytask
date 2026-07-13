@@ -1,7 +1,7 @@
 "use client"
-import { useEffect, useState } from "react"
-import Script from "next/script"
-import { Loader2, Megaphone, Mail, CheckCircle2, AlertCircle } from "lucide-react"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Loader2, Megaphone, Mail, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
@@ -32,6 +32,24 @@ const empty = {
 }
 
 export default function AdvertisePage() {
+  return (
+    <Suspense fallback={
+      <>
+        <PublicHeader />
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12 flex justify-center">
+          <Loader2 className="animate-spin text-muted-foreground w-6 h-6" />
+        </main>
+        <Footer />
+      </>
+    }>
+      <AdvertisePageInner />
+    </Suspense>
+  )
+}
+
+function AdvertisePageInner() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [settings, setSettings] = useState<AdvertiserSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(empty)
@@ -39,8 +57,8 @@ export default function AdvertisePage() {
   const [done, setDone] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<{ submissionId: string; feeAmount: number } | null>(null)
   const [paying, setPaying] = useState(false)
-  const [paystackScriptStatus, setPaystackScriptStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [paystackDiagnostic, setPaystackDiagnostic] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const handledReturn = useRef(false)
 
   useEffect(() => {
     fetch("/api/advertiser/settings")
@@ -49,39 +67,52 @@ export default function AdvertisePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // See src/app/dashboard/verify/page.tsx for the full rationale: a poll
-  // fallback guarantees the button never spins forever even if next/script's
-  // onLoad/onError never fire, and a `no-cors` fetch probe (immune to the
-  // false-positive a normal fetch() gets from js.paystack.co's missing CORS
-  // headers) surfaces the real network result on-screen — no DevTools needed.
+  // Paystack redirects back here with `?submission_id=...&reference=...` (or
+  // `trxref`) after checkout — this page is public/unauthenticated, so
+  // unlike dashboard/verify there's no session to recover the in-progress
+  // submission from; the round-trip query params are the only state that
+  // survives the redirect. Confirm the payment server-side, then either show
+  // the success screen or let the user retry with the fee amount we already
+  // have from settings.
   useEffect(() => {
-    if (pendingPayment && paystackScriptStatus === "loading") {
-      const start = Date.now()
+    if (handledReturn.current) return
+    const submissionId = searchParams.get("submission_id")
+    const ref = searchParams.get("reference") ?? searchParams.get("trxref")
+    if (!submissionId || !ref) return
+    handledReturn.current = true
 
-      fetch("https://js.paystack.co/v1/inline.js", { mode: "no-cors", cache: "no-store" })
-        .then(() => setPaystackDiagnostic((d) => d ?? "Network probe: reached js.paystack.co OK."))
-        .catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e)
-          setPaystackDiagnostic(`Network probe: could not reach js.paystack.co — "${msg}". This points to a network-level block (carrier/DNS filtering, VPN, or firewall), not the app.`)
-        })
-
-      const poll = setInterval(() => {
-        if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
-          setPaystackScriptStatus("ready")
-          clearInterval(poll)
-        } else if (Date.now() - start > 10_000) {
-          setPaystackDiagnostic((d) =>
-            d?.startsWith("Network probe: reached")
-              ? `${d} Script loaded but never initialized PaystackPop after 10s — likely blocked/stripped mid-load rather than a total network failure.`
-              : d ?? "Timed out after 10s with no network probe result."
-          )
-          setPaystackScriptStatus("error")
-          clearInterval(poll)
+    setConfirming(true)
+    fetch("/api/advertiser/paystack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: submissionId, reference: ref }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) {
+          toast.error(json.error)
+          if (settings) setPendingPayment({ submissionId, feeAmount: settings.submission_fee_kobo })
+          return
         }
-      }, 300)
-      return () => clearInterval(poll)
-    }
-  }, [pendingPayment, paystackScriptStatus])
+        setDone(true)
+      })
+      .finally(() => {
+        setConfirming(false)
+        router.replace("/advertise")
+      })
+  }, [searchParams, settings, router])
+
+  // Watchdog: a redirect can still leave `paying` stuck true if the fetch to
+  // our own initialize endpoint hangs (e.g. flaky mobile network) before the
+  // browser ever navigates away. Force a defined end state either way.
+  useEffect(() => {
+    if (!paying) return
+    const timeout = setTimeout(() => {
+      setPaying(false)
+      toast.error("Couldn't reach the payment page. Please try again.")
+    }, 20_000)
+    return () => clearTimeout(timeout)
+  }, [paying])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -117,45 +148,25 @@ export default function AdvertisePage() {
     }
   }
 
+  // Redirects to Paystack's own hosted checkout page instead of opening an
+  // in-page iframe via inline.js — see dashboard/verify/page.tsx for the
+  // full rationale (ad-blockers and third-party-cookie blocking silently
+  // break the inline flow with no recoverable error).
   async function handlePaystackPayment() {
     if (!pendingPayment) return
-    if (paystackScriptStatus !== "ready") {
-      toast.error(
-        paystackScriptStatus === "error"
-          ? "Couldn't load Paystack. Check your connection or disable ad/script blockers for this site, then try again."
-          : "Still loading Paystack — try again in a second."
-      )
+    setPaying(true)
+    const res = await fetch("/api/advertiser/paystack/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: pendingPayment.submissionId }),
+    })
+    const json = await res.json()
+    if (json.error || !json.data?.authorization_url) {
+      setPaying(false)
+      toast.error(json.error ?? "Could not start payment. Try again.")
       return
     }
-    const PaystackPop = (window as unknown as {
-      PaystackPop?: { setup: (opts: Record<string, unknown>) => { openIframe: () => void } }
-    }).PaystackPop
-    if (!PaystackPop) { toast.error("Paystack not loaded. Refresh and try again."); return }
-
-    setPaying(true)
-    const ref = `advertiser_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-
-    PaystackPop.setup({
-      key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "",
-      email: form.contact_email,
-      amount: pendingPayment.feeAmount,
-      currency: "NGN",
-      ref,
-      metadata: { purpose: "advertiser_submission_fee" },
-      callback: async (resp: { reference: string }) => {
-        const res = await fetch("/api/advertiser/paystack", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submission_id: pendingPayment.submissionId, reference: resp.reference }),
-        })
-        const json = await res.json()
-        setPaying(false)
-        if (json.error) { toast.error(json.error); return }
-        setPendingPayment(null)
-        setDone(true)
-      },
-      onClose: () => setPaying(false),
-    }).openIframe()
+    window.location.href = json.data.authorization_url
   }
 
   const minBudgetNaira = settings ? Math.round(settings.min_budget_kobo / 100) : 0
@@ -194,55 +205,41 @@ export default function AdvertisePage() {
             <CardContent className="p-8 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-500" />
               <p className="font-medium">Submission received!</p>
-              <p className="text-sm text-muted-foreground">Our team will review it and reach out at {form.contact_email} within a few business days.</p>
+              <p className="text-sm text-muted-foreground">
+                Our team will review it and reach out{form.contact_email ? ` at ${form.contact_email}` : ""} within a few business days.
+              </p>
+            </CardContent>
+          </Card>
+        ) : confirming ? (
+          <Card>
+            <CardContent className="p-8 text-center space-y-2">
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
+              <p className="font-medium">Confirming your payment…</p>
             </CardContent>
           </Card>
         ) : pendingPayment ? (
-          <>
-            <Script
-              src="https://js.paystack.co/v1/inline.js"
-              strategy="afterInteractive"
-              onReady={() => setPaystackScriptStatus("ready")}
-              onError={() => setPaystackScriptStatus("error")}
-            />
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">One more step — submission fee</CardTitle>
-                <CardDescription>
-                  A ₦{feeNaira.toLocaleString("en-NG")} fee confirms your submission and moves it into our review queue.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button
-                  variant="gradient"
-                  className="w-full"
-                  onClick={handlePaystackPayment}
-                  disabled={paying || paystackScriptStatus === "loading"}
-                >
-                  {(paying || paystackScriptStatus === "loading") && <Loader2 className="animate-spin" />}
-                  {paystackScriptStatus === "loading"
-                    ? "Loading Paystack…"
-                    : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Submit</>}
-                </Button>
-                {paystackScriptStatus === "error" && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-destructive flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      Couldn&apos;t load Paystack. Check your connection or disable ad/script blockers for this site, then{" "}
-                      <button type="button" className="underline underline-offset-2" onClick={() => location.reload()}>
-                        reload the page
-                      </button>.
-                    </p>
-                    {paystackDiagnostic && (
-                      <p className="text-[11px] text-muted-foreground font-mono leading-snug break-words">
-                        {paystackDiagnostic}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">One more step — submission fee</CardTitle>
+              <CardDescription>
+                A ₦{feeNaira.toLocaleString("en-NG")} fee confirms your submission and moves it into our review queue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                variant="gradient"
+                className="w-full"
+                onClick={handlePaystackPayment}
+                disabled={paying}
+              >
+                {paying && <Loader2 className="animate-spin" />}
+                {paying ? "Redirecting to Paystack…" : <>Pay ₦{feeNaira.toLocaleString("en-NG")} &amp; Submit</>}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                You&apos;ll be redirected to Paystack&apos;s secure checkout, then brought back here automatically.
+              </p>
+            </CardContent>
+          </Card>
         ) : (
           <>
             {(settings.requirements || settings.pricing_info) && (
