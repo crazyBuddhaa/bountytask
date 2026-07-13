@@ -36,13 +36,9 @@ export async function GET(request: NextRequest) {
   const { data, error, count } = await query
   if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
 
-  // Fetch live balances for each user
-  const usersWithBalance = await Promise.all(
-    (data ?? []).map(async (u) => {
-      const { data: bal } = await admin.rpc("get_user_balance", { p_user_id: u.id })
-      return { ...u, balance: bal ?? 0 }
-    })
-  )
+  // balance_kobo is a materialized column on users — no per-row RPC calls needed.
+  // Previously this was an N+1 loop (one get_user_balance RPC per user).
+  const usersWithBalance = (data ?? []).map(u => ({ ...u, balance: u.balance_kobo ?? 0 }))
 
   return NextResponse.json({ data: usersWithBalance, total: count ?? 0, page, limit, error: null })
 }
