@@ -545,12 +545,12 @@ Six ad/offer-wall providers integrated in 7 staged additions on top of the exist
 | Stage | Provider(s) | Type | Status |
 |---|---|---|---|
 | A | Infrastructure | DB table, lib utils, admin settings | ✅ Built |
-| B | Google AdSense | Display ads — snippet-based, passive | ⬜ Planned |
-| C | CPX Research | Survey wall — best NG fill rate | ⬜ Planned |
-| D | Ayet Studios | Offer wall — HMAC-signed postbacks | ⬜ Planned |
-| E | Google IMA SDK | Watch-an-ad — rewarded video | ⬜ Planned |
-| F | HideoutTV | Watch-videos — session-based | ⬜ Planned |
-| G | Lootably | Mixed offer wall — broadest fallback | ⬜ Planned |
+| B | Google AdSense | Display ads — snippet-based, passive | ✅ Built |
+| C | CPX Research | Survey wall — best NG fill rate | ✅ Built |
+| D | Ayet Studios | Offer wall — HMAC-signed postbacks | ✅ Built |
+| E | Google IMA SDK | Watch-an-ad — rewarded video | ✅ Built |
+| F | HideoutTV | Watch-videos — session-based | ✅ Built |
+| G | Lootably | Mixed offer wall — broadest fallback | ✅ Built |
 
 **Architecture shared by Stages C–G:**
 Every rewarded ad provider follows the same server-side pattern:
