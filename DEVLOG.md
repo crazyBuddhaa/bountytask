@@ -496,7 +496,7 @@ Reported: after the previous fix, the Pay button just showed "Loading Paystack�
 
 ---
 
-## Audit — Paystack inline.js loading, all entry points
+## ✅ Audit — Paystack inline.js loading, all entry points
 **Date:** 2026-07-13
 
 ### Found
@@ -535,3 +535,59 @@ Reporter confirmed no visible blocker and can't access browser DevTools on their
 | 25k | ✅ Solid | Materialized balance eliminates the former breakpoint |
 | 50k | ⚠️ Watch | Switch Supabase connection pool to **transaction mode** (no code changes) |
 | 100k+ | Needs work | Read replica for admin routes; evaluate Supabase Pro/Team tier |
+
+---
+
+## Ad Integration Build Plan
+
+Six ad/offer-wall providers integrated in 7 staged additions on top of the existing platform.
+
+| Stage | Provider(s) | Type | Status |
+|---|---|---|---|
+| A | Infrastructure | DB table, lib utils, admin settings | ✅ Built |
+| B | Google AdSense | Display ads — snippet-based, passive | ⬜ Planned |
+| C | CPX Research | Survey wall — best NG fill rate | ⬜ Planned |
+| D | Ayet Studios | Offer wall — HMAC-signed postbacks | ⬜ Planned |
+| E | Google IMA SDK | Watch-an-ad — rewarded video | ⬜ Planned |
+| F | HideoutTV | Watch-videos — session-based | ⬜ Planned |
+| G | Lootably | Mixed offer wall — broadest fallback | ⬜ Planned |
+
+**Architecture shared by Stages C–G:**
+Every rewarded ad provider follows the same server-side pattern:
+1. User opens the task page → provider SDK/widget loads
+2. User completes an ad/survey/offer inside the provider's environment
+3. Provider fires a signed postback to `POST /api/postback/<provider>`
+4. Route validates the signature, deduplicates by session ID, checks the daily cap, calls `recordAdCompletion()` → ledger credit + in-app notification
+5. Provider receives `"1"` (success) or HTTP 4xx (reject)
+
+Daily caps are enforced server-side via the `ad_task_logs` table — not client-side — so they cannot be bypassed by refreshing the page.
+
+---
+
+## ✅ Stage A — Ad Infrastructure
+**Date:** 2026-07-13
+
+### Built
+- `supabase/migrations/20260713_ad_task_logs.sql` — `ad_task_logs` table: tracks per-user, per-provider completions; composite index on `(user_id, provider, completed_at DESC)` for cap queries; unique partial index on `(provider, session_id)` for deduplication; RLS enabled (users read own rows, inserts via admin client only)
+- `supabase/migrations/20260713_ad_provider_settings.sql` — 20 new `platform_settings` rows: enabled flags, daily caps, reward amounts, and credential placeholders for IMA, HideoutTV, Lootably, Ayet, and CPX Research
+- `src/lib/ad-providers.ts` — shared utilities:
+  - `getAdCompletionsTodayCount(userId, provider)` — counts UTC-day completions
+  - `checkAdDailyCap(userId, provider, cap)` — returns `{ limited, used, cap }`
+  - `isAdSessionDuplicate(provider, sessionId)` — checks for replayed postback IDs
+  - `recordAdCompletion({ userId, provider, adType, rewardKobo, sessionId })` — inserts log row, appends ledger credit, sends notification; 23505 collision → treated as already processed
+  - `generateImaToken(userId)` / `validateImaToken(token)` — HMAC-SHA256 one-time token (10-min TTL, base64url encoded) for IMA client-side ad completion
+  - `validateAyetSignature(params, secretKey)` — HMAC-SHA256 over sorted params
+  - `validateCpxHash(appId, userId, txId, key, hash)` — MD5 hash validation
+  - `validateHideoutSignature(userId, sessionId, secret, sig)` — HMAC-SHA256
+  - `validateLootablySignature(userId, txId, secret, sig)` — HMAC-SHA256
+  - `getAdProviderSettings()` — fetches all 20 provider keys in one query, returns typed object
+  - All signature comparisons use `timingSafeEqual` to prevent timing attacks
+- `src/app/admin/settings/page.tsx` — new Cards for each provider (IMA, HideoutTV, Lootably, Ayet, CPX): enable toggle, daily cap input, reward-per-completion input, credential fields (password-masked). Updated description for Display Ads card to reference AdSense explicitly.
+- `src/app/api/admin/settings/route.ts` — extended Zod schema with 20 new ad provider keys; all keys optional so existing saves are unaffected
+
+### Verify
+- Run `20260713_ad_task_logs.sql` in Supabase SQL editor — table, two indexes, RLS policy created without error.
+- Run `20260713_ad_provider_settings.sql` — 20 new rows in `platform_settings`; `ON CONFLICT DO NOTHING` means safe to re-run.
+- Admin Settings page (`/admin/settings`) loads all five new provider cards; toggle, save, reload → values persist.
+- `PATCH /api/admin/settings` with `{ "ima_daily_cap": 3 }` → `{ updated: ["ima_daily_cap"] }`.
+- `npx tsc --noEmit` passes clean.

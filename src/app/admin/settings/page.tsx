@@ -1,7 +1,11 @@
 "use client"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Save, Settings2, CreditCard, Building2, Smartphone, Banknote, Megaphone, LayoutTemplate } from "lucide-react"
+import {
+  Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
+  Banknote, Megaphone, LayoutTemplate, PlayCircle, Tv, LayoutGrid,
+  Layers, ClipboardList, Key,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 type Settings = {
+  // Withdrawal & verification
   verification_fee_enabled: boolean
   verification_fee_amount: number
   verification_payment_method: "paystack" | "bank_transfer"
@@ -18,6 +23,7 @@ type Settings = {
   bank_transfer_bank: string
   phone_verification_enabled: boolean
   min_withdrawal_kobo: number
+  // Advertiser
   advertiser_submissions_enabled: boolean
   advertiser_min_budget_kobo: number
   advertiser_requirements: string
@@ -25,32 +31,82 @@ type Settings = {
   advertiser_contact_email: string
   advertiser_submission_fee_enabled: boolean
   advertiser_submission_fee_kobo: number
+  // Display ads (AdSense snippets)
   ads_enabled: boolean
   ads_dashboard_snippet: string
   ads_tasklist_snippet: string
+  // IMA SDK
+  ima_enabled: boolean
+  ima_daily_cap: number
+  ima_reward_kobo: number
+  ima_ad_tag_url: string
+  // HideoutTV
+  hideout_enabled: boolean
+  hideout_daily_cap: number
+  hideout_reward_kobo: number
+  hideout_publisher_id: string
+  hideout_secret: string
+  // Lootably
+  lootably_enabled: boolean
+  lootably_daily_cap: number
+  lootably_api_key: string
+  lootably_secret: string
+  // Ayet Studios
+  ayet_enabled: boolean
+  ayet_daily_cap: number
+  ayet_placement_key: string
+  ayet_secret_key: string
+  // CPX Research
+  cpx_enabled: boolean
+  cpx_daily_cap: number
+  cpx_app_id: string
+  cpx_secure_hash_key: string
+}
+
+const DEFAULTS: Settings = {
+  verification_fee_enabled: false,
+  verification_fee_amount: 50000,
+  verification_payment_method: "paystack",
+  bank_transfer_name: "",
+  bank_transfer_number: "",
+  bank_transfer_bank: "",
+  phone_verification_enabled: false,
+  min_withdrawal_kobo: 500000,
+  advertiser_submissions_enabled: false,
+  advertiser_min_budget_kobo: 500000,
+  advertiser_requirements: "",
+  advertiser_pricing_info: "",
+  advertiser_contact_email: "",
+  advertiser_submission_fee_enabled: false,
+  advertiser_submission_fee_kobo: 500000,
+  ads_enabled: false,
+  ads_dashboard_snippet: "",
+  ads_tasklist_snippet: "",
+  ima_enabled: false,
+  ima_daily_cap: 2,
+  ima_reward_kobo: 50,
+  ima_ad_tag_url: "",
+  hideout_enabled: false,
+  hideout_daily_cap: 5,
+  hideout_reward_kobo: 100,
+  hideout_publisher_id: "",
+  hideout_secret: "",
+  lootably_enabled: false,
+  lootably_daily_cap: 10,
+  lootably_api_key: "",
+  lootably_secret: "",
+  ayet_enabled: false,
+  ayet_daily_cap: 10,
+  ayet_placement_key: "",
+  ayet_secret_key: "",
+  cpx_enabled: false,
+  cpx_daily_cap: 10,
+  cpx_app_id: "",
+  cpx_secure_hash_key: "",
 }
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<Settings>({
-    verification_fee_enabled: false,
-    verification_fee_amount: 50000,
-    verification_payment_method: "paystack",
-    bank_transfer_name: "",
-    bank_transfer_number: "",
-    bank_transfer_bank: "",
-    phone_verification_enabled: false,
-    min_withdrawal_kobo: 500000,
-    advertiser_submissions_enabled: false,
-    advertiser_min_budget_kobo: 500000,
-    advertiser_requirements: "",
-    advertiser_pricing_info: "",
-    advertiser_contact_email: "",
-    advertiser_submission_fee_enabled: false,
-    advertiser_submission_fee_kobo: 500000,
-    ads_enabled: false,
-    ads_dashboard_snippet: "",
-    ads_tasklist_snippet: "",
-  })
+  const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -70,14 +126,35 @@ export default function AdminSettingsPage() {
             min_withdrawal_kobo:         data.min_withdrawal_kobo          ?? 500000,
             advertiser_submissions_enabled:    data.advertiser_submissions_enabled    ?? false,
             advertiser_min_budget_kobo:        data.advertiser_min_budget_kobo         ?? 500000,
-            advertiser_requirements:          data.advertiser_requirements            ?? "",
-            advertiser_pricing_info:          data.advertiser_pricing_info            ?? "",
-            advertiser_contact_email:         data.advertiser_contact_email           ?? "",
+            advertiser_requirements:           data.advertiser_requirements            ?? "",
+            advertiser_pricing_info:           data.advertiser_pricing_info            ?? "",
+            advertiser_contact_email:          data.advertiser_contact_email           ?? "",
             advertiser_submission_fee_enabled: data.advertiser_submission_fee_enabled ?? false,
-            advertiser_submission_fee_kobo:   data.advertiser_submission_fee_kobo      ?? 500000,
-            ads_enabled:            data.ads_enabled            ?? false,
-            ads_dashboard_snippet:  data.ads_dashboard_snippet  ?? "",
-            ads_tasklist_snippet:   data.ads_tasklist_snippet   ?? "",
+            advertiser_submission_fee_kobo:    data.advertiser_submission_fee_kobo     ?? 500000,
+            ads_enabled:           data.ads_enabled           ?? false,
+            ads_dashboard_snippet: data.ads_dashboard_snippet ?? "",
+            ads_tasklist_snippet:  data.ads_tasklist_snippet  ?? "",
+            ima_enabled:     data.ima_enabled     ?? false,
+            ima_daily_cap:   data.ima_daily_cap   ?? 2,
+            ima_reward_kobo: data.ima_reward_kobo ?? 50,
+            ima_ad_tag_url:  data.ima_ad_tag_url  ?? "",
+            hideout_enabled:       data.hideout_enabled       ?? false,
+            hideout_daily_cap:     data.hideout_daily_cap     ?? 5,
+            hideout_reward_kobo:   data.hideout_reward_kobo   ?? 100,
+            hideout_publisher_id:  data.hideout_publisher_id  ?? "",
+            hideout_secret:        data.hideout_secret        ?? "",
+            lootably_enabled:   data.lootably_enabled   ?? false,
+            lootably_daily_cap: data.lootably_daily_cap ?? 10,
+            lootably_api_key:   data.lootably_api_key   ?? "",
+            lootably_secret:    data.lootably_secret    ?? "",
+            ayet_enabled:       data.ayet_enabled       ?? false,
+            ayet_daily_cap:     data.ayet_daily_cap     ?? 10,
+            ayet_placement_key: data.ayet_placement_key ?? "",
+            ayet_secret_key:    data.ayet_secret_key    ?? "",
+            cpx_enabled:         data.cpx_enabled          ?? false,
+            cpx_daily_cap:       data.cpx_daily_cap         ?? 10,
+            cpx_app_id:          data.cpx_app_id            ?? "",
+            cpx_secure_hash_key: data.cpx_secure_hash_key   ?? "",
           })
         }
       })
@@ -92,11 +169,8 @@ export default function AdminSettingsPage() {
       body: JSON.stringify(settings),
     })
     const json = await res.json()
-    if (json.error) {
-      toast.error(json.error)
-    } else {
-      toast.success("Settings saved")
-    }
+    if (json.error) toast.error(json.error)
+    else toast.success("Settings saved")
     setSaving(false)
   }
 
@@ -117,11 +191,11 @@ export default function AdminSettingsPage() {
           <Settings2 className="w-6 h-6" /> Platform Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Configure the minimum withdrawal, verification fee, payment method, and phone verification.
+          Configure withdrawals, verification, advertiser intake, display ads, and rewarded ad providers.
         </p>
       </div>
 
-      {/* Minimum Withdrawal */}
+      {/* ── Minimum Withdrawal ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -142,10 +216,7 @@ export default function AdminSettingsPage() {
               step={100}
               value={Math.round(settings.min_withdrawal_kobo / 100)}
               onChange={(e) =>
-                setSettings((s) => ({
-                  ...s,
-                  min_withdrawal_kobo: Math.round(Number(e.target.value) * 100),
-                }))
+                setSettings((s) => ({ ...s, min_withdrawal_kobo: Math.round(Number(e.target.value) * 100) }))
               }
               className="w-40"
             />
@@ -156,7 +227,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Verification Fee Toggle */}
+      {/* ── Withdrawal Verification Fee ─────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Withdrawal Verification Fee</CardTitle>
@@ -176,7 +247,6 @@ export default function AdminSettingsPage() {
               onCheckedChange={(v) => setSettings((s) => ({ ...s, verification_fee_enabled: v }))}
             />
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="fee_amount">Fee Amount (₦)</Label>
             <div className="flex items-center gap-2">
@@ -188,29 +258,22 @@ export default function AdminSettingsPage() {
                 step={50}
                 value={feeNaira}
                 onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    verification_fee_amount: Math.round(Number(e.target.value) * 100),
-                  }))
+                  setSettings((s) => ({ ...s, verification_fee_amount: Math.round(Number(e.target.value) * 100) }))
                 }
                 className="w-40"
                 disabled={!settings.verification_fee_enabled}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Currently set to ₦{feeNaira.toLocaleString("en-NG")}
-            </p>
+            <p className="text-xs text-muted-foreground">Currently set to ₦{feeNaira.toLocaleString("en-NG")}</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Payment Method */}
+      {/* ── Payment Method ──────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Payment Method</CardTitle>
-          <CardDescription>
-            How users will pay the verification fee before withdrawing.
-          </CardDescription>
+          <CardDescription>How users will pay the verification fee before withdrawing.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -222,75 +285,52 @@ export default function AdminSettingsPage() {
                   type="button"
                   onClick={() => setSettings((s) => ({ ...s, verification_payment_method: method }))}
                   className={`flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-all ${
-                    active
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-border hover:border-muted-foreground"
+                    active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-muted-foreground"
                   }`}
                 >
-                  {method === "paystack" ? (
-                    <CreditCard className="w-5 h-5 text-primary" />
-                  ) : (
-                    <Building2 className="w-5 h-5 text-primary" />
-                  )}
+                  {method === "paystack" ? <CreditCard className="w-5 h-5 text-primary" /> : <Building2 className="w-5 h-5 text-primary" />}
                   <span className="text-sm font-medium capitalize">
                     {method === "paystack" ? "Paystack (online)" : "Bank Transfer"}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {method === "paystack"
-                      ? "Instant verification via Paystack popup"
-                      : "User transfers manually, admin approves"}
+                    {method === "paystack" ? "Instant verification via Paystack popup" : "User transfers manually, admin approves"}
                   </span>
                 </button>
               )
             })}
           </div>
-
-          {/* Bank transfer details */}
           {settings.verification_payment_method === "bank_transfer" && (
             <div className="space-y-3 pt-2 border-t border-border">
               <p className="text-sm font-medium text-muted-foreground">Your bank account details</p>
               <div className="space-y-2">
                 <Label htmlFor="bank_name">Bank Name</Label>
-                <Input
-                  id="bank_name"
-                  placeholder="e.g. GTBank"
-                  value={settings.bank_transfer_bank}
-                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_bank: e.target.value }))}
-                />
+                <Input id="bank_name" placeholder="e.g. GTBank" value={settings.bank_transfer_bank}
+                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_bank: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="account_number">Account Number</Label>
-                <Input
-                  id="account_number"
-                  placeholder="0123456789"
-                  value={settings.bank_transfer_number}
-                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_number: e.target.value }))}
-                />
+                <Input id="account_number" placeholder="0123456789" value={settings.bank_transfer_number}
+                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_number: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="account_name">Account Name</Label>
-                <Input
-                  id="account_name"
-                  placeholder="BountyTask Nigeria"
-                  value={settings.bank_transfer_name}
-                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_name: e.target.value }))}
-                />
+                <Input id="account_name" placeholder="BountyTask Nigeria" value={settings.bank_transfer_name}
+                  onChange={(e) => setSettings((s) => ({ ...s, bank_transfer_name: e.target.value }))} />
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Phone Verification Toggle */}
+      {/* ── Phone Verification ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Smartphone className="w-4 h-4" /> Phone Verification
           </CardTitle>
           <CardDescription>
-            When enabled, users must verify a phone number via SMS code before their first
-            withdrawal. Registration itself always stays free. Requires TEXTBEE_API_KEY and
-            TEXTBEE_DEVICE_ID to be set in the hosting environment.
+            When enabled, users must verify a phone number via SMS before their first withdrawal.
+            Requires TEXTBEE_API_KEY and TEXTBEE_DEVICE_ID to be set.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -307,15 +347,15 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Advertiser Submissions */}
+      {/* ── Advertiser Submissions ──────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Megaphone className="w-4 h-4" /> Advertiser Submissions
           </CardTitle>
           <CardDescription>
-            Lets outside businesses submit their own task requests via <code>/advertise</code>. Every
-            submission lands here as a pending lead — nothing goes live until you approve it.
+            Lets outside businesses submit task requests via <code>/advertise</code>. Every submission
+            lands as a pending lead — nothing goes live until you approve it.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -329,57 +369,31 @@ export default function AdminSettingsPage() {
               onCheckedChange={(v) => setSettings((s) => ({ ...s, advertiser_submissions_enabled: v }))}
             />
           </div>
-
           {settings.advertiser_submissions_enabled && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="adv_min_budget">Minimum Budget (₦)</Label>
-                <Input
-                  id="adv_min_budget"
-                  type="number"
+                <Input id="adv_min_budget" type="number"
                   value={Math.round(settings.advertiser_min_budget_kobo / 100)}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, advertiser_min_budget_kobo: (parseInt(e.target.value) || 0) * 100 }))
-                  }
-                />
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_min_budget_kobo: (parseInt(e.target.value) || 0) * 100 }))} />
                 <p className="text-xs text-muted-foreground">Submissions below this budget are rejected automatically.</p>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="adv_contact_email">Contact Email</Label>
-                <Input
-                  id="adv_contact_email"
-                  type="email"
-                  placeholder="partners@bountytask.ng"
+                <Input id="adv_contact_email" type="email" placeholder="partners@bountytask.ng"
                   value={settings.advertiser_contact_email}
-                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_contact_email: e.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground">Shown to advertisers when submissions are closed, or for direct enquiries.</p>
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_contact_email: e.target.value }))} />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="adv_requirements">Requirements</Label>
-                <Textarea
-                  id="adv_requirements"
-                  rows={3}
-                  placeholder="e.g. Tasks must be legal, safe, and verifiable..."
-                  value={settings.advertiser_requirements}
-                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_requirements: e.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground">Displayed on the /advertise page above the form.</p>
+                <Textarea id="adv_requirements" rows={3} value={settings.advertiser_requirements}
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_requirements: e.target.value }))} />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="adv_pricing">Pricing Details</Label>
-                <Textarea
-                  id="adv_pricing"
-                  rows={3}
-                  placeholder="e.g. Flat-fee tasks vs. CPA/affiliate offers, how billing works..."
-                  value={settings.advertiser_pricing_info}
-                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_pricing_info: e.target.value }))}
-                />
+                <Textarea id="adv_pricing" rows={3} value={settings.advertiser_pricing_info}
+                  onChange={(e) => setSettings((s) => ({ ...s, advertiser_pricing_info: e.target.value }))} />
               </div>
-
               <div className="flex items-center justify-between pt-1">
                 <div>
                   <p className="text-sm font-medium">Charge a submission fee</p>
@@ -390,18 +404,12 @@ export default function AdminSettingsPage() {
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, advertiser_submission_fee_enabled: v }))}
                 />
               </div>
-
               {settings.advertiser_submission_fee_enabled && (
                 <div className="space-y-2">
                   <Label htmlFor="adv_fee">Submission Fee (₦)</Label>
-                  <Input
-                    id="adv_fee"
-                    type="number"
+                  <Input id="adv_fee" type="number"
                     value={Math.round(settings.advertiser_submission_fee_kobo / 100)}
-                    onChange={(e) =>
-                      setSettings((s) => ({ ...s, advertiser_submission_fee_kobo: (parseInt(e.target.value) || 0) * 100 }))
-                    }
-                  />
+                    onChange={(e) => setSettings((s) => ({ ...s, advertiser_submission_fee_kobo: (parseInt(e.target.value) || 0) * 100 }))} />
                 </div>
               )}
             </>
@@ -409,52 +417,292 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* In-App Display Ads */}
+      {/* ── Display Ads (AdSense snippets) ──────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <LayoutTemplate className="w-4 h-4" /> Display Ads
+            <LayoutTemplate className="w-4 h-4" /> Display Ads (AdSense)
           </CardTitle>
           <CardDescription>
-            Paste an ad network snippet (e.g. AdMaven, PropellerAds, AdSense) to run banner ads on
-            worker-facing pages. Leave a field blank to skip that placement.
+            Paste your Google AdSense (or any network) HTML snippet for passive banner placements.
+            Use manual ad units — not Auto Ads — to control exact placement. Keep units visually
+            separated from reward UI to comply with AdSense policy.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Enable display ads</p>
-              <p className="text-xs text-muted-foreground">Toggle all ad placements on or off</p>
+              <p className="text-xs text-muted-foreground">Toggle all passive ad placements on or off</p>
             </div>
             <Switch
               checked={settings.ads_enabled}
               onCheckedChange={(v) => setSettings((s) => ({ ...s, ads_enabled: v }))}
             />
           </div>
-
           {settings.ads_enabled && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="ads_dashboard">Dashboard Placement (HTML/script snippet)</Label>
-                <Textarea
-                  id="ads_dashboard"
-                  rows={3}
-                  placeholder='<script async src="..."></script>'
+                <Label htmlFor="ads_dashboard">Dashboard Placement</Label>
+                <Textarea id="ads_dashboard" rows={3} placeholder='<script async src="..."></script>'
                   value={settings.ads_dashboard_snippet}
-                  onChange={(e) => setSettings((s) => ({ ...s, ads_dashboard_snippet: e.target.value }))}
-                />
+                  onChange={(e) => setSettings((s) => ({ ...s, ads_dashboard_snippet: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">Shown at the top of the worker dashboard.</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ads_tasklist">Task List Placement (HTML/script snippet)</Label>
-                <Textarea
-                  id="ads_tasklist"
-                  rows={3}
-                  placeholder='<script async src="..."></script>'
+                <Label htmlFor="ads_tasklist">Task List Placement</Label>
+                <Textarea id="ads_tasklist" rows={3} placeholder='<script async src="..."></script>'
                   value={settings.ads_tasklist_snippet}
-                  onChange={(e) => setSettings((s) => ({ ...s, ads_tasklist_snippet: e.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground">Shown between the filters and grid on the Tasks page.</p>
+                  onChange={(e) => setSettings((s) => ({ ...s, ads_tasklist_snippet: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">Shown between filters and grid on the Tasks page.</p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Google IMA SDK ──────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <PlayCircle className="w-4 h-4" /> Google IMA SDK — Watch an Ad
+          </CardTitle>
+          <CardDescription>
+            Rewarded video ads via Google IMA (VAST). Hard capped at 2 views per user per day to
+            stay within AdSense invalid-traffic policy. Requires a VAST ad tag URL from Google Ad Manager.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable IMA rewarded video</p>
+            </div>
+            <Switch
+              checked={settings.ima_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, ima_enabled: v }))}
+            />
+          </div>
+          {settings.ima_enabled && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ima_cap">Daily cap per user</Label>
+                  <Input id="ima_cap" type="number" min={1} max={10}
+                    value={settings.ima_daily_cap}
+                    onChange={(e) => setSettings((s) => ({ ...s, ima_daily_cap: parseInt(e.target.value) || 2 }))} />
+                  <p className="text-xs text-muted-foreground">Max 10. Recommended: 2.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ima_reward">Reward per view (₦)</Label>
+                  <Input id="ima_reward" type="number" min={1}
+                    value={Math.round(settings.ima_reward_kobo / 100)}
+                    onChange={(e) => setSettings((s) => ({ ...s, ima_reward_kobo: Math.round(Number(e.target.value) * 100) }))} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ima_tag" className="flex items-center gap-1"><Key className="w-3 h-3" /> VAST Ad Tag URL</Label>
+                <Input id="ima_tag" placeholder="https://pubads.g.doubleclick.net/gampad/ads?..."
+                  value={settings.ima_ad_tag_url}
+                  onChange={(e) => setSettings((s) => ({ ...s, ima_ad_tag_url: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">Generate from Google Ad Manager → Ad units → VAST tag.</p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── HideoutTV ───────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Tv className="w-4 h-4" /> HideoutTV — Watch Videos
+          </CardTitle>
+          <CardDescription>
+            Session-based video + content stream. Users watch for a qualifying duration and earn per
+            session. Postback is server-side signed — more trustworthy than client-side IMA events.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable HideoutTV</p></div>
+            <Switch
+              checked={settings.hideout_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, hideout_enabled: v }))}
+            />
+          </div>
+          {settings.hideout_enabled && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hideout_cap">Daily cap per user</Label>
+                  <Input id="hideout_cap" type="number" min={1} max={20}
+                    value={settings.hideout_daily_cap}
+                    onChange={(e) => setSettings((s) => ({ ...s, hideout_daily_cap: parseInt(e.target.value) || 5 }))} />
+                  <p className="text-xs text-muted-foreground">Recommended: 5 sessions.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hideout_reward">Reward per session (₦)</Label>
+                  <Input id="hideout_reward" type="number" min={1}
+                    value={Math.round(settings.hideout_reward_kobo / 100)}
+                    onChange={(e) => setSettings((s) => ({ ...s, hideout_reward_kobo: Math.round(Number(e.target.value) * 100) }))} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hideout_pid" className="flex items-center gap-1"><Key className="w-3 h-3" /> Publisher ID</Label>
+                <Input id="hideout_pid" placeholder="your-hideout-publisher-id"
+                  value={settings.hideout_publisher_id}
+                  onChange={(e) => setSettings((s) => ({ ...s, hideout_publisher_id: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hideout_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Secret</Label>
+                <Input id="hideout_secret" type="password" placeholder="HMAC-SHA256 signing secret"
+                  value={settings.hideout_secret}
+                  onChange={(e) => setSettings((s) => ({ ...s, hideout_secret: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Set postback URL to: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/hideout</code>
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Lootably ────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LayoutGrid className="w-4 h-4" /> Lootably — Mixed Offers
+          </CardTitle>
+          <CardDescription>
+            Aggregated offer wall: surveys, video offers, sign-ups, and app installs.
+            Broadest offer variety — best used as a fallback when specialist walls have low fill.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable Lootably</p></div>
+            <Switch
+              checked={settings.lootably_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, lootably_enabled: v }))}
+            />
+          </div>
+          {settings.lootably_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="lootably_cap">Daily cap per user</Label>
+                <Input id="lootably_cap" type="number" min={1} max={20}
+                  value={settings.lootably_daily_cap}
+                  onChange={(e) => setSettings((s) => ({ ...s, lootably_daily_cap: parseInt(e.target.value) || 10 }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lootably_key" className="flex items-center gap-1"><Key className="w-3 h-3" /> API Key</Label>
+                <Input id="lootably_key" placeholder="lootably-api-key"
+                  value={settings.lootably_api_key}
+                  onChange={(e) => setSettings((s) => ({ ...s, lootably_api_key: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lootably_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Secret</Label>
+                <Input id="lootably_secret" type="password" placeholder="HMAC-SHA256 signing secret"
+                  value={settings.lootably_secret}
+                  onChange={(e) => setSettings((s) => ({ ...s, lootably_secret: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/lootably</code>
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Ayet Studios ────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4" /> Ayet Studios — Surveys &amp; Offers
+          </CardTitle>
+          <CardDescription>
+            Best-in-class fraud protection with HMAC-SHA256 signed postbacks. Strong survey and
+            offer inventory — recommended as the primary offer wall for Nigerian traffic.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable Ayet Studios</p></div>
+            <Switch
+              checked={settings.ayet_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, ayet_enabled: v }))}
+            />
+          </div>
+          {settings.ayet_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="ayet_cap">Daily cap per user</Label>
+                <Input id="ayet_cap" type="number" min={1} max={20}
+                  value={settings.ayet_daily_cap}
+                  onChange={(e) => setSettings((s) => ({ ...s, ayet_daily_cap: parseInt(e.target.value) || 10 }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ayet_placement" className="flex items-center gap-1"><Key className="w-3 h-3" /> Placement Key</Label>
+                <Input id="ayet_placement" placeholder="ayet-placement-key"
+                  value={settings.ayet_placement_key}
+                  onChange={(e) => setSettings((s) => ({ ...s, ayet_placement_key: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ayet_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Secret Key</Label>
+                <Input id="ayet_secret" type="password" placeholder="HMAC-SHA256 signing secret"
+                  value={settings.ayet_secret_key}
+                  onChange={(e) => setSettings((s) => ({ ...s, ayet_secret_key: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/ayet</code>
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── CPX Research ────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" /> CPX Research — Surveys
+          </CardTitle>
+          <CardDescription>
+            Survey-specialist network with the best Nigerian fill rate in this stack. MD5-hashed
+            postbacks. Rewards are variable (CPX sets the amount per survey); configure a default
+            fallback reward for surveys with no explicit payout.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable CPX Research</p></div>
+            <Switch
+              checked={settings.cpx_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, cpx_enabled: v }))}
+            />
+          </div>
+          {settings.cpx_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="cpx_cap">Daily cap per user</Label>
+                <Input id="cpx_cap" type="number" min={1} max={20}
+                  value={settings.cpx_daily_cap}
+                  onChange={(e) => setSettings((s) => ({ ...s, cpx_daily_cap: parseInt(e.target.value) || 10 }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cpx_app_id" className="flex items-center gap-1"><Key className="w-3 h-3" /> App ID</Label>
+                <Input id="cpx_app_id" placeholder="cpx-app-id"
+                  value={settings.cpx_app_id}
+                  onChange={(e) => setSettings((s) => ({ ...s, cpx_app_id: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cpx_hash_key" className="flex items-center gap-1"><Key className="w-3 h-3" /> Secure Hash Key</Label>
+                <Input id="cpx_hash_key" type="password" placeholder="MD5 hash key"
+                  value={settings.cpx_secure_hash_key}
+                  onChange={(e) => setSettings((s) => ({ ...s, cpx_secure_hash_key: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/cpx</code>
+                </p>
               </div>
             </>
           )}

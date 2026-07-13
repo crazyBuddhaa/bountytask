@@ -6,10 +6,8 @@ import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
-// Keys that getVerificationSettings() (src/lib/verification.ts) reads and
-// caches under this tag with a 5-minute TTL. Without revalidating on write,
-// admin changes to these keys (e.g. switching the withdrawal-verification
-// payment method) can appear to silently not apply for up to 5 minutes.
+// Keys that getVerificationSettings() reads and caches under this tag with a
+// 5-minute TTL. Revalidate on write so admin changes apply immediately.
 const VERIFICATION_SETTINGS_KEYS = new Set([
   "verification_fee_enabled",
   "verification_fee_amount",
@@ -21,9 +19,10 @@ const VERIFICATION_SETTINGS_KEYS = new Set([
   "min_withdrawal_kobo",
 ])
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic"
 
 const settingsSchema = z.object({
+  // ── Withdrawal & verification ──────────────────────────────────────────────
   verification_fee_enabled:    z.boolean().optional(),
   verification_fee_amount:     z.number().int().positive().optional(),
   verification_payment_method: z.enum(["paystack", "bank_transfer"]).optional(),
@@ -32,16 +31,51 @@ const settingsSchema = z.object({
   bank_transfer_bank:          z.string().max(100).optional(),
   phone_verification_enabled:  z.boolean().optional(),
   min_withdrawal_kobo:         z.number().int().min(100, "Minimum withdrawal must be at least ₦1").optional(),
+
+  // ── Advertiser submissions ─────────────────────────────────────────────────
   advertiser_submissions_enabled:    z.boolean().optional(),
   advertiser_min_budget_kobo:        z.number().int().positive().optional(),
-  advertiser_requirements:          z.string().max(4000).optional(),
-  advertiser_pricing_info:          z.string().max(4000).optional(),
-  advertiser_contact_email:         z.string().email().optional(),
+  advertiser_requirements:           z.string().max(4000).optional(),
+  advertiser_pricing_info:           z.string().max(4000).optional(),
+  advertiser_contact_email:          z.string().email().optional(),
   advertiser_submission_fee_enabled: z.boolean().optional(),
-  advertiser_submission_fee_kobo:   z.number().int().positive().optional(),
-  ads_enabled:            z.boolean().optional(),
-  ads_dashboard_snippet:  z.string().max(4000).optional(),
-  ads_tasklist_snippet:   z.string().max(4000).optional(),
+  advertiser_submission_fee_kobo:    z.number().int().positive().optional(),
+
+  // ── Display ads (AdSense snippets) ────────────────────────────────────────
+  ads_enabled:           z.boolean().optional(),
+  ads_dashboard_snippet: z.string().max(4000).optional(),
+  ads_tasklist_snippet:  z.string().max(4000).optional(),
+
+  // ── Google IMA SDK ─────────────────────────────────────────────────────────
+  ima_enabled:      z.boolean().optional(),
+  ima_daily_cap:    z.number().int().min(1).max(10).optional(),
+  ima_reward_kobo:  z.number().int().min(1).optional(),
+  ima_ad_tag_url:   z.string().max(500).optional(),
+
+  // ── HideoutTV ──────────────────────────────────────────────────────────────
+  hideout_enabled:       z.boolean().optional(),
+  hideout_daily_cap:     z.number().int().min(1).max(20).optional(),
+  hideout_reward_kobo:   z.number().int().min(1).optional(),
+  hideout_publisher_id:  z.string().max(200).optional(),
+  hideout_secret:        z.string().max(200).optional(),
+
+  // ── Lootably ───────────────────────────────────────────────────────────────
+  lootably_enabled:   z.boolean().optional(),
+  lootably_daily_cap: z.number().int().min(1).max(20).optional(),
+  lootably_api_key:   z.string().max(200).optional(),
+  lootably_secret:    z.string().max(200).optional(),
+
+  // ── Ayet Studios ───────────────────────────────────────────────────────────
+  ayet_enabled:        z.boolean().optional(),
+  ayet_daily_cap:      z.number().int().min(1).max(20).optional(),
+  ayet_placement_key:  z.string().max(200).optional(),
+  ayet_secret_key:     z.string().max(200).optional(),
+
+  // ── CPX Research ───────────────────────────────────────────────────────────
+  cpx_enabled:          z.boolean().optional(),
+  cpx_daily_cap:        z.number().int().min(1).max(20).optional(),
+  cpx_app_id:           z.string().max(200).optional(),
+  cpx_secure_hash_key:  z.string().max(200).optional(),
 })
 
 async function assertAdmin(userId: string) {
