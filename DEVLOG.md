@@ -272,3 +272,122 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 - `curl -I https://your-domain.vercel.app` — response includes `X-Frame-Options: DENY`.
 - Non-existent route → renders `not-found.tsx` (404 page).
 - Runtime error in a page → renders `error.tsx` with retry button.
+
+---
+
+## ✅ Post-launch — Tier System Expansion
+**Pushed:** commit `a3f9c61` (approx)
+**Date:** 2026-07-13
+
+### Built
+- `supabase/migrations/20260716_tier_task_completions.sql` — adds `min_completions` column to `tiers` table (**must be run manually in Supabase SQL editor**)
+- `src/lib/tiers.ts` — `pickTierForUser()` uses OR logic: referral threshold OR task-completion threshold promotes a user. `recalcUserTier()` fetches both referral and completion counts. `getUserTierStatus()` now returns `totalCompletions`.
+- `src/app/api/tasks/[id]/complete/route.ts` + `src/app/api/admin/approvals/route.ts` — both call `recalcUserTier()` after a task is approved, so tiers advance immediately on completion.
+- `src/app/api/admin/tiers/[id]/route.ts` — accepts `min_completions` in the update schema.
+- `src/app/admin/tiers/page.tsx` — admin UI shows "Min. Tasks Completed to Unlock" field alongside the existing referral threshold.
+- `src/app/dashboard/referral/page.tsx` — dual progress bars: one for referrals, one for task completions toward next tier.
+
+### Verify
+- Set `min_completions = 5` on a tier → user who completes 5 tasks (without any referrals) advances to that tier.
+- Admin tiers page saves `min_completions` without error.
+- Referral page progress bars both update correctly.
+
+---
+
+## ✅ Post-launch — Tier Badge Throughout Dashboard
+**Pushed:** commit (included above)
+**Date:** 2026-07-13
+
+### Built
+- `src/app/dashboard/layout.tsx` — fetches `getUserTierStatus()` server-side, passes `currentTier` to the header on every page load.
+- `src/components/layout/DashboardHeader.tsx` — colour-coded tier badge pill next to balance (Bronze=amber, Silver=slate, Gold=yellow, Platinum=cyan, Diamond=blue, Elite=purple); links to referral page.
+- `src/app/dashboard/page.tsx` — clickable tier card between stats grid and transactions: badge, perks list, today's task count vs. limit, mini dual progress bars.
+- `src/app/dashboard/profile/page.tsx` — tier badge alongside role and KYC badges in avatar card.
+
+### Verify
+- Log in as Bronze user → amber "Bronze" pill visible in header and profile card.
+- Complete tasks to advance tier → pill updates on next load.
+
+---
+
+## ✅ Post-launch — Pending Verification State
+**Pushed:** commit (included above)
+**Date:** 2026-07-13
+
+### Built
+- `src/app/api/verification/request/route.ts` — added `GET` (returns user's active pending request) and `DELETE` (cancels it by marking it rejected with note "Cancelled by user").
+- `src/app/dashboard/verify/page.tsx` — on load, checks for a pending request in parallel with page data. If pending: shows amber card with submitted reference, a blue "same reference can't be reused" warning, and a cancel button. Fresh form also shows the duplicate-reference note inline.
+
+### Verify
+- Submit a verification request → page immediately shows the pending state card.
+- Click cancel → status flips to rejected; page returns to the fresh form.
+- Attempting a second request with the same reference → inline warning shown.
+
+---
+
+## ✅ Post-launch — Referral System Overhaul
+**Pushed:** commit `b430c78`
+**Date:** 2026-07-13
+
+### Built
+- **URL fix** — `src/app/api/referrals/route.ts` builds referral URL from request host headers (`x-forwarded-host` / `host`) with `NEXT_PUBLIC_APP_URL` as fallback only. Links work without the env var.
+- **Live code validation** — new `GET /api/referrals/validate?code=XXX` (public, no auth). Register form debounces 500 ms then shows green ✓ (valid), red ✗ (invalid), or spinner; invalid codes highlight the input border and block submission; code is uppercased before submission.
+- **Dynamic bonus amounts** — `/api/referrals` now returns `referral_bonus_kobo` and `signup_bonus_kobo` from constants. Referral page header, "How It Works" steps, and share copy all use live values — no hardcoded ₦500/₦200.
+- **KYC gate on referral bonus** — `creditReferralBonus()` checks `fee_enabled`; if verification is on, the referred user must have `kyc_verified = true` before ₦ is released. Admin KYC approval route now calls `creditReferralBonus()` after flipping `kyc_verified`, covering users who completed a task before getting verified (both paths covered, no double-credit).
+- **Referral table status** — three clear states: "Awaiting activation" (not yet KYC-verified), "Awaiting first task" (verified, no completion yet), "Credited" (bonus paid).
+
+### Verify
+- Register with a referral code → green tick confirms code before submission.
+- Register with a fake code → red X blocks form submission.
+- With verification on: referred user completes task but isn't verified → referrer gets no bonus yet → admin approves KYC → bonus lands immediately.
+- With verification off: bonus lands on first task completion as before.
+
+---
+
+## ✅ Post-launch — Security & Performance Hardening (Round 1)
+**Pushed:** commit `7b8b6d3`
+**Date:** 2026-07-13
+
+### Built
+- **Task-owner guard** — `src/app/api/tasks/[id]/complete/route.ts`: added `task.created_by === user.id → 403`. Prevents advertisers completing their own tasks.
+- **Atomic withdrawal debit** — `src/app/api/withdrawals/route.ts` now calls `safe_withdrawal_debit()` Postgres RPC instead of the old `assertSufficientBalance → appendLedger` sequence. The RPC holds a per-user advisory lock, reads the balance, and writes the debit inside one transaction — eliminates the overdraft race condition under concurrent requests.
+- **Missing DB indexes** (`supabase/migrations/20260713_perf_and_safety.sql`):
+  - `task_completions(user_id, status, created_at DESC)` — used by daily limit check and tier calc on every task attempt; previously a full scan.
+  - `platform_settings(key)` — used by `getVerificationSettings` + `getAdvertiserSettings` on every layout load; previously a full scan.
+  - `users(tier)` — tier-based filtering in admin and tier logic.
+- **Unique partial index** — `withdrawals(user_id) WHERE status IN ('pending','under_review')` — DB-enforced single active withdrawal per user; concurrent requests that both slip past the app-level check will hit a `23505` constraint violation.
+- **Next.js caching** — `getAllTiers()` and `getVerificationSettings()` wrapped with `unstable_cache` (5-minute TTL). Both were hitting the DB on every single request from every user.
+
+### Verify
+- Run `supabase/migrations/20260713_perf_and_safety.sql` in Supabase SQL editor.
+- Task created by User A → User A tries to complete it → 403 "cannot complete your own task".
+- Two simultaneous withdrawal requests → only one succeeds; no ledger overdraft.
+
+---
+
+## ✅ Post-launch — Materialized Balance Column
+**Pushed:** commit `9d7ab13`
+**Date:** 2026-07-13
+
+### Built
+- `supabase/migrations/20260713_materialized_balance.sql`:
+  - Adds `users.balance_kobo BIGINT NOT NULL DEFAULT 0` — materialized running total.
+  - Backfills from existing ledger data (one-time `UPDATE ... SET balance_kobo = SUM(delta)`), running before the trigger is created to avoid double-counting.
+  - `sync_user_balance()` trigger fires `AFTER INSERT ON ledger`, incrementing `balance_kobo` within the same transaction — can never drift from ledger.
+  - Rewrites `get_user_balance(uuid)` from `SELECT SUM(delta) FROM ledger …` (O(n)) to `SELECT balance_kobo FROM users WHERE id = $1` (O(1)). All TypeScript callers unchanged.
+  - Rewrites `safe_withdrawal_debit()` to use `SELECT … FOR UPDATE` on the user row instead of an advisory lock — serialises concurrent withdrawals per user, with the trigger keeping `balance_kobo` in sync automatically.
+- `src/app/api/admin/users/route.ts` — removes N+1 `Promise.all` loop that called `get_user_balance` once per user. `balance_kobo` is now a plain column on the users row; the existing `SELECT *` already returns it.
+
+### Verify
+- Run `supabase/migrations/20260713_materialized_balance.sql` in Supabase SQL editor (**after** the perf_and_safety migration).
+- After backfill: `SELECT id, balance_kobo FROM users LIMIT 10` matches `SELECT user_id, SUM(delta) FROM ledger GROUP BY user_id LIMIT 10`.
+- Complete a task → `users.balance_kobo` updates immediately.
+- Admin users list loads in one query — no per-row RPC calls in server logs.
+
+### Scalability outlook after all fixes
+| Users | Status | Notes |
+|---|---|---|
+| 1k–10k | ✅ Solid | All critical bottlenecks resolved |
+| 25k | ✅ Solid | Materialized balance eliminates the former breakpoint |
+| 50k | ⚠️ Watch | Switch Supabase connection pool to **transaction mode** (no code changes) |
+| 100k+ | Needs work | Read replica for admin routes; evaluate Supabase Pro/Team tier |
