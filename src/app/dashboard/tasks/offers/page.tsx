@@ -5,7 +5,7 @@ import { getAdCompletionsTodayCount } from "@/lib/ad-providers"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Layers, Info } from "lucide-react"
+import { Layers, Info, Zap } from "lucide-react"
 
 export default async function OffersPage() {
   const supabase = await createClient()
@@ -31,7 +31,7 @@ export default async function OffersPage() {
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
-          Powered by Ayet Studios
+          <Zap className="w-2.5 h-2.5" /> Instant
         </Badge>
       </div>
 
@@ -80,7 +80,7 @@ export default async function OffersPage() {
             src={buildAyetWallUrl(settings.placementKey, user.id)}
             className="w-full"
             style={{ height: 640, border: "none" }}
-            title="Ayet Studios Offer Wall"
+            title="Offer Wall"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
           />
         </Card>

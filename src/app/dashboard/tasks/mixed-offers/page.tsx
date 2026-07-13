@@ -5,7 +5,7 @@ import { getAdCompletionsTodayCount } from "@/lib/ad-providers"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { LayoutGrid, Info } from "lucide-react"
+import { LayoutGrid, Info, Zap } from "lucide-react"
 import LootablyWidget from "./LootablyWidget"
 
 export default async function MixedOffersPage() {
@@ -32,7 +32,7 @@ export default async function MixedOffersPage() {
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
-          Powered by Lootably
+          <Zap className="w-2.5 h-2.5" /> Instant
         </Badge>
       </div>
 

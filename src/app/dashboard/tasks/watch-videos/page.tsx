@@ -5,7 +5,7 @@ import { getAdCompletionsTodayCount } from "@/lib/ad-providers"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Tv, Info } from "lucide-react"
+import { Tv, Info, Zap } from "lucide-react"
 import HideoutWidget from "./HideoutWidget"
 
 export default async function WatchVideosPage() {
@@ -32,7 +32,7 @@ export default async function WatchVideosPage() {
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
-          Powered by HideoutTV
+          <Zap className="w-2.5 h-2.5" /> Instant
         </Badge>
       </div>
 
@@ -80,7 +80,7 @@ export default async function WatchVideosPage() {
           </p>
           <ul className="list-disc list-inside space-y-0.5">
             <li>Watch videos in the player below for a qualifying duration (typically 60–90 seconds).</li>
-            <li>A session is credited automatically by HideoutTV after you meet the minimum watch time.</li>
+            <li>A session is credited automatically after you meet the minimum watch time.</li>
             <li>Daily limit: {settings.dailyCap} sessions per day; reward: ₦{(settings.rewardKobo / 100).toFixed(0)} per session.</li>
             <li>Rewards appear in your earnings ledger within a few seconds of session completion.</li>
           </ul>

@@ -4,7 +4,7 @@ import { getAdProviderSettings, getAdCompletionsTodayCount } from "@/lib/ad-prov
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { PlayCircle, ShieldCheck } from "lucide-react"
+import { PlayCircle, ShieldCheck, Zap } from "lucide-react"
 import WatchAdClient from "./WatchAdClient"
 
 export default async function WatchAdPage() {
@@ -52,7 +52,7 @@ export default async function WatchAdPage() {
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
-          Powered by Google IMA
+          <Zap className="w-2.5 h-2.5" /> Instant
         </Badge>
       </div>
 

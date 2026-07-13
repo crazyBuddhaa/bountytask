@@ -94,8 +94,7 @@ export default function TasksPage() {
       ? []
       : adTasks.filter(t => {
           if (!search) return true
-          const q = search.toLowerCase()
-          return t.title.toLowerCase().includes(q) || t.poweredBy.toLowerCase().includes(q)
+          return t.title.toLowerCase().includes(search.toLowerCase())
         })
 
   return (

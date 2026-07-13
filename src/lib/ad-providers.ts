@@ -331,7 +331,6 @@ export interface AdTaskStatus {
   title: string
   description: string
   href: string
-  poweredBy: string
   /** Fixed reward in kobo, or null when the reward varies per offer (set by the ad network). */
   rewardKobo: number | null
   dailyCap: number
@@ -362,7 +361,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       title: "Watch a Video Ad",
       description: "Watch a short rewarded video ad to completion for an instant payout.",
       href: "/dashboard/tasks/watch-ad",
-      poweredBy: "Google IMA",
       rewardKobo: ima.rewardKobo,
       dailyCap: ima.dailyCap,
     })
@@ -371,9 +369,8 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
     candidates.push({
       provider: "hideout",
       title: "Watch Videos",
-      description: "Watch a batch of short videos through HideoutTV for an instant payout.",
+      description: "Watch a batch of short videos for an instant payout.",
       href: "/dashboard/tasks/watch-videos",
-      poweredBy: "HideoutTV",
       rewardKobo: hideout.rewardKobo,
       dailyCap: hideout.dailyCap,
     })
@@ -382,9 +379,8 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
     candidates.push({
       provider: "lootably",
       title: "Offers & Rewards",
-      description: "Complete offers, games, and surveys from the Lootably rewards wall.",
+      description: "Complete offers, games, and surveys from the mixed rewards wall.",
       href: "/dashboard/tasks/mixed-offers",
-      poweredBy: "Lootably",
       rewardKobo: null,
       dailyCap: lootably.dailyCap,
     })
@@ -395,7 +391,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       title: "Surveys & Offers",
       description: "Complete surveys, sign-ups, and offers from verified advertisers.",
       href: "/dashboard/tasks/offers",
-      poweredBy: "Ayet Studios",
       rewardKobo: null,
       dailyCap: ayet.dailyCap,
     })
@@ -404,9 +399,8 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
     candidates.push({
       provider: "cpx",
       title: "Take a Survey",
-      description: "Answer a short survey via CPX Research for an instant payout.",
+      description: "Answer a short survey for an instant payout.",
       href: "/dashboard/tasks/surveys",
-      poweredBy: "CPX Research",
       rewardKobo: null,
       dailyCap: cpx.dailyCap,
     })

@@ -25,7 +25,6 @@ export function AdTaskCard({ task }: AdTaskCardProps) {
           <Badge variant="success" className="text-[10px]">
             <Zap className="w-2.5 h-2.5" />Instant
           </Badge>
-          <span className="text-xs text-muted-foreground">Powered by {task.poweredBy}</span>
         </div>
 
         <h3 className="font-semibold text-sm leading-snug mb-2 line-clamp-2 group-hover:text-primary transition-colors">

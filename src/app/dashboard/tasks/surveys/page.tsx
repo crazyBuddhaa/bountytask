@@ -5,7 +5,7 @@ import { getAdCompletionsTodayCount } from "@/lib/ad-providers"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ClipboardList, CheckCircle2 } from "lucide-react"
+import { ClipboardList, CheckCircle2, Zap } from "lucide-react"
 
 interface Props {
   searchParams: Promise<{ done?: string }>
@@ -39,7 +39,7 @@ export default async function SurveysPage({ searchParams }: Props) {
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
-          Powered by CPX Research
+          <Zap className="w-2.5 h-2.5" /> Instant
         </Badge>
       </div>
 
@@ -101,7 +101,7 @@ export default async function SurveysPage({ searchParams }: Props) {
             src={buildCpxSurveyUrl(settings.appId, user.id, username, "")}
             className="w-full"
             style={{ height: 600, border: "none" }}
-            title="CPX Research Survey Wall"
+            title="Survey Wall"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
           />
         </Card>
