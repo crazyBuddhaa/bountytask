@@ -1,7 +1,7 @@
 import type { BankOption, PaystackResolveResponse } from "@/types";
 
 /**
- * Bank account number verification via Flutterwave.
+ * Bank account number verification via Flutterwave (v4 API).
  *
  * Replaces an earlier RapidAPI-based provider, which turned out to be
  * unreliable (intermittent timeouts and broken-endpoint errors even on the
@@ -13,24 +13,87 @@ import type { BankOption, PaystackResolveResponse } from "@/types";
  * the withdrawal-verification-fee and advertiser payment flows, unrelated
  * to bank account verification.
  *
- * Docs:
- *   https://developer.flutterwave.com/v3.0/reference/get-all-banks
- *   https://developer.flutterwave.com/v3.0/reference/resolve-account-transfer-details
+ * Flutterwave's v4 API authenticates with OAuth2 client-credentials (not a
+ * static secret key): exchange FLUTTERWAVE_CLIENT_ID + FLUTTERWAVE_CLIENT_SECRET
+ * for a short-lived access token, then use that token as a Bearer header.
+ * The "Encryption Key" shown alongside these on the dashboard is only used
+ * for encrypting raw card details on direct card charges — not needed here.
  *
- * Required env var:
- *   FLUTTERWAVE_SECRET_KEY — your Flutterwave secret key (Bearer token)
+ * Docs:
+ *   https://developer.flutterwave.com/docs/authentication
+ *   https://developer.flutterwave.com/docs/environments
+ *   https://developer.flutterwave.com/reference/banks_get
+ *   https://developer.flutterwave.com/reference/bank_account_resolve_post
+ *
+ * Required env vars:
+ *   FLUTTERWAVE_CLIENT_ID
+ *   FLUTTERWAVE_CLIENT_SECRET
+ *   FLUTTERWAVE_ENV — "production" or "sandbox" (defaults to "production")
  */
 
-const FLW_BASE = "https://api.flutterwave.com/v3";
+const TOKEN_URL =
+  "https://idp.flutterwave.com/realms/flutterwave/protocol/openid-connect/token";
 
-function flutterwaveHeaders() {
-  const key = process.env.FLUTTERWAVE_SECRET_KEY;
-  if (!key) throw new Error("FLUTTERWAVE_SECRET_KEY is not configured");
+const API_BASE =
+  process.env.FLUTTERWAVE_ENV === "sandbox"
+    ? "https://developersandbox-api.flutterwave.com"
+    : "https://f4bexperience.flutterwave.com";
 
+interface CachedToken {
+  accessToken: string;
+  expiresAt: number; // epoch ms
+}
+
+let cachedToken: CachedToken | null = null;
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 15_000) {
+    return cachedToken.accessToken;
+  }
+
+  const clientId = process.env.FLUTTERWAVE_CLIENT_ID;
+  const clientSecret = process.env.FLUTTERWAVE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "FLUTTERWAVE_CLIENT_ID / FLUTTERWAVE_CLIENT_SECRET is not configured"
+    );
+  }
+
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+    }),
+    cache: "no-store",
+  });
+
+  const json = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+  };
+
+  if (!res.ok || !json.access_token) {
+    throw new Error("Failed to authenticate with Flutterwave");
+  }
+
+  cachedToken = {
+    accessToken: json.access_token,
+    // expires_in is seconds (typically 600); refresh a little early
+    expiresAt: Date.now() + (json.expires_in ?? 540) * 1000,
+  };
+
+  return cachedToken.accessToken;
+}
+
+async function authHeaders() {
+  const token = await getAccessToken();
   return {
     "Content-Type": "application/json",
     Accept: "application/json",
-    Authorization: `Bearer ${key}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -42,20 +105,20 @@ interface FlutterwaveEnvelope<T> {
 
 /** Fetch the list of Nigerian banks (name + code) from Flutterwave. */
 export async function fetchBanks(): Promise<BankOption[]> {
-  const res = await fetch(`${FLW_BASE}/banks/NG`, {
-    headers: flutterwaveHeaders(),
+  const res = await fetch(`${API_BASE}/banks?country=NG`, {
+    headers: await authHeaders(),
     cache: "no-store",
   });
 
   const json = (await res.json()) as FlutterwaveEnvelope<
-    { id: number; code: string; name: string }[]
+    { id: string; code: string; name: string }[]
   >;
 
   if (!res.ok || json.status !== "success" || !Array.isArray(json.data)) {
     throw new Error(json.message ?? "Failed to fetch bank list");
   }
 
-  return json.data.map((b) => ({ id: b.id, code: b.code, name: b.name }));
+  return json.data.map((b, i) => ({ id: i, code: b.code, name: b.name }));
 }
 
 /** Verify a bank account number against a bank code via Flutterwave. */
@@ -63,14 +126,15 @@ export async function resolveAccount(
   accountNumber: string,
   bankCode: string
 ): Promise<PaystackResolveResponse> {
-  const res = await fetch(`${FLW_BASE}/accounts/resolve`, {
+  const res = await fetch(`${API_BASE}/banks/account-resolve`, {
     method: "POST",
-    headers: flutterwaveHeaders(),
-    body: JSON.stringify({ account_number: accountNumber, account_bank: bankCode }),
+    headers: await authHeaders(),
+    body: JSON.stringify({ account: { code: bankCode, number: accountNumber } }),
     cache: "no-store",
   });
 
   const json = (await res.json()) as FlutterwaveEnvelope<{
+    bank_code: string;
     account_number: string;
     account_name: string;
   }>;

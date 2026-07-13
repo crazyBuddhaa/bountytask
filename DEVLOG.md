@@ -391,11 +391,11 @@ Tracks every stage: what was built, what was pushed, and what to verify.
 
 ### Built
 - Initially moved bank account verification from Paystack to a RapidAPI provider ("Nigeria Bank Account validation"). In production this provider proved unreliable — intermittent `504` timeouts and `404 Endpoint '/login' does not exist` errors, reproducible even against the provider's own example request. Removed it entirely.
-- `src/lib/flutterwave.ts` — new provider for bank verification: `fetchBanks()` (`GET /v3/banks/NG`) and `resolveAccount()` (`POST /v3/accounts/resolve`) against Flutterwave's documented API, using `FLUTTERWAVE_SECRET_KEY`.
+- `src/lib/flutterwave.ts` — new provider for bank verification, built against Flutterwave's **v4 API**: `fetchBanks()` (`GET /banks?country=NG`) and `resolveAccount()` (`POST /banks/account-resolve`). v4 authenticates via OAuth2 client-credentials (`FLUTTERWAVE_CLIENT_ID` + `FLUTTERWAVE_CLIENT_SECRET` exchanged for a short-lived bearer token), not a static secret key — the access token is cached in memory and refreshed on expiry.
 - Moved `src/app/api/paystack/{banks,resolve}` → `src/app/api/bank-verification/{banks,resolve}`, now backed by `flutterwave.ts`.
 - `src/app/api/withdrawals/accounts/route.ts` — `resolveAccount` import switched from `@/lib/paystack` to `@/lib/flutterwave`.
 - `src/app/dashboard/withdrawal/page.tsx` — bank list + account resolution calls updated to the new `/api/bank-verification/*` routes.
-- `.env.example` / `README.md` — documented `FLUTTERWAVE_SECRET_KEY`; clarified `PAYSTACK_SECRET_KEY` is now only used for the withdrawal verification fee and advertiser payments.
+- `.env.example` / `README.md` — documented `FLUTTERWAVE_CLIENT_ID` / `FLUTTERWAVE_CLIENT_SECRET` / `FLUTTERWAVE_ENV`; clarified `PAYSTACK_SECRET_KEY` is now only used for the withdrawal verification fee and advertiser payments.
 - `src/lib/paystack.ts` left untouched — kept as-is for those two payment flows and as a future fallback/alternate verification provider.
 
 ### Verify

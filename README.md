@@ -69,7 +69,9 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server only) |
 | `NEXT_PUBLIC_APP_URL` | Full app URL (e.g. `https://bountytask.vercel.app`) |
-| `FLUTTERWAVE_SECRET_KEY` | Flutterwave secret key for bank list + account number verification |
+| `FLUTTERWAVE_CLIENT_ID` | Flutterwave v4 Client ID (OAuth2 client-credentials) for bank list + account number verification |
+| `FLUTTERWAVE_CLIENT_SECRET` | Flutterwave v4 Client Secret (OAuth2 client-credentials) |
+| `FLUTTERWAVE_ENV` | `production` (default) or `sandbox` |
 | `PAYSTACK_SECRET_KEY` | Paystack secret key (verification-fee + advertiser payments only — not used for bank verification) |
 | `RESEND_API_KEY` | Resend API key for transactional email |
 | `ADMIN_EMAIL` | Email address for admin notifications |
