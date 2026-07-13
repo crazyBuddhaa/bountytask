@@ -481,6 +481,21 @@ Reported: after the fee card correctly switched to "Pay with Paystack", tapping 
 
 ---
 
+## ✅ Fix — "Loading Paystack…" spinner never resolves (stuck indefinitely)
+**Date:** 2026-07-13
+
+### Found
+Reported: after the previous fix, the Pay button just showed "Loading Paystack…" forever instead of becoming clickable or showing an error. Some blockers/network conditions stall the `<script src="https://js.paystack.co/v1/inline.js">` request without ever firing `next/script`'s `onLoad` *or* `onError` callback (e.g. a request that never resolves, or is silently dropped) — so `paystackScriptStatus` stayed stuck on `"loading"` with no path forward.
+
+### Built
+- `src/app/dashboard/verify/page.tsx` — added a second, independent readiness check: while the Paystack card is showing and status is still `"loading"`, poll every 300ms for `window.PaystackPop` to appear (in case the script actually loaded but `onLoad` didn't fire for some reason), and give up after 10s, flipping to the existing `"error"` state either way. This guarantees the UI always reaches a definite ready/error state instead of spinning forever, regardless of how the script fails.
+
+### Verify
+- `npx tsc --noEmit` passes clean (fresh `npm install`, no errors).
+- Reasoned through the three cases: (1) script loads fine → `onReady` fires immediately, poll never needed; (2) script blocked with a fired error event → existing `onError` path handles it well before the 10s timeout; (3) script silently stalls with no event → poll's 10s timeout now guarantees a transition out of "loading" either way.
+
+---
+
 ### Scalability outlook after all fixes
 | Users | Status | Notes |
 |---|---|---|

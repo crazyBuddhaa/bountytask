@@ -63,6 +63,30 @@ export default function VerifyPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Some ad/script/tracker blockers silently stall the request (never firing
+  // Script's onLoad *or* onError), which used to leave the "Loading
+  // Paystack..." button spinning forever with no way out. Poll for the
+  // global the SDK defines and give up after a timeout either way, so the
+  // UI always reaches a definite ready/error state. Kept independent of
+  // `needsFee`/`payment_method` (computed further below, after an early
+  // return) so this hook's own deps stay stable across renders.
+  const needsPaystackScript = !!settings && settings.fee_enabled && !kycVerified && settings.payment_method === "paystack"
+  useEffect(() => {
+    if (needsPaystackScript && paystackScriptStatus === "loading") {
+      const start = Date.now()
+      const poll = setInterval(() => {
+        if (typeof (window as unknown as { PaystackPop?: unknown }).PaystackPop !== "undefined") {
+          setPaystackScriptStatus("ready")
+          clearInterval(poll)
+        } else if (Date.now() - start > 10_000) {
+          setPaystackScriptStatus("error")
+          clearInterval(poll)
+        }
+      }, 300)
+      return () => clearInterval(poll)
+    }
+  }, [needsPaystackScript, paystackScriptStatus])
+
   async function handleCancelRequest() {
     setCancelling(true)
     const res = await fetch("/api/verification/request", { method: "DELETE" })
