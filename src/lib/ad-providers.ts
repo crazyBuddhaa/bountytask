@@ -206,7 +206,13 @@ export function validateAyetSignature(
     .map((k) => `${k}=${params[k]}`)
     .join("&")
   const expected = createHmac("sha256", secretKey).update(sorted).digest("hex")
-  return timingSafeEqual(Buffer.from(receivedSig), Buffer.from(expected))
+  try {
+    return timingSafeEqual(Buffer.from(receivedSig), Buffer.from(expected))
+  } catch {
+    // Different-length buffers (e.g. malformed/forged sig) throw instead of
+    // returning false — treat as an invalid signature, not a server error.
+    return false
+  }
 }
 
 /**
