@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
-  Banknote, Megaphone, LayoutTemplate, PlayCircle, Tv, LayoutGrid,
+  Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
   Layers, ClipboardList, Key,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -40,12 +40,6 @@ type Settings = {
   ima_daily_cap: number
   ima_reward_kobo: number
   ima_ad_tag_url: string
-  // HideoutTV
-  hideout_enabled: boolean
-  hideout_daily_cap: number
-  hideout_reward_kobo: number
-  hideout_publisher_id: string
-  hideout_secret: string
   // Lootably
   lootably_enabled: boolean
   lootably_daily_cap: number
@@ -86,11 +80,6 @@ const DEFAULTS: Settings = {
   ima_daily_cap: 2,
   ima_reward_kobo: 50,
   ima_ad_tag_url: "",
-  hideout_enabled: false,
-  hideout_daily_cap: 5,
-  hideout_reward_kobo: 100,
-  hideout_publisher_id: "",
-  hideout_secret: "",
   lootably_enabled: false,
   lootably_daily_cap: 10,
   lootably_api_key: "",
@@ -138,11 +127,6 @@ export default function AdminSettingsPage() {
             ima_daily_cap:   data.ima_daily_cap   ?? 2,
             ima_reward_kobo: data.ima_reward_kobo ?? 50,
             ima_ad_tag_url:  data.ima_ad_tag_url  ?? "",
-            hideout_enabled:       data.hideout_enabled       ?? false,
-            hideout_daily_cap:     data.hideout_daily_cap     ?? 5,
-            hideout_reward_kobo:   data.hideout_reward_kobo   ?? 100,
-            hideout_publisher_id:  data.hideout_publisher_id  ?? "",
-            hideout_secret:        data.hideout_secret        ?? "",
             lootably_enabled:   data.lootably_enabled   ?? false,
             lootably_daily_cap: data.lootably_daily_cap ?? 10,
             lootably_api_key:   data.lootably_api_key   ?? "",
@@ -505,62 +489,6 @@ export default function AdminSettingsPage() {
                   value={settings.ima_ad_tag_url}
                   onChange={(e) => setSettings((s) => ({ ...s, ima_ad_tag_url: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">Generate from Google Ad Manager → Ad units → VAST tag.</p>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── HideoutTV ───────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Tv className="w-4 h-4" /> HideoutTV — Watch Videos
-          </CardTitle>
-          <CardDescription>
-            Session-based video + content stream. Users watch for a qualifying duration and earn per
-            session. Postback is server-side signed — more trustworthy than client-side IMA events.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Enable HideoutTV</p></div>
-            <Switch
-              checked={settings.hideout_enabled}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, hideout_enabled: v }))}
-            />
-          </div>
-          {settings.hideout_enabled && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hideout_cap">Daily cap per user</Label>
-                  <Input id="hideout_cap" type="number" min={1} max={20}
-                    value={settings.hideout_daily_cap}
-                    onChange={(e) => setSettings((s) => ({ ...s, hideout_daily_cap: parseInt(e.target.value) || 5 }))} />
-                  <p className="text-xs text-muted-foreground">Recommended: 5 sessions.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hideout_reward">Reward per session (₦)</Label>
-                  <Input id="hideout_reward" type="number" min={1}
-                    value={Math.round(settings.hideout_reward_kobo / 100)}
-                    onChange={(e) => setSettings((s) => ({ ...s, hideout_reward_kobo: Math.round(Number(e.target.value) * 100) }))} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hideout_pid" className="flex items-center gap-1"><Key className="w-3 h-3" /> Publisher ID</Label>
-                <Input id="hideout_pid" placeholder="your-hideout-publisher-id"
-                  value={settings.hideout_publisher_id}
-                  onChange={(e) => setSettings((s) => ({ ...s, hideout_publisher_id: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hideout_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Secret</Label>
-                <Input id="hideout_secret" type="password" placeholder="HMAC-SHA256 signing secret"
-                  value={settings.hideout_secret}
-                  onChange={(e) => setSettings((s) => ({ ...s, hideout_secret: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  Set postback URL to: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/hideout</code>
-                </p>
               </div>
             </>
           )}

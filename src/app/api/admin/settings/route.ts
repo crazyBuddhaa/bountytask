@@ -52,12 +52,6 @@ const settingsSchema = z.object({
   ima_reward_kobo:  z.number().int().min(1).optional(),
   ima_ad_tag_url:   z.string().max(500).optional(),
 
-  // ── HideoutTV ──────────────────────────────────────────────────────────────
-  hideout_enabled:       z.boolean().optional(),
-  hideout_daily_cap:     z.number().int().min(1).max(20).optional(),
-  hideout_reward_kobo:   z.number().int().min(1).optional(),
-  hideout_publisher_id:  z.string().max(200).optional(),
-  hideout_secret:        z.string().max(200).optional(),
 
   // ── Lootably ───────────────────────────────────────────────────────────────
   lootably_enabled:   z.boolean().optional(),

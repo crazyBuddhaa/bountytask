@@ -7,7 +7,7 @@
  *  - Unified completion recorder (ad_task_logs + ledger + notification)
  *  - IMA SDK one-time HMAC token (generate + validate)
  *  - Postback signature validators for Ayet (HMAC-SHA256), CPX (MD5),
- *    HideoutTV (HMAC-SHA256), and Lootably (HMAC-SHA256)
+ *    and Lootably (HMAC-SHA256)
  */
 
 import { createHmac, createHash, timingSafeEqual } from "crypto"
@@ -17,10 +17,9 @@ import { createNotification } from "@/lib/notifications"
 import { recalcUserTier } from "@/lib/tiers"
 import { getAyetSettings } from "@/lib/ayet"
 import { getCpxSettings } from "@/lib/cpx"
-import { getHideoutSettings } from "@/lib/hideout"
 import { getLootablySettings } from "@/lib/lootably"
 
-export type AdProvider = "ima" | "hideout" | "lootably" | "ayet" | "cpx"
+export type AdProvider = "ima" | "lootably" | "ayet" | "cpx"
 export type AdType = "video" | "survey" | "offer" | "mixed"
 
 // ─── Daily Cap ────────────────────────────────────────────────────────────────
@@ -125,7 +124,6 @@ export async function recordAdCompletion({
   const naira = (rewardKobo / 100).toFixed(2)
   const providerLabel: Record<AdProvider, string> = {
     ima: "video ad",
-    hideout: "video session",
     lootably: "offer",
     ayet: "survey/offer",
     cpx: "survey",
@@ -232,26 +230,6 @@ export function validateCpxHash(
 }
 
 /**
- * HideoutTV: HMAC-SHA256(secret, userId + sessionId)
- * HideoutTV sends `sig` as a query parameter on the postback.
- */
-export function validateHideoutSignature(
-  userId: string,
-  sessionId: string,
-  secret: string,
-  receivedSig: string
-): boolean {
-  const expected = createHmac("sha256", secret)
-    .update(`${userId}${sessionId}`)
-    .digest("hex")
-  try {
-    return timingSafeEqual(Buffer.from(receivedSig), Buffer.from(expected))
-  } catch {
-    return false
-  }
-}
-
-/**
  * Lootably: HMAC-SHA256(secret, userId + transactionId)
  * Lootably sends `sig` as a query parameter on the postback.
  */
@@ -278,7 +256,6 @@ export async function getAdProviderSettings() {
   const admin = createAdminClient()
   const keys = [
     "ima_enabled", "ima_daily_cap", "ima_reward_kobo", "ima_ad_tag_url",
-    "hideout_enabled", "hideout_daily_cap", "hideout_reward_kobo", "hideout_publisher_id", "hideout_secret",
     "lootably_enabled", "lootably_daily_cap", "lootably_api_key", "lootably_secret",
     "ayet_enabled", "ayet_daily_cap", "ayet_placement_key", "ayet_secret_key",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
@@ -297,13 +274,6 @@ export async function getAdProviderSettings() {
       dailyCap:   Number(s.ima_daily_cap   ?? 2),
       rewardKobo: Number(s.ima_reward_kobo ?? 50),
       adTagUrl:   String(s.ima_ad_tag_url  ?? ""),
-    },
-    hideout: {
-      enabled:     Boolean(s.hideout_enabled      ?? false),
-      dailyCap:    Number(s.hideout_daily_cap      ?? 5),
-      rewardKobo:  Number(s.hideout_reward_kobo    ?? 100),
-      publisherId: String(s.hideout_publisher_id   ?? ""),
-      secret:      String(s.hideout_secret         ?? ""),
     },
     lootably: {
       enabled:    Boolean(s.lootably_enabled   ?? false),
@@ -345,9 +315,8 @@ export interface AdTaskStatus {
  * omitted entirely rather than shown as "coming soon" in the main grid.
  */
 export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
-  const [ima, hideout, lootably, ayet, cpx] = await Promise.all([
+  const [ima, lootably, ayet, cpx] = await Promise.all([
     getAdProviderSettings().then((s) => s.ima),
-    getHideoutSettings(),
     getLootablySettings(),
     getAyetSettings(),
     getCpxSettings(),
@@ -363,16 +332,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       href: "/dashboard/tasks/watch-ad",
       rewardKobo: ima.rewardKobo,
       dailyCap: ima.dailyCap,
-    })
-  }
-  if (hideout.enabled && hideout.publisherId && hideout.secret) {
-    candidates.push({
-      provider: "hideout",
-      title: "Watch Videos",
-      description: "Watch a batch of short videos for an instant payout.",
-      href: "/dashboard/tasks/watch-videos",
-      rewardKobo: hideout.rewardKobo,
-      dailyCap: hideout.dailyCap,
     })
   }
   if (lootably.enabled && lootably.apiKey && lootably.secret) {
