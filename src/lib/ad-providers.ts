@@ -18,8 +18,9 @@ import { recalcUserTier } from "@/lib/tiers"
 import { getAyetSettings } from "@/lib/ayet"
 import { getCpxSettings } from "@/lib/cpx"
 import { getLootablySettings } from "@/lib/lootably"
+import { getAdGateSettings } from "@/lib/adgate"
 
-export type AdProvider = "ima" | "lootably" | "ayet" | "cpx"
+export type AdProvider = "ima" | "lootably" | "ayet" | "cpx" | "adgate"
 export type AdType = "video" | "survey" | "offer" | "mixed"
 
 // ─── Daily Cap ────────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ export async function recordAdCompletion({
     lootably: "offer",
     ayet: "survey/offer",
     cpx: "survey",
+    adgate: "offer",
   }
 
   await createNotification({
@@ -255,6 +257,17 @@ export function validateLootablySignature(
   }
 }
 
+/**
+ * AdGate Media verifies postbacks by source IP rather than a signed hash
+ * (their panel shows the sending IP under the wall's Postback section).
+ * Constant-time-ish string compare is unnecessary here — IPs aren't secret,
+ * this just guards against stray/forged callers.
+ */
+export function validateAdGatePostbackIp(requestIp: string | undefined, configuredIp: string): boolean {
+  if (!requestIp || !configuredIp) return false
+  return requestIp === configuredIp
+}
+
 // ─── Settings Getters ─────────────────────────────────────────────────────────
 
 /** Fetch all ad provider settings in one query. */
@@ -265,6 +278,7 @@ export async function getAdProviderSettings() {
     "lootably_enabled", "lootably_daily_cap", "lootably_api_key", "lootably_secret",
     "ayet_enabled", "ayet_daily_cap", "ayet_placement_key", "ayet_secret_key",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
+    "adgate_enabled", "adgate_daily_cap", "adgate_wall_id", "adgate_postback_ip",
   ] as const
 
   const { data: rows } = await admin
@@ -299,6 +313,12 @@ export async function getAdProviderSettings() {
       appId:         String(s.cpx_app_id             ?? ""),
       secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
     },
+    adgate: {
+      enabled:    Boolean(s.adgate_enabled    ?? false),
+      dailyCap:   Number(s.adgate_daily_cap   ?? 10),
+      wallId:     String(s.adgate_wall_id     ?? ""),
+      postbackIp: String(s.adgate_postback_ip ?? ""),
+    },
   }
 }
 
@@ -321,11 +341,12 @@ export interface AdTaskStatus {
  * omitted entirely rather than shown as "coming soon" in the main grid.
  */
 export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
-  const [ima, lootably, ayet, cpx] = await Promise.all([
+  const [ima, lootably, ayet, cpx, adgate] = await Promise.all([
     getAdProviderSettings().then((s) => s.ima),
     getLootablySettings(),
     getAyetSettings(),
     getCpxSettings(),
+    getAdGateSettings(),
   ])
 
   const candidates: Omit<AdTaskStatus, "usedToday" | "capReached">[] = []
@@ -368,6 +389,16 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       href: "/dashboard/tasks/surveys",
       rewardKobo: null,
       dailyCap: cpx.dailyCap,
+    })
+  }
+  if (adgate.enabled && adgate.wallId && adgate.postbackIp) {
+    candidates.push({
+      provider: "adgate",
+      title: "AdGate Rewards Wall",
+      description: "Complete offers, app installs, and sign-ups from the AdGate rewards wall.",
+      href: "/dashboard/tasks/adgate-offers",
+      rewardKobo: null,
+      dailyCap: adgate.dailyCap,
     })
   }
 

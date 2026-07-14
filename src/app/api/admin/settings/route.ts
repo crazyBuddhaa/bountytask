@@ -70,6 +70,12 @@ const settingsSchema = z.object({
   cpx_daily_cap:        z.number().int().min(1).max(20).optional(),
   cpx_app_id:           z.string().max(200).optional(),
   cpx_secure_hash_key:  z.string().max(200).optional(),
+
+  // ── AdGate Media ───────────────────────────────────────────────────────────
+  adgate_enabled:      z.boolean().optional(),
+  adgate_daily_cap:    z.number().int().min(1).max(20).optional(),
+  adgate_wall_id:      z.string().max(200).optional(),
+  adgate_postback_ip:  z.string().max(45).optional(), // IPv4 or IPv6
 })
 
 async function assertAdmin(userId: string) {

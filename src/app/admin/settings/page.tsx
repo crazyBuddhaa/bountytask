@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  Layers, ClipboardList, Key,
+  Layers, ClipboardList, Key, Gift,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,6 +55,11 @@ type Settings = {
   cpx_daily_cap: number
   cpx_app_id: string
   cpx_secure_hash_key: string
+  // AdGate Media
+  adgate_enabled: boolean
+  adgate_daily_cap: number
+  adgate_wall_id: string
+  adgate_postback_ip: string
 }
 
 const DEFAULTS: Settings = {
@@ -92,6 +97,10 @@ const DEFAULTS: Settings = {
   cpx_daily_cap: 10,
   cpx_app_id: "",
   cpx_secure_hash_key: "",
+  adgate_enabled: false,
+  adgate_daily_cap: 10,
+  adgate_wall_id: "",
+  adgate_postback_ip: "",
 }
 
 export default function AdminSettingsPage() {
@@ -139,6 +148,10 @@ export default function AdminSettingsPage() {
             cpx_daily_cap:       data.cpx_daily_cap         ?? 10,
             cpx_app_id:          data.cpx_app_id            ?? "",
             cpx_secure_hash_key: data.cpx_secure_hash_key   ?? "",
+            adgate_enabled:      data.adgate_enabled       ?? false,
+            adgate_daily_cap:    data.adgate_daily_cap     ?? 10,
+            adgate_wall_id:      data.adgate_wall_id       ?? "",
+            adgate_postback_ip:  data.adgate_postback_ip   ?? "",
           })
         }
       })
@@ -630,6 +643,57 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setSettings((s) => ({ ...s, cpx_secure_hash_key: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
                   Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/cpx</code>
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── AdGate Media ────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Gift className="w-4 h-4" /> AdGate Media — Rewards Wall
+          </CardTitle>
+          <CardDescription>
+            App installs, sign-ups, and offer wall. Postbacks are verified by source IP
+            (shown on your AdGate affiliate panel under the wall&apos;s Postback section) rather
+            than a signed hash — enter that IP below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable AdGate Media</p></div>
+            <Switch
+              checked={settings.adgate_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, adgate_enabled: v }))}
+            />
+          </div>
+          {settings.adgate_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="adgate_cap">Daily cap per user</Label>
+                <Input id="adgate_cap" type="number" min={1} max={20}
+                  value={settings.adgate_daily_cap}
+                  onChange={(e) => setSettings((s) => ({ ...s, adgate_daily_cap: parseInt(e.target.value) || 10 }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adgate_wall_id" className="flex items-center gap-1"><Key className="w-3 h-3" /> Wall ID</Label>
+                <Input id="adgate_wall_id" placeholder="e.g. nQ"
+                  value={settings.adgate_wall_id}
+                  onChange={(e) => setSettings((s) => ({ ...s, adgate_wall_id: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Found at panel.adgatemedia.com under Monetization Tools → AdGate Rewards → your VC wall.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adgate_postback_ip" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Source IP</Label>
+                <Input id="adgate_postback_ip" placeholder="e.g. 123.123.123.123"
+                  value={settings.adgate_postback_ip}
+                  onChange={(e) => setSettings((s) => ({ ...s, adgate_postback_ip: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/adgate?conversion_id={"{conversion_id}"}&amp;user_id={"{s1}"}&amp;payout={"{payout}"}&amp;state={"{state}"}</code>
                 </p>
               </div>
             </>
