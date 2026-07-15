@@ -112,13 +112,20 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
 
     script.onload = () => {
       // CPX initialises asynchronously after the script executes.
-      // Give it READY_TIMEOUT_MS to fire a callback before we assume surveys
-      // are rendering (i.e. CPX rendered into the div without calling either
-      // count_new_surveys or no_surveys_available — treated as "ready").
+      // Give it READY_TIMEOUT_MS to fire a callback. If it fires neither
+      // count_new_surveys nor no_surveys_available within that window,
+      // inspect the div: if CPX rendered children into it we're "ready";
+      // if the div is still empty CPX silently rejected the config and we
+      // treat it as "no-surveys" so we never show a blank white space.
       setTimeout(() => {
-        if (!cancelled) {
-          setStatus((prev) => (prev === "loading" ? "ready" : prev))
-        }
+        if (cancelled) return
+        setStatus((prev) => {
+          if (prev !== "loading") return prev  // a callback already fired
+          const hasContent =
+            containerRef.current != null &&
+            containerRef.current.children.length > 0
+          return hasContent ? "ready" : "no-surveys"
+        })
       }, READY_TIMEOUT_MS)
     }
 
