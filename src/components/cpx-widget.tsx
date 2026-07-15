@@ -65,8 +65,7 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
           limit_surveys: 12,
         },
       ],
-      useIFrame:     true,  // open each survey in an in-page iframe overlay (CPX documented option)
-      iFramePosition: 1,    // 1 = right (default), 2 = left
+      debug: true,  // TODO: remove after confirming surveys render; surfaces CPX errors to console
     }
 
     // Step 2: strip previous script + clear div, then inject fresh
