@@ -17,7 +17,10 @@ export async function getCpxSettings(): Promise<CpxSettings> {
 
   const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
   return {
-    enabled:       Boolean(s.cpx_enabled          ?? false),
+    // Supabase JSONB returns native booleans, but guard against the string
+    // "false" being stored — Boolean("false") === true which would silently
+    // enable CPX when the admin disabled it.
+    enabled:       s.cpx_enabled === true || s.cpx_enabled === "true",
     dailyCap:      Number(s.cpx_daily_cap          ?? 10),
     appId:         String(s.cpx_app_id             ?? ""),
     secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
