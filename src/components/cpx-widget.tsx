@@ -15,7 +15,7 @@
  *  3. Renders the target <div> that CPX populates with the survey list.
  */
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 interface CpxWidgetProps {
   appId: string
@@ -27,10 +27,11 @@ interface CpxWidgetProps {
 }
 
 const DIV_ID     = "cpx-survey-wall"
-const SCRIPT_ID  = "cpx-script-tag"
 const SCRIPT_SRC = "https://cdn.cpx-research.com/assets/js/script_tag_v2.0.js"
 
 export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWidgetProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     // Step 1: write window.config BEFORE the library loads
     // (CPX reads this object on initialisation)
@@ -54,21 +55,32 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
       ],
     }
 
-    // Step 2: append the CPX library script tag once (avoid duplicates on re-render)
-    if (!document.getElementById(SCRIPT_ID)) {
-      const script = document.createElement("script")
-      script.id   = SCRIPT_ID
-      script.type = "text/javascript"
-      script.src  = SCRIPT_SRC
-      document.body.appendChild(script)
-    } else {
-      // Script already loaded from a previous render — trigger re-init if CPX exposes it
-      ;(window as any).CpxResearch?.init?.()
+    // Step 2: (re-)inject the CPX library script tag.
+    // CPX's library reads window.config once, at script-execution time, and
+    // paints the survey list into the target div right then — it exposes no
+    // public re-init API (confirmed: no `window.CpxResearch` global exists
+    // anywhere in the bundle). Because this is an SPA, the previously
+    // injected <script> tag survives client-side navigation, so skipping
+    // re-injection when a tag with this id already exists left the survey
+    // wall empty on every visit after the first. Always strip any previous
+    // instance and its rendered content, then inject a fresh script tag so
+    // it re-reads the current window.config and re-renders on every mount.
+    document.querySelectorAll(`script[src="${SCRIPT_SRC}"]`).forEach((el) => el.remove())
+    if (containerRef.current) containerRef.current.innerHTML = ""
+
+    const script = document.createElement("script")
+    script.type = "text/javascript"
+    script.src  = SCRIPT_SRC
+    document.body.appendChild(script)
+
+    return () => {
+      script.remove()
     }
   }, [appId, userId, secureHash, username, email])
 
   return (
     <div
+      ref={containerRef}
       id={DIV_ID}
       className="w-full"
       style={{ minHeight: 400 }}
