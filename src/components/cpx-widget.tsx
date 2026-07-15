@@ -62,7 +62,15 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
         email,
         subid_1:     "bountytask",
       },
-      style_config: {},
+      // style_config.survey_box must be an object (even if empty).
+      // CPX's bundle accesses survey_box.rounded_borders without optional
+      // chaining in one branch — leaving survey_box undefined throws a
+      // TypeError that kills the script before any callbacks fire.
+      style_config: {
+        survey_box: {
+          rounded_borders: true,
+        },
+      },
       script_config: [
         {
           div_id:        DIV_ID,
