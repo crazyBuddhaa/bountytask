@@ -707,7 +707,7 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setSettings((s) => ({ ...s, cpx_secure_hash_key: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
                   Found in your CPX Research dashboard under <strong>App Settings → Security</strong>.
-                  Used to verify every postback via MD5(<code className="bg-muted px-1 rounded">appId-userId-transId-key</code>).
+                  Used to verify every postback via MD5(<code className="bg-muted px-1 rounded">transId-key</code>).
                 </p>
               </div>
               <div className="space-y-2">
