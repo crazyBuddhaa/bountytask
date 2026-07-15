@@ -562,8 +562,9 @@ export default function AdminSettingsPage() {
             <Layers className="w-4 h-4" /> Ayet Studios — Surveys &amp; Offers
           </CardTitle>
           <CardDescription>
-            Best-in-class fraud protection with HMAC-SHA256 signed postbacks. Strong survey and
-            offer inventory — recommended as the primary offer wall for Nigerian traffic.
+            Strong survey and offer inventory — recommended as the primary offer wall for Nigerian
+            traffic. Offerwall postbacks are authenticated with a static secret you control (not
+            HMAC). Reversal callbacks are supported — enable them in the Ayet dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -583,19 +584,64 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setSettings((s) => ({ ...s, ayet_daily_cap: parseInt(e.target.value) || 10 }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ayet_placement" className="flex items-center gap-1"><Key className="w-3 h-3" /> Placement Key</Label>
-                <Input id="ayet_placement" placeholder="ayet-placement-key"
+                <Label htmlFor="ayet_placement" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Placement Key
+                </Label>
+                <Input id="ayet_placement" placeholder="e.g. pl-23749"
                   value={settings.ayet_placement_key}
                   onChange={(e) => setSettings((s) => ({ ...s, ayet_placement_key: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Found in Ayet dashboard → your placement → Overview (e.g. <code className="bg-muted px-1 rounded">PL-23749</code>).
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ayet_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Secret Key</Label>
-                <Input id="ayet_secret" type="password" placeholder="HMAC-SHA256 signing secret"
+                <Label htmlFor="ayet_secret" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Postback Secret
+                </Label>
+                <Input id="ayet_secret" type="password" placeholder="Random secret you generated (e.g. openssl rand -hex 24)"
                   value={settings.ayet_secret_key}
                   onChange={(e) => setSettings((s) => ({ ...s, ayet_secret_key: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/ayet</code>
+                  A random token <strong>you choose</strong> — not provided by Ayet. Ayet offerwall
+                  postbacks carry no HMAC; this static secret appended to the callback URL is the
+                  only auth mechanism. Generate one with{" "}
+                  <code className="bg-muted px-1 rounded">openssl rand -hex 24</code>, paste it
+                  here, then paste the same value into the callback URL below.
                 </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Conversion Callback URL
+                </Label>
+                <div className="relative">
+                  <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
+                    {"https://bountytask.dpdns.org/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret="}
+                    {settings.ayet_secret_key
+                      ? <span className="text-green-600 dark:text-green-400">{settings.ayet_secret_key}</span>
+                      : <span className="text-destructive">YOUR_SECRET_HERE</span>}
+                  </code>
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                    title="Copy callback URL"
+                    onClick={() => {
+                      const secret = settings.ayet_secret_key || "YOUR_SECRET_HERE"
+                      navigator.clipboard.writeText(
+                        `https://bountytask.dpdns.org/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=${secret}`
+                      )
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                  </button>
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                  <li><code className="bg-muted px-1 rounded">{"{external_identifier}"}</code> — your internal user ID</li>
+                  <li><code className="bg-muted px-1 rounded">{"{transaction_id}"}</code> — dedup key; reversals reuse the same ID</li>
+                  <li><code className="bg-muted px-1 rounded">{"{payout_usd}"}</code> — actual USD value, converted to NGN at credit time</li>
+                  <li><code className="bg-muted px-1 rounded">{"{is_chargeback}"}</code> — 0 on completion, 1 on reversal (enable Reversal Callbacks in Ayet dashboard)</li>
+                </ul>
               </div>
             </>
           )}
