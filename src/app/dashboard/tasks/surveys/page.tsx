@@ -13,14 +13,11 @@ export default async function SurveysPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/sign-in")
 
-  const [profile, settings, usedToday] = await Promise.all([
-    supabase.from("users").select("username, email").eq("id", user.id).single(),
+  const [settings, usedToday] = await Promise.all([
     getCpxSettings(),
     getAdCompletionsTodayCount(user.id, "cpx"),
   ])
 
-  const username   = profile.data?.username ?? "user"
-  const email      = profile.data?.email    ?? user.email ?? ""
   const secureHash = buildCpxSecureHash(user.id, settings.secureHashKey)
   const capHit     = usedToday >= settings.dailyCap
 
@@ -84,8 +81,6 @@ export default async function SurveysPage() {
           appId={settings.appId}
           userId={user.id}
           secureHash={secureHash}
-          username={username}
-          email={email}
         />
       )}
 
