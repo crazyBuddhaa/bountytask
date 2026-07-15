@@ -701,8 +701,40 @@ export default function AdminSettingsPage() {
                   value={settings.cpx_secure_hash_key}
                   onChange={(e) => setSettings((s) => ({ ...s, cpx_secure_hash_key: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/cpx</code>
+                  Found in your CPX Research dashboard under <strong>App Settings → Security</strong>.
+                  Used to verify every postback via MD5(<code className="bg-muted px-1 rounded">appId-userId-transId-key</code>).
                 </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Postback URL
+                </Label>
+                <div className="relative">
+                  <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
+                    https://bountytask.dpdns.org/api/postback/cpx
+                  </code>
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                    title="Copy postback URL"
+                    onClick={() => navigator.clipboard.writeText("https://bountytask.dpdns.org/api/postback/cpx")}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste this into CPX Research → App Settings → Postback URL.
+                  CPX appends all parameters automatically — no macros needed in the URL.
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                  <li><code className="bg-muted px-1 rounded">ext_user_id</code> — your internal user ID (passed at embed time)</li>
+                  <li><code className="bg-muted px-1 rounded">trans_id</code> — unique transaction ID used for deduplication</li>
+                  <li><code className="bg-muted px-1 rounded">status</code> — <code className="bg-muted px-1 rounded">1</code> = completed, <code className="bg-muted px-1 rounded">2</code> = reversed</li>
+                  <li><code className="bg-muted px-1 rounded">hash</code> — MD5 authentication hash (verified server-side)</li>
+                  <li><code className="bg-muted px-1 rounded">payout</code> — USD payout, converted to ₦ at credit time</li>
+                </ul>
               </div>
             </>
           )}

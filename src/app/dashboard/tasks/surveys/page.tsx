@@ -1,3 +1,4 @@
+import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getCpxSettings, buildCpxSurveyUrl } from "@/lib/cpx"
@@ -17,6 +18,11 @@ export default async function SurveysPage({ searchParams }: Props) {
   if (!user) redirect("/sign-in")
 
   const { done } = await searchParams
+
+  const headersList = await headers()
+  const host  = headersList.get("host") ?? "bountytask.dpdns.org"
+  const proto = headersList.get("x-forwarded-proto") ?? "https"
+  const origin = `${proto}://${host}`
 
   const [profile, settings, usedToday] = await Promise.all([
     supabase.from("users").select("username").eq("id", user.id).single(),
@@ -98,7 +104,7 @@ export default async function SurveysPage({ searchParams }: Props) {
       ) : (
         <Card className="overflow-hidden p-0">
           <iframe
-            src={buildCpxSurveyUrl(settings.appId, user.id, username, "")}
+            src={buildCpxSurveyUrl(settings.appId, user.id, username, origin)}
             className="w-full"
             style={{ height: 600, border: "none" }}
             title="Survey Wall"

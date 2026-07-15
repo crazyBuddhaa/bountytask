@@ -28,6 +28,15 @@ export async function getCpxSettings(): Promise<CpxSettings> {
  * The `ext_user_id` is echoed back on every postback so our route can credit
  * the correct user without any server-side state lookup.
  */
+/**
+ * Build the CPX Research survey wall iframe URL.
+ *
+ * IMPORTANT: Do NOT include `output_method=web_layer` here.
+ * The "web_layer" mode is a JavaScript floating overlay — it manipulates the
+ * parent page DOM and does not work when loaded inside an <iframe>. Leave the
+ * output method unset so CPX serves the plain survey-list page that embeds
+ * cleanly in an iframe.
+ */
 export function buildCpxSurveyUrl(
   appId: string,
   userId: string,
@@ -38,8 +47,7 @@ export function buildCpxSurveyUrl(
     app_id: appId,
     ext_user_id: userId,
     username: username,
-    output_method: "web_layer",
-    // subid_1 is passed through on every postback — useful for analytics
+    // subid_1 is echoed through on every postback — useful for analytics
     subid_1: "bountytask",
     // Tell CPX where to redirect the user after survey completion
     survey_finished_callback: `${origin}/dashboard/tasks/surveys?done=1`,
