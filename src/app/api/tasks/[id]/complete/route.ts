@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { creditReferralBonus } from "@/lib/referrals"
-import { flagUser, checkTaskCompletionRate, hasCompletedTask, recordDevice } from "@/lib/fraud"
+import { flagUser, checkTaskCompletionRate, recordDevice } from "@/lib/fraud"
 import { checkDailyTaskLimit, recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved } from "@/lib/notifications"
 import { getClientIp } from "@/lib/utils"
@@ -47,13 +47,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ data: null, error: "This task requires proof of completion" }, { status: 400 })
   }
 
-  // Fraud checks
-  const [alreadyDone, rateLimited, dailyLimit] = await Promise.all([
-    hasCompletedTask(user.id, taskId),
+  // Per-user completion limit check (replaces the old hasCompletedTask single-submission guard)
+  // max_completions_per_user: null = no per-user limit, 1 = once (default), N = up to N times
+  const perUserLimit = task.max_completions_per_user ?? 1
+  const { count: userCount } = await admin
+    .from("task_completions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("task_id", taskId)
+    .in("status", ["pending", "approved"])
+  if ((userCount ?? 0) >= perUserLimit) {
+    return NextResponse.json({
+      data: null,
+      error: perUserLimit === 1
+        ? "You have already submitted this task"
+        : `You've completed this task ${perUserLimit} time${perUserLimit === 1 ? "" : "s"} — that's the maximum allowed.`,
+    }, { status: 409 })
+  }
+
+  // Remaining fraud checks
+  const [rateLimited, dailyLimit] = await Promise.all([
     checkTaskCompletionRate(user.id),
     checkDailyTaskLimit(user.id),
   ])
-  if (alreadyDone) return NextResponse.json({ data: null, error: "You have already submitted this task" }, { status: 409 })
   if (rateLimited) {
     await flagUser({ userId: user.id, reason: "Exceeded task completion rate limit (10/hr)", severity: "medium" })
     return NextResponse.json({ data: null, error: "Too many submissions. Please wait before trying again." }, { status: 429 })

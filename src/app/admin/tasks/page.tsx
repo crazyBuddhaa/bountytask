@@ -65,7 +65,7 @@ export default function AdminTasksPage() {
   // Supabase's update() rejects unknown columns with a schema-cache error.
   const EDITABLE_TASK_FIELDS = [
     "title", "description", "instructions", "category_id", "type", "status",
-    "reward_amount", "max_completions", "requires_proof", "proof_instructions",
+    "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
     "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
   ] as const
 
@@ -109,7 +109,7 @@ export default function AdminTasksPage() {
           <h1 className="text-2xl font-bold">Tasks</h1>
           <p className="text-muted-foreground text-sm mt-1">{total.toLocaleString()} tasks</p>
         </div>
-        <Button variant="gradient" size="sm" onClick={() => setEditing({ status: "draft", type: "unverified", reward_amount: 0, requires_proof: false })}>
+        <Button variant="gradient" size="sm" onClick={() => setEditing({ status: "draft", type: "unverified", reward_amount: 0, requires_proof: false, max_completions_per_user: 1 })}>
           <Plus className="w-4 h-4" /> New Task
         </Button>
       </div>
@@ -258,7 +258,7 @@ export default function AdminTasksPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="reward">Reward (kobo)</Label>
                   <Input id="reward" type="number" className="mt-1"
@@ -267,10 +267,18 @@ export default function AdminTasksPage() {
                   <p className="text-xs text-muted-foreground mt-1">{formatCurrency(editing.reward_amount ?? 0)}</p>
                 </div>
                 <div>
-                  <Label htmlFor="maxComp">Max Completions</Label>
+                  <Label htmlFor="maxComp">Total Cap</Label>
                   <Input id="maxComp" type="number" className="mt-1" placeholder="Unlimited"
                     value={editing.max_completions ?? ""}
                     onChange={e => setEditing(prev => ({ ...prev, max_completions: e.target.value ? parseInt(e.target.value) : null }))} />
+                  <p className="text-xs text-muted-foreground mt-1">All users combined</p>
+                </div>
+                <div>
+                  <Label htmlFor="perUserCap">Per-user Limit</Label>
+                  <Input id="perUserCap" type="number" min={1} className="mt-1" placeholder="No limit"
+                    value={editing.max_completions_per_user ?? ""}
+                    onChange={e => setEditing(prev => ({ ...prev, max_completions_per_user: e.target.value ? parseInt(e.target.value) : null }))} />
+                  <p className="text-xs text-muted-foreground mt-1">Times per user</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

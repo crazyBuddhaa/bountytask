@@ -79,6 +79,7 @@ export interface Task {
   status: TaskStatus;
   reward_amount: number; // in kobo (1 NGN = 100 kobo)
   max_completions: number | null;
+  max_completions_per_user: number | null;
   current_completions: number;
   requires_proof: boolean;
   proof_instructions: string | null;

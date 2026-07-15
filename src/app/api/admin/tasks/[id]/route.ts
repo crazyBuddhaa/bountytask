@@ -18,7 +18,7 @@ async function assertAdmin(userId: string) {
 // in the schema cache". Always sanitize server-side, independent of what the client sends.
 const EDITABLE_TASK_FIELDS = [
   "title", "description", "instructions", "category_id", "type", "status",
-  "reward_amount", "max_completions", "requires_proof", "proof_instructions",
+  "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
   "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
 ] as const
 
