@@ -716,13 +716,13 @@ export default function AdminSettingsPage() {
                 </Label>
                 <div className="relative">
                   <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
-                    {`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}`}
+                    {`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}&amount_local={amount_local}`}
                   </code>
                   <button
                     type="button"
                     className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
                     title="Copy postback URL"
-                    onClick={() => navigator.clipboard.writeText(`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}`)}
+                    onClick={() => navigator.clipboard.writeText(`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}&amount_local={amount_local}`)}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -737,7 +737,8 @@ export default function AdminSettingsPage() {
                   <li><code className="bg-muted px-1 rounded">{"{trans_id}"}</code> — unique transaction ID used for deduplication</li>
                   <li><code className="bg-muted px-1 rounded">{"{status}"}</code> — <code className="bg-muted px-1 rounded">1</code> = completed, <code className="bg-muted px-1 rounded">2</code> = canceled/fraud</li>
                   <li><code className="bg-muted px-1 rounded">{"{secure_hash}"}</code> — MD5(<code className="bg-muted px-1 rounded">trans_id-secureHashKey</code>), verified server-side</li>
-                  <li><code className="bg-muted px-1 rounded">{"{amount_usd}"}</code> — USD payout, converted to ₦ at credit time</li>
+                  <li><code className="bg-muted px-1 rounded">{"{amount_usd}"}</code> — payout in USD</li>
+                  <li><code className="bg-muted px-1 rounded">{"{amount_local}"}</code> — payout in your local currency (required by CPX)</li>
                 </ul>
               </div>
             </>

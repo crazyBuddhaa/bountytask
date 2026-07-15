@@ -3,14 +3,15 @@
  *
  * CPX calls this URL with the placeholders you configured in the dashboard.
  * We configure it as:
- *   GET /api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}
+ *   GET /api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}&amount_local={amount_local}
  *
  * Parameter notes (from CPX publisher dashboard):
  *  {user_id}      → the ext_user_id we passed in the iframe URL (echoed back)
  *  {trans_id}     → unique transaction ID for deduplication
  *  {status}       → 1 = completed, 2 = canceled/fraud chargeback
  *  {secure_hash}  → MD5(trans_id + '-' + secureHashKey)
- *  {amount_usd}   → payout in USD (e.g. "0.50")
+ *  {amount_usd}   → payout in USD (e.g. "0.50") — used for NGN conversion
+ *  {amount_local} → payout in local currency — required by CPX but we use amount_usd
  *
  * Must respond with plain text "1" on success so CPX marks the postback delivered.
  * Respond with "0" (or any non-"1") to signal failure — CPX will retry.
