@@ -46,7 +46,7 @@ export async function sendEmail({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: `BountyTask <noreply@${process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") ?? "bountytask.com"}>`,
+      from: `BountyTask <noreply@${process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") ?? "bountytask.dpdns.org"}>`,
       to,
       subject,
       html,

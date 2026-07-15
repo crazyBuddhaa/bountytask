@@ -1,12 +1,21 @@
 /**
  * CPX Research postback endpoint.
  *
- * CPX calls: GET /api/postback/cpx?ext_user_id={uid}&trans_id={tid}&status={1|2}&hash={md5}&payout={usd}
- *  status=1 → survey completed (credit user)
- *  status=2 → survey reversed / chargeback (acknowledge, no debit for now)
+ * CPX calls this URL with the placeholders you configured in the dashboard.
+ * We configure it as:
+ *   GET /api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}
+ *
+ * Parameter notes (from CPX publisher dashboard):
+ *  {user_id}      → the ext_user_id we passed in the iframe URL (echoed back)
+ *  {trans_id}     → unique transaction ID for deduplication
+ *  {status}       → 1 = completed, 2 = canceled/fraud chargeback
+ *  {secure_hash}  → MD5(trans_id + '-' + secureHashKey)
+ *  {amount_usd}   → payout in USD (e.g. "0.50")
  *
  * Must respond with plain text "1" on success so CPX marks the postback delivered.
  * Respond with "0" (or any non-"1") to signal failure — CPX will retry.
+ *
+ * CPX postback IPs: 188.40.3.73, 2a01:4f8:d0a:30ff::2, 157.90.97.92
  */
 import { NextRequest, NextResponse } from "next/server"
 import { getCpxSettings, cpxUsdCentsToKobo } from "@/lib/cpx"
@@ -23,18 +32,18 @@ export const dynamic = "force-dynamic"
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
 
-  const userId    = searchParams.get("ext_user_id") ?? ""
-  const transId   = searchParams.get("trans_id")    ?? ""
-  const status    = searchParams.get("status")       ?? ""
-  const hash      = searchParams.get("hash")         ?? ""
-  const payout    = searchParams.get("payout")       ?? "0"
+  const userId    = searchParams.get("user_id")    ?? ""
+  const transId   = searchParams.get("trans_id")   ?? ""
+  const status    = searchParams.get("status")      ?? ""
+  const hash      = searchParams.get("hash")        ?? ""
+  const amountUsd = searchParams.get("amount_usd") ?? "0"
 
   // Validate required params
   if (!userId || !transId || !hash) {
     return new NextResponse("0", { status: 400, headers: { "Content-Type": "text/plain" } })
   }
 
-  // Reversals — acknowledge without debiting (feature parity with ad networks)
+  // status=2 → canceled/fraud. Acknowledge without debiting.
   if (status === "2") {
     return new NextResponse("1", { status: 200, headers: { "Content-Type": "text/plain" } })
   }
@@ -49,8 +58,8 @@ export async function GET(request: NextRequest) {
     return new NextResponse("0", { status: 503, headers: { "Content-Type": "text/plain" } })
   }
 
-  // Validate hash
-  if (!validateCpxHash(settings.appId, userId, transId, settings.secureHashKey, hash)) {
+  // Validate hash: MD5(trans_id + '-' + secureHashKey)
+  if (!validateCpxHash(transId, settings.secureHashKey, hash)) {
     return new NextResponse("0", { status: 401, headers: { "Content-Type": "text/plain" } })
   }
 
@@ -71,7 +80,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse("0", { status: 429, headers: { "Content-Type": "text/plain" } })
   }
 
-  const rewardKobo = cpxUsdCentsToKobo(payout)
+  const rewardKobo = cpxUsdCentsToKobo(amountUsd)
 
   const result = await recordAdCompletion({
     userId,

@@ -1,37 +1,28 @@
-import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { getCpxSettings, buildCpxSurveyUrl } from "@/lib/cpx"
+import { getCpxSettings, buildCpxSecureHash } from "@/lib/cpx"
 import { getAdCompletionsTodayCount } from "@/lib/ad-providers"
+import { CpxWidget } from "@/components/cpx-widget"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ClipboardList, CheckCircle2, Zap } from "lucide-react"
+import { ClipboardList, Zap } from "lucide-react"
 
-interface Props {
-  searchParams: Promise<{ done?: string }>
-}
-
-export default async function SurveysPage({ searchParams }: Props) {
+export default async function SurveysPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/sign-in")
 
-  const { done } = await searchParams
-
-  const headersList = await headers()
-  const host  = headersList.get("host") ?? "bountytask.dpdns.org"
-  const proto = headersList.get("x-forwarded-proto") ?? "https"
-  const origin = `${proto}://${host}`
-
   const [profile, settings, usedToday] = await Promise.all([
-    supabase.from("users").select("username").eq("id", user.id).single(),
+    supabase.from("users").select("username, email").eq("id", user.id).single(),
     getCpxSettings(),
     getAdCompletionsTodayCount(user.id, "cpx"),
   ])
 
-  const username = profile.data?.username ?? "user"
-  const capHit = usedToday >= settings.dailyCap
+  const username   = profile.data?.username ?? "user"
+  const email      = profile.data?.email    ?? user.email ?? ""
+  const secureHash = buildCpxSecureHash(user.id, settings.secureHashKey)
+  const capHit     = usedToday >= settings.dailyCap
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -67,19 +58,6 @@ export default async function SurveysPage({ searchParams }: Props) {
         </Card>
       )}
 
-      {/* Survey completion confirmation */}
-      {done === "1" && (
-        <Card className="border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20">
-          <CardContent className="p-4 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Survey submitted!</p>
-              <p className="text-xs text-muted-foreground">Your reward will appear in your balance shortly.</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Survey wall */}
       {!settings.enabled || !settings.appId ? (
         <Card>
@@ -102,15 +80,13 @@ export default async function SurveysPage({ searchParams }: Props) {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
-          <iframe
-            src={buildCpxSurveyUrl(settings.appId, user.id, username, origin)}
-            className="w-full"
-            style={{ height: 600, border: "none" }}
-            title="Survey Wall"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
-          />
-        </Card>
+        <CpxWidget
+          appId={settings.appId}
+          userId={user.id}
+          secureHash={secureHash}
+          username={username}
+          email={email}
+        />
       )}
 
       <Card className="bg-muted/40">

@@ -1,3 +1,4 @@
+import { createHash } from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export type CpxSettings = {
@@ -24,35 +25,14 @@ export async function getCpxSettings(): Promise<CpxSettings> {
 }
 
 /**
- * Build the CPX Research survey wall URL for a given user.
- * The `ext_user_id` is echoed back on every postback so our route can credit
- * the correct user without any server-side state lookup.
- */
-/**
- * Build the CPX Research survey wall iframe URL.
+ * Generate the CPX Research secure hash.
  *
- * IMPORTANT: Do NOT include `output_method=web_layer` here.
- * The "web_layer" mode is a JavaScript floating overlay — it manipulates the
- * parent page DOM and does not work when loaded inside an <iframe>. Leave the
- * output method unset so CPX serves the plain survey-list page that embeds
- * cleanly in an iframe.
+ * Per CPX publisher dashboard docs: MD5(ext_user_id + '-' + secure_hash_key)
+ * Computed server-side so the secureHashKey is never exposed to the browser.
+ * Passed into window.config as `secure_hash` before the CPX script tag loads.
  */
-export function buildCpxSurveyUrl(
-  appId: string,
-  userId: string,
-  username: string,
-  origin: string
-): string {
-  const params = new URLSearchParams({
-    app_id: appId,
-    ext_user_id: userId,
-    username: username,
-    // subid_1 is echoed through on every postback — useful for analytics
-    subid_1: "bountytask",
-    // Tell CPX where to redirect the user after survey completion
-    survey_finished_callback: `${origin}/dashboard/tasks/surveys?done=1`,
-  })
-  return `https://live.cpx-research.com/index.php?${params}`
+export function buildCpxSecureHash(userId: string, secureHashKey: string): string {
+  return createHash("md5").update(`${userId}-${secureHashKey}`).digest("hex")
 }
 
 /**

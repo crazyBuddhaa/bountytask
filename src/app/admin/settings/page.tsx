@@ -112,6 +112,11 @@ const DEFAULTS: Settings = {
   asterra_smartlink_url: "",
 }
 
+const APP_URL =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : "https://bountytask.dpdns.org"
+
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
@@ -560,7 +565,7 @@ export default function AdminSettingsPage() {
                   value={settings.lootably_secret}
                   onChange={(e) => setSettings((s) => ({ ...s, lootably_secret: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/lootably</code>
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">{APP_URL}/api/postback/lootably</code>
                 </p>
               </div>
             </>
@@ -628,7 +633,7 @@ export default function AdminSettingsPage() {
                 </Label>
                 <div className="relative">
                   <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
-                    {"https://bountytask.dpdns.org/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret="}
+                    {`${APP_URL}/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=`}
                     {settings.ayet_secret_key
                       ? <span className="text-green-600 dark:text-green-400">{settings.ayet_secret_key}</span>
                       : <span className="text-destructive">YOUR_SECRET_HERE</span>}
@@ -640,7 +645,7 @@ export default function AdminSettingsPage() {
                     onClick={() => {
                       const secret = settings.ayet_secret_key || "YOUR_SECRET_HERE"
                       navigator.clipboard.writeText(
-                        `https://bountytask.dpdns.org/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=${secret}`
+                        `${APP_URL}/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=${secret}`
                       )
                     }}
                   >
@@ -711,13 +716,13 @@ export default function AdminSettingsPage() {
                 </Label>
                 <div className="relative">
                   <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
-                    https://bountytask.dpdns.org/api/postback/cpx
+                    {`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}`}
                   </code>
                   <button
                     type="button"
                     className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
                     title="Copy postback URL"
-                    onClick={() => navigator.clipboard.writeText("https://bountytask.dpdns.org/api/postback/cpx")}
+                    onClick={() => navigator.clipboard.writeText(`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}`)}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -725,15 +730,14 @@ export default function AdminSettingsPage() {
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Paste this into CPX Research → App Settings → Postback URL.
-                  CPX appends all parameters automatically — no macros needed in the URL.
+                  Copy this <strong>exact URL including the placeholders</strong> into CPX Research → your App → <strong>Postback Settings</strong> tab → Main Postback URL. CPX substitutes each <code className="bg-muted px-1 rounded">{"{placeholder}"}</code> with real values on every postback.
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
-                  <li><code className="bg-muted px-1 rounded">ext_user_id</code> — your internal user ID (passed at embed time)</li>
-                  <li><code className="bg-muted px-1 rounded">trans_id</code> — unique transaction ID used for deduplication</li>
-                  <li><code className="bg-muted px-1 rounded">status</code> — <code className="bg-muted px-1 rounded">1</code> = completed, <code className="bg-muted px-1 rounded">2</code> = reversed</li>
-                  <li><code className="bg-muted px-1 rounded">hash</code> — MD5 authentication hash (verified server-side)</li>
-                  <li><code className="bg-muted px-1 rounded">payout</code> — USD payout, converted to ₦ at credit time</li>
+                  <li><code className="bg-muted px-1 rounded">{"{user_id}"}</code> — your internal user ID (echoed from the survey wall)</li>
+                  <li><code className="bg-muted px-1 rounded">{"{trans_id}"}</code> — unique transaction ID used for deduplication</li>
+                  <li><code className="bg-muted px-1 rounded">{"{status}"}</code> — <code className="bg-muted px-1 rounded">1</code> = completed, <code className="bg-muted px-1 rounded">2</code> = canceled/fraud</li>
+                  <li><code className="bg-muted px-1 rounded">{"{secure_hash}"}</code> — MD5(<code className="bg-muted px-1 rounded">trans_id-secureHashKey</code>), verified server-side</li>
+                  <li><code className="bg-muted px-1 rounded">{"{amount_usd}"}</code> — USD payout, converted to ₦ at credit time</li>
                 </ul>
               </div>
             </>
@@ -784,7 +788,7 @@ export default function AdminSettingsPage() {
                   value={settings.adgate_postback_ip}
                   onChange={(e) => setSettings((s) => ({ ...s, adgate_postback_ip: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/adgate?conversion_id={"{conversion_id}"}&amp;user_id={"{s1}"}&amp;payout={"{payout}"}&amp;state={"{state}"}</code>
+                  Postback URL: <code className="text-xs bg-muted px-1 rounded">{`${APP_URL}/api/postback/adgate?conversion_id={conversion_id}&user_id={s1}&payout={payout}&state={state}`}</code>
                 </p>
               </div>
             </>

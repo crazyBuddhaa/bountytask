@@ -51,8 +51,8 @@ supabase/migrations/005_storage.sql
 
 ### 3. Configure Supabase Auth
 
-- **Site URL** → set to your production domain (e.g. `https://bountytask.vercel.app`)
-- **Redirect URLs** → add `https://your-domain.vercel.app/api/auth/callback`
+- **Site URL** → set to your production domain (`https://bountytask.dpdns.org`)
+- **Redirect URLs** → add `https://bountytask.dpdns.org/api/auth/callback`
 - **Google OAuth** (optional) → enable in Auth → Providers
 
 ### 4. Environment variables
@@ -68,7 +68,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server only) |
-| `NEXT_PUBLIC_APP_URL` | Full app URL (e.g. `https://bountytask.vercel.app`) |
+| `NEXT_PUBLIC_APP_URL` | Full app URL — `https://bountytask.dpdns.org` |
 | `PAYSTACK_SECRET_KEY` | Paystack secret key — used for bank list + account verification, the withdrawal verification-fee, and advertiser payments |
 | `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` | Paystack public key — only needed if the withdrawal verification fee's payment method is set to "paystack" |
 | `RESEND_API_KEY` | Resend API key for transactional email |
@@ -100,7 +100,7 @@ Add these secrets to your GitHub repo (`Settings → Secrets → Actions`):
 
 | Secret | Value |
 |---|---|
-| `APP_URL` | Your production URL (e.g. `https://bountytask.vercel.app`) |
+| `APP_URL` | Production URL — `https://bountytask.dpdns.org` |
 | `CRON_SECRET` | Same value as the `CRON_SECRET` env var in Vercel |
 
 ---
