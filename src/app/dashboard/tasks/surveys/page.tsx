@@ -59,7 +59,7 @@ export default async function SurveysPage() {
       )}
 
       {/* Survey wall */}
-      {!settings.enabled || !settings.appId ? (
+      {!settings.enabled || !settings.appId || !settings.secureHashKey ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Coming Soon</CardTitle>

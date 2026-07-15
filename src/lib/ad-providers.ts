@@ -220,25 +220,6 @@ export function validateAyetSignature(
 }
 
 /**
- * CPX Research: MD5(`transactionId-secureHashKey`)
- * Per the CPX publisher dashboard: hash = md5({trans_id}-yourappsecurehash)
- * CPX sends this as the `hash` query parameter on every postback.
- */
-export function validateCpxHash(
-  transactionId: string,
-  secureHashKey: string,
-  receivedHash: string
-): boolean {
-  const raw = `${transactionId}-${secureHashKey}`
-  const expected = createHash("md5").update(raw).digest("hex")
-  try {
-    return timingSafeEqual(Buffer.from(receivedHash), Buffer.from(expected))
-  } catch {
-    return false
-  }
-}
-
-/**
  * Lootably: HMAC-SHA256(secret, userId + transactionId)
  * Lootably sends `sig` as a query parameter on the postback.
  */

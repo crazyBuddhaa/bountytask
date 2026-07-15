@@ -6,7 +6,7 @@
  *   loading    → script injected, waiting for CPX to initialise
  *   ready      → count_new_surveys fired with count > 0, or onload timeout
  *                elapsed without a no_surveys_available callback
- *   no-surveys → CPX fired no_surveys_available (no inventory for this user/geo)
+ *   no-surveys → CPX fired no_surveys_available OR count_new_surveys(0)
  *   error      → <script> onerror (CDN unreachable or blocked)
  *
  * Why fresh injection on every mount:
@@ -18,7 +18,8 @@
  *
  * Secure hash:
  *   Computed server-side as MD5(userId + '-' + secureHashKey) so the raw key
- *   is never sent to the browser.
+ *   is never sent to the browser. Note: the postback hash uses a different
+ *   formula — MD5(trans_id + '-' + secureHashKey) — see validateCpxPostbackHash().
  */
 
 import { useEffect, useRef, useState } from "react"
@@ -71,13 +72,23 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
         },
       ],
       functions: {
-        /** Fired by CPX when there are no surveys for this user/geo/device. */
+        /**
+         * Fired by CPX when there are no surveys for this user/geo/device,
+         * OR when count_new_surveys is called with 0.
+         */
         no_surveys_available: () => {
           if (!cancelled) setStatus("no-surveys")
         },
-        /** Fired by CPX with the count of available surveys. */
+        /**
+         * Fired by CPX with the count of available surveys.
+         *
+         * Bug fix: previously `count === 0` was ignored, causing the widget
+         * to stay in "loading" until the 5s timeout then flip to "ready"
+         * with an empty div. Now 0 correctly maps to "no-surveys".
+         */
         count_new_surveys: (count: number) => {
-          if (!cancelled && count > 0) setStatus("ready")
+          if (cancelled) return
+          setStatus(count > 0 ? "ready" : "no-surveys")
         },
         /** Fired by CPX after a transaction completes (survey finished). */
         get_transaction: (_transactions: unknown) => {

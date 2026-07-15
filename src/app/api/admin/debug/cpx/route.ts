@@ -5,21 +5,23 @@
  *
  * Returns a full health-check of the CPX integration:
  *   - settings completeness
- *   - hash formula with a sample computation (verify against CPX dashboard)
- *   - postback URL template
- *   - a ready-to-fire test postback URL (status=1, $0.10)
+ *   - BOTH hash formulas with sample computations:
+ *       • widget hash  — MD5(userId + '-' + key)  — passed to window.config
+ *       • postback hash — MD5(trans_id + '-' + key) — what CPX sends back
+ *   - postback URL template (paste into CPX publisher dashboard)
+ *   - a ready-to-fire test postback URL with a unique trans_id (timestamped)
  *
  * The secure hash key is never returned in plaintext — only a masked version
- * and a sample hash output are included so the caller can cross-check against
- * the CPX publisher dashboard without the key being logged.
+ * and sample hash outputs are included.
  */
-import { NextResponse }        from "next/server"
-import { createClient }        from "@/lib/supabase/server"
-import { createAdminClient }   from "@/lib/supabase/admin"
-import { getCpxSettings, buildCpxSecureHash } from "@/lib/cpx"
-import { createHash }          from "crypto"
+import { NextResponse }                               from "next/server"
+import { createClient }                               from "@/lib/supabase/server"
+import { createAdminClient }                          from "@/lib/supabase/admin"
+import { getCpxSettings, buildCpxSecureHash, validateCpxPostbackHash, CPX_POSTBACK_IPS } from "@/lib/cpx"
+import { createHash }                                 from "crypto"
 
-const APP_URL = "https://bountytask.dpdns.org"
+// Use the env var so this keeps working if the domain changes.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://bountytask.dpdns.org"
 
 async function assertAdmin(userId: string): Promise<boolean> {
   const admin = createAdminClient()
@@ -29,7 +31,7 @@ async function assertAdmin(userId: string): Promise<boolean> {
 
 /** Mask a string: show first 4 and last 4 chars, replace middle with ****. */
 function mask(s: string): string {
-  if (!s)          return "(empty)"
+  if (!s)            return "(empty)"
   if (s.length <= 8) return "*".repeat(s.length)
   return `${s.slice(0, 4)}****${s.slice(-4)}`
 }
@@ -40,30 +42,40 @@ export async function GET() {
   // ── Auth ─────────────────────────────────────────────────────────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user)                      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!user)                       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!await assertAdmin(user.id)) return NextResponse.json({ error: "Forbidden"    }, { status: 403 })
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const settings = await getCpxSettings()
 
-  // ── Hash diagnostics ──────────────────────────────────────────────────────
-  // Use the calling admin's own user ID as the sample so they can cross-check
-  // the output against what the CPX publisher dashboard shows for their account.
-  const sampleUserId      = user.id
-  const sampleHashInput   = `${sampleUserId}-${settings.secureHashKey}`
-  const sampleHashOutput  = settings.secureHashKey
-    ? buildCpxSecureHash(sampleUserId, settings.secureHashKey)
+  // ── Widget hash diagnostic ────────────────────────────────────────────────
+  // Formula: MD5(ext_user_id + '-' + secure_hash_key)
+  // This is what we pass into window.config.general_config.secure_hash.
+  const widgetHashOutput = settings.secureHashKey
+    ? buildCpxSecureHash(user.id, settings.secureHashKey)
     : "(no key — hash not computed)"
 
+  // ── Postback hash diagnostic ──────────────────────────────────────────────
+  // Formula: MD5(trans_id + '-' + secure_hash_key)
+  // This is what CPX sends in the `hash` query param on the postback.
+  // Use a fixed sample trans_id so the admin can verify the formula manually.
+  const sampleTransId         = "sample-trans-001"
+  const postbackHashOutput    = settings.secureHashKey
+    ? createHash("md5").update(`${sampleTransId}-${settings.secureHashKey}`).digest("hex")
+    : "(no key — hash not computed)"
+  const postbackHashVerifies  = settings.secureHashKey
+    ? validateCpxPostbackHash(sampleTransId, settings.secureHashKey, postbackHashOutput)
+    : false
+
   // ── Test postback URL ─────────────────────────────────────────────────────
-  // A valid-looking test postback you can paste into a browser to verify the
-  // route accepts it end-to-end. Uses a fixed test transId.
-  const testTransId   = "cpx-debug-test-001"
-  const testHash      = settings.secureHashKey
+  // Use a timestamped trans_id so each call to this debug route generates a
+  // fresh, unused ID — the dedup system won't block repeated test runs.
+  const testTransId  = `cpx-debug-${Date.now()}`
+  const testHash     = settings.secureHashKey
     ? createHash("md5").update(`${testTransId}-${settings.secureHashKey}`).digest("hex")
     : "(no key)"
-  const testUserId    = user.id  // credits the admin's own account — amount is $0.01
-  const testPostback  =
+  const testUserId   = user.id  // credits the admin's own account — $0.01 = ₦16
+  const testPostback =
     `${APP_URL}/api/postback/cpx` +
     `?user_id=${encodeURIComponent(testUserId)}` +
     `&trans_id=${encodeURIComponent(testTransId)}` +
@@ -84,17 +96,18 @@ export async function GET() {
 
   // ── Checks ────────────────────────────────────────────────────────────────
   const checks = {
-    cpx_enabled:       settings.enabled,
-    has_app_id:        !!settings.appId,
-    has_hash_key:      !!settings.secureHashKey,
-    app_id_is_number:  !isNaN(Number(settings.appId)),
-    daily_cap_nonzero: settings.dailyCap > 0,
+    cpx_enabled:            settings.enabled,
+    has_app_id:             !!settings.appId,
+    has_hash_key:           !!settings.secureHashKey,
+    app_id_is_number:       !isNaN(Number(settings.appId)),
+    daily_cap_nonzero:      settings.dailyCap > 0,
+    postback_hash_verifies: postbackHashVerifies,
   }
 
   const allPassed = Object.values(checks).every(Boolean)
 
   return NextResponse.json({
-    status:    allPassed ? "ok" : "misconfigured",
+    status:  allPassed ? "ok" : "misconfigured",
     checks,
 
     settings: {
@@ -105,25 +118,35 @@ export async function GET() {
     },
 
     hash_diagnostic: {
-      formula:     "MD5(ext_user_id + '-' + secure_hash_key)",
-      sample_user: sampleUserId,
-      sample_input_pattern: `${sampleUserId}-${mask(settings.secureHashKey)}`,
-      sample_output: sampleHashOutput,
-      instructions: [
-        "1. Log into your CPX Research publisher dashboard",
-        "2. Navigate to your app → Security settings",
-        "3. Generate the expected hash for your own user ID using their tool",
-        "4. Compare against sample_output above — they must match",
-        "5. If they differ, the formula or key stored here is wrong",
-      ],
+      widget_hash: {
+        formula:       "MD5(ext_user_id + '-' + secure_hash_key)",
+        description:   "Passed into window.config.general_config.secure_hash when loading the survey widget.",
+        sample_user:   user.id,
+        sample_input:  `${user.id}-${mask(settings.secureHashKey)}`,
+        sample_output: widgetHashOutput,
+        instructions: [
+          "1. In CPX publisher dashboard → your app → Security settings",
+          "2. Find 'Generate Secure Hash' and use your Supabase user UUID as ext_user_id",
+          "3. Compare their output against sample_output above — they must match",
+        ],
+      },
+      postback_hash: {
+        formula:       "MD5(trans_id + '-' + secure_hash_key)",
+        description:   "What CPX sends in the `hash` param on every postback. NOT the same as the widget hash.",
+        sample_trans:  sampleTransId,
+        sample_input:  `${sampleTransId}-${mask(settings.secureHashKey)}`,
+        sample_output: postbackHashOutput,
+        self_check:    postbackHashVerifies ? "PASS — our validator correctly verifies this hash" : "FAIL — hash validation is broken",
+      },
     },
 
     postback: {
-      template:        postbackTemplate,
-      test_url:        testPostback,
-      test_trans_id:   testTransId,
-      test_hash:       testHash,
-      warning:         "Hitting test_url will credit ₦ to YOUR account (the admin). Use once to verify; the dedup system will block retries with the same trans_id.",
+      template:      postbackTemplate,
+      test_url:      testPostback,
+      test_trans_id: testTransId,
+      test_hash:     testHash,
+      known_ips:     CPX_POSTBACK_IPS,
+      warning:       "Hitting test_url will credit ~₦16 ($0.01) to YOUR account. Each test_url is unique (timestamped) so it can be used once without being blocked by dedup.",
     },
   })
 }
