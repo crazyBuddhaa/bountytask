@@ -281,7 +281,7 @@ export async function getAdProviderSettings() {
     "ayet_enabled", "ayet_daily_cap", "ayet_placement_key", "ayet_secret_key",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
     "adgate_enabled", "adgate_daily_cap", "adgate_wall_id", "adgate_postback_ip",
-    "asterra_enabled", "asterra_daily_cap", "asterra_smartlink_url", "asterra_secret_key",
+    "asterra_enabled", "asterra_daily_cap", "asterra_reward_kobo", "asterra_smartlink_url",
   ] as const
 
   const { data: rows } = await admin
@@ -324,9 +324,9 @@ export async function getAdProviderSettings() {
     },
     asterra: {
       enabled:      Boolean(s.asterra_enabled      ?? false),
-      dailyCap:     Number(s.asterra_daily_cap      ?? 10),
+      dailyCap:     Number(s.asterra_daily_cap      ?? 3),
+      rewardKobo:   Number(s.asterra_reward_kobo    ?? 250),
       smartlinkUrl: String(s.asterra_smartlink_url  ?? ""),
-      secretKey:    String(s.asterra_secret_key     ?? ""),
     },
   }
 }
@@ -411,7 +411,7 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       dailyCap: adgate.dailyCap,
     })
   }
-  if (asterra.enabled && asterra.smartlinkUrl && asterra.secretKey) {
+  if (asterra.enabled && asterra.smartlinkUrl) {
     candidates.push({
       provider: "asterra",
       title: "Asterra Smartlink",

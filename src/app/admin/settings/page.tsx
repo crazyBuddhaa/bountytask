@@ -60,11 +60,11 @@ type Settings = {
   adgate_daily_cap: number
   adgate_wall_id: string
   adgate_postback_ip: string
-  // Asterra Smartlink
+  // Adsterra Smartlink
   asterra_enabled: boolean
   asterra_daily_cap: number
+  asterra_reward_kobo: number
   asterra_smartlink_url: string
-  asterra_secret_key: string
 }
 
 const DEFAULTS: Settings = {
@@ -107,9 +107,9 @@ const DEFAULTS: Settings = {
   adgate_wall_id: "",
   adgate_postback_ip: "",
   asterra_enabled: false,
-  asterra_daily_cap: 10,
+  asterra_daily_cap: 3,
+  asterra_reward_kobo: 250,
   asterra_smartlink_url: "",
-  asterra_secret_key: "",
 }
 
 export default function AdminSettingsPage() {
@@ -162,9 +162,9 @@ export default function AdminSettingsPage() {
             adgate_wall_id:      data.adgate_wall_id       ?? "",
             adgate_postback_ip:  data.adgate_postback_ip   ?? "",
             asterra_enabled:       data.asterra_enabled       ?? false,
-            asterra_daily_cap:     data.asterra_daily_cap     ?? 10,
+            asterra_daily_cap:     data.asterra_daily_cap     ?? 3,
+            asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
             asterra_smartlink_url: data.asterra_smartlink_url ?? "",
-            asterra_secret_key:    data.asterra_secret_key    ?? "",
           })
         }
       })
@@ -760,22 +760,25 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Asterra Smartlink ───────────────────────────────────────────── */}
+      {/* ── Adsterra Smartlink ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <LayoutGrid className="w-4 h-4" /> Asterra — Smartlink Offers
+            <LayoutGrid className="w-4 h-4" /> Adsterra — Sponsored Link
           </CardTitle>
           <CardDescription>
-            CPA smartlink that auto-selects the best offer (surveys, installs, sign-ups) for each
-            user. Postbacks use a static secret you control — no HMAC. Paste the base smartlink URL
-            from your Asterra dashboard; your user ID is appended automatically as{" "}
-            <code className="bg-muted px-1 rounded text-xs">aff_sub</code>.
+            <strong>Aggregate revenue model</strong> — Adsterra pays you as a publisher in aggregate
+            (CPM/CPA on total traffic), not per confirmed user conversion. There is no per-user
+            postback. Rewards are a fixed internal amount you set, credited optimistically at click
+            time from your own margin.{" "}
+            <strong>Reconcile weekly:</strong> compare total ledger payout for this provider
+            against actual Adsterra revenue received; cut the reward if you&apos;re paying out more
+            than you earn. Keep the daily cap conservative (2–3/day).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Enable Asterra Smartlink</p></div>
+            <div><p className="text-sm font-medium">Enable Adsterra Smartlink</p></div>
             <Switch
               checked={settings.asterra_enabled}
               onCheckedChange={(v) => setSettings((s) => ({ ...s, asterra_enabled: v }))}
@@ -785,68 +788,47 @@ export default function AdminSettingsPage() {
             <>
               <div className="space-y-2">
                 <Label htmlFor="asterra_cap">Daily cap per user</Label>
-                <Input id="asterra_cap" type="number" min={1} max={20}
+                <Input id="asterra_cap" type="number" min={1} max={10}
                   value={settings.asterra_daily_cap}
-                  onChange={(e) => setSettings((s) => ({ ...s, asterra_daily_cap: parseInt(e.target.value) || 10 }))} />
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_daily_cap: parseInt(e.target.value) || 3 }))} />
+                <p className="text-xs text-muted-foreground">
+                  Keep this at 2–3. No postback confirmation means your daily cap is the only
+                  fraud control here. 30-minute cooldown between clicks is enforced server-side.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asterra_reward">Reward per click (kobo)</Label>
+                <Input id="asterra_reward" type="number" min={1}
+                  value={settings.asterra_reward_kobo}
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_reward_kobo: parseInt(e.target.value) || 250 }))} />
+                <p className="text-xs text-muted-foreground">
+                  250 kobo = ₦2.50. Start conservative and raise only after confirming your
+                  Adsterra revenue covers the payout. Nigerian/West African CPMs are low.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asterra_url" className="flex items-center gap-1">
                   <Key className="w-3 h-3" /> Smartlink URL
                 </Label>
-                <Input id="asterra_url" placeholder="https://go.asterra.io/..."
+                <Input id="asterra_url" placeholder="https://smartlink.adsterra.com/..."
                   value={settings.asterra_smartlink_url}
                   onChange={(e) => setSettings((s) => ({ ...s, asterra_smartlink_url: e.target.value }))} />
                 <p className="text-xs text-muted-foreground">
-                  Base URL from your Asterra campaign. Do not add <code className="bg-muted px-1 rounded">aff_sub</code> yourself
-                  — it is appended automatically with each user&apos;s ID.
+                  From your Adsterra publisher dashboard → Smartlink. Create a <strong>separate
+                  smartlink per placement</strong> so Adsterra&apos;s own analytics show which surface
+                  earns — the network won&apos;t give you per-user breakdowns.{" "}
+                  <code className="bg-muted px-1 rounded">sub1=userId</code> is appended
+                  automatically.
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="asterra_secret" className="flex items-center gap-1">
-                  <Key className="w-3 h-3" /> Postback Secret
-                </Label>
-                <Input id="asterra_secret" type="password" placeholder="Random secret you generated (e.g. openssl rand -hex 24)"
-                  value={settings.asterra_secret_key}
-                  onChange={(e) => setSettings((s) => ({ ...s, asterra_secret_key: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  A random token <strong>you choose</strong> — not provided by Asterra. Generate one with{" "}
-                  <code className="bg-muted px-1 rounded">openssl rand -hex 24</code>, paste it here,
-                  then add <code className="bg-muted px-1 rounded">&amp;secret=&lt;value&gt;</code> to
-                  the postback URL you enter in Asterra&apos;s dashboard.
+              <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-medium">ads.txt reminder</p>
+                <p>
+                  Check your Adsterra publisher dashboard for the required{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">ads.txt</code>{" "}
+                  entry and add it to <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">public/ads.txt</code> alongside the Ayet line.
+                  Adsterra will not serve properly without it.
                 </p>
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Key className="w-3 h-3" /> Postback URL
-                </Label>
-                <div className="relative">
-                  <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
-                    {"https://bountytask.dpdns.org/api/postback/asterra?uid={aff_sub}&txn_id={transaction_id}&payout_usd={payout}&secret="}
-                    {settings.asterra_secret_key
-                      ? <span className="text-green-600 dark:text-green-400">{settings.asterra_secret_key}</span>
-                      : <span className="text-destructive">YOUR_SECRET_HERE</span>}
-                  </code>
-                  <button
-                    type="button"
-                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
-                    title="Copy postback URL"
-                    onClick={() => {
-                      const secret = settings.asterra_secret_key || "YOUR_SECRET_HERE"
-                      navigator.clipboard.writeText(
-                        `https://bountytask.dpdns.org/api/postback/asterra?uid={aff_sub}&txn_id={transaction_id}&payout_usd={payout}&secret=${secret}`
-                      )
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                    </svg>
-                  </button>
-                </div>
-                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                  <li><code className="bg-muted px-1 rounded">{"{aff_sub}"}</code> — your internal user ID, echoed from the click URL</li>
-                  <li><code className="bg-muted px-1 rounded">{"{transaction_id}"}</code> — Asterra&apos;s unique conversion ID; used for deduplication</li>
-                  <li><code className="bg-muted px-1 rounded">{"{payout}"}</code> — actual USD value, converted to NGN at credit time</li>
-                </ul>
               </div>
             </>
           )}
