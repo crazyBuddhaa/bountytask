@@ -60,6 +60,11 @@ type Settings = {
   adgate_daily_cap: number
   adgate_wall_id: string
   adgate_postback_ip: string
+  // Asterra Smartlink
+  asterra_enabled: boolean
+  asterra_daily_cap: number
+  asterra_smartlink_url: string
+  asterra_secret_key: string
 }
 
 const DEFAULTS: Settings = {
@@ -101,6 +106,10 @@ const DEFAULTS: Settings = {
   adgate_daily_cap: 10,
   adgate_wall_id: "",
   adgate_postback_ip: "",
+  asterra_enabled: false,
+  asterra_daily_cap: 10,
+  asterra_smartlink_url: "",
+  asterra_secret_key: "",
 }
 
 export default function AdminSettingsPage() {
@@ -152,6 +161,10 @@ export default function AdminSettingsPage() {
             adgate_daily_cap:    data.adgate_daily_cap     ?? 10,
             adgate_wall_id:      data.adgate_wall_id       ?? "",
             adgate_postback_ip:  data.adgate_postback_ip   ?? "",
+            asterra_enabled:       data.asterra_enabled       ?? false,
+            asterra_daily_cap:     data.asterra_daily_cap     ?? 10,
+            asterra_smartlink_url: data.asterra_smartlink_url ?? "",
+            asterra_secret_key:    data.asterra_secret_key    ?? "",
           })
         }
       })
@@ -741,6 +754,99 @@ export default function AdminSettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   Postback URL: <code className="text-xs bg-muted px-1 rounded">https://yourdomain.com/api/postback/adgate?conversion_id={"{conversion_id}"}&amp;user_id={"{s1}"}&amp;payout={"{payout}"}&amp;state={"{state}"}</code>
                 </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Asterra Smartlink ───────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LayoutGrid className="w-4 h-4" /> Asterra — Smartlink Offers
+          </CardTitle>
+          <CardDescription>
+            CPA smartlink that auto-selects the best offer (surveys, installs, sign-ups) for each
+            user. Postbacks use a static secret you control — no HMAC. Paste the base smartlink URL
+            from your Asterra dashboard; your user ID is appended automatically as{" "}
+            <code className="bg-muted px-1 rounded text-xs">aff_sub</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm font-medium">Enable Asterra Smartlink</p></div>
+            <Switch
+              checked={settings.asterra_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, asterra_enabled: v }))}
+            />
+          </div>
+          {settings.asterra_enabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="asterra_cap">Daily cap per user</Label>
+                <Input id="asterra_cap" type="number" min={1} max={20}
+                  value={settings.asterra_daily_cap}
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_daily_cap: parseInt(e.target.value) || 10 }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asterra_url" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Smartlink URL
+                </Label>
+                <Input id="asterra_url" placeholder="https://go.asterra.io/..."
+                  value={settings.asterra_smartlink_url}
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_smartlink_url: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  Base URL from your Asterra campaign. Do not add <code className="bg-muted px-1 rounded">aff_sub</code> yourself
+                  — it is appended automatically with each user&apos;s ID.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asterra_secret" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Postback Secret
+                </Label>
+                <Input id="asterra_secret" type="password" placeholder="Random secret you generated (e.g. openssl rand -hex 24)"
+                  value={settings.asterra_secret_key}
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_secret_key: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">
+                  A random token <strong>you choose</strong> — not provided by Asterra. Generate one with{" "}
+                  <code className="bg-muted px-1 rounded">openssl rand -hex 24</code>, paste it here,
+                  then add <code className="bg-muted px-1 rounded">&amp;secret=&lt;value&gt;</code> to
+                  the postback URL you enter in Asterra&apos;s dashboard.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Postback URL
+                </Label>
+                <div className="relative">
+                  <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
+                    {"https://bountytask.dpdns.org/api/postback/asterra?uid={aff_sub}&txn_id={transaction_id}&payout_usd={payout}&secret="}
+                    {settings.asterra_secret_key
+                      ? <span className="text-green-600 dark:text-green-400">{settings.asterra_secret_key}</span>
+                      : <span className="text-destructive">YOUR_SECRET_HERE</span>}
+                  </code>
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                    title="Copy postback URL"
+                    onClick={() => {
+                      const secret = settings.asterra_secret_key || "YOUR_SECRET_HERE"
+                      navigator.clipboard.writeText(
+                        `https://bountytask.dpdns.org/api/postback/asterra?uid={aff_sub}&txn_id={transaction_id}&payout_usd={payout}&secret=${secret}`
+                      )
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                  </button>
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                  <li><code className="bg-muted px-1 rounded">{"{aff_sub}"}</code> — your internal user ID, echoed from the click URL</li>
+                  <li><code className="bg-muted px-1 rounded">{"{transaction_id}"}</code> — Asterra&apos;s unique conversion ID; used for deduplication</li>
+                  <li><code className="bg-muted px-1 rounded">{"{payout}"}</code> — actual USD value, converted to NGN at credit time</li>
+                </ul>
               </div>
             </>
           )}

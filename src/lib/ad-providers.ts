@@ -19,8 +19,9 @@ import { getAyetSettings } from "@/lib/ayet"
 import { getCpxSettings } from "@/lib/cpx"
 import { getLootablySettings } from "@/lib/lootably"
 import { getAdGateSettings } from "@/lib/adgate"
+import { getAsterraSettings } from "@/lib/asterra"
 
-export type AdProvider = "ima" | "lootably" | "ayet" | "cpx" | "adgate"
+export type AdProvider = "ima" | "lootably" | "ayet" | "cpx" | "adgate" | "asterra"
 export type AdType = "video" | "survey" | "offer" | "mixed"
 
 // ─── Daily Cap ────────────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ export async function recordAdCompletion({
     ayet: "survey/offer",
     cpx: "survey",
     adgate: "offer",
+    asterra: "smartlink offer",
   }
 
   await createNotification({
@@ -279,6 +281,7 @@ export async function getAdProviderSettings() {
     "ayet_enabled", "ayet_daily_cap", "ayet_placement_key", "ayet_secret_key",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
     "adgate_enabled", "adgate_daily_cap", "adgate_wall_id", "adgate_postback_ip",
+    "asterra_enabled", "asterra_daily_cap", "asterra_smartlink_url", "asterra_secret_key",
   ] as const
 
   const { data: rows } = await admin
@@ -319,6 +322,12 @@ export async function getAdProviderSettings() {
       wallId:     String(s.adgate_wall_id     ?? ""),
       postbackIp: String(s.adgate_postback_ip ?? ""),
     },
+    asterra: {
+      enabled:      Boolean(s.asterra_enabled      ?? false),
+      dailyCap:     Number(s.asterra_daily_cap      ?? 10),
+      smartlinkUrl: String(s.asterra_smartlink_url  ?? ""),
+      secretKey:    String(s.asterra_secret_key     ?? ""),
+    },
   }
 }
 
@@ -341,12 +350,13 @@ export interface AdTaskStatus {
  * omitted entirely rather than shown as "coming soon" in the main grid.
  */
 export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
-  const [ima, lootably, ayet, cpx, adgate] = await Promise.all([
+  const [ima, lootably, ayet, cpx, adgate, asterra] = await Promise.all([
     getAdProviderSettings().then((s) => s.ima),
     getLootablySettings(),
     getAyetSettings(),
     getCpxSettings(),
     getAdGateSettings(),
+    getAsterraSettings(),
   ])
 
   const candidates: Omit<AdTaskStatus, "usedToday" | "capReached">[] = []
@@ -399,6 +409,16 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       href: "/dashboard/tasks/adgate-offers",
       rewardKobo: null,
       dailyCap: adgate.dailyCap,
+    })
+  }
+  if (asterra.enabled && asterra.smartlinkUrl && asterra.secretKey) {
+    candidates.push({
+      provider: "asterra",
+      title: "Asterra Smartlink",
+      description: "Complete offers, surveys, and app installs — Asterra auto-selects the best offer for you.",
+      href: "/dashboard/tasks/smartlink",
+      rewardKobo: null,
+      dailyCap: asterra.dailyCap,
     })
   }
 
