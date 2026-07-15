@@ -105,9 +105,14 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
       },
     }
 
-    // ── Strip any previous CPX script + clear the div ─────────────────────────
+    // ── Strip any previous CPX script ────────────────────────────────────────
+    // Do NOT clear the div via innerHTML here. If CPX has rendered cross-origin
+    // iframes inside it, setting innerHTML="" throws a DOMException in Chrome.
+    // On initial mount the div is fresh (React just created it). On retry,
+    // `key={retryKey}` on the div causes React to unmount the old node and
+    // mount a brand-new empty one before this effect runs — so the div is
+    // always clean when we reach this point.
     document.querySelectorAll(`script[src="${SCRIPT_SRC}"]`).forEach((el) => el.remove())
-    if (containerRef.current) containerRef.current.innerHTML = ""
 
     // ── Inject a fresh script tag ─────────────────────────────────────────────
     const script = document.createElement("script")
@@ -207,17 +212,21 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
   return (
     <div className="w-full space-y-4">
       {overlay}
-      {/* Always keep the div in the DOM so CPX can render into it.
-          Hide it visually while loading/errored to avoid a blank flash. */}
-      <div
-        ref={containerRef}
-        id={DIV_ID}
-        className="w-full"
-        style={{
-          minHeight: status === "ready" ? 400 : 0,
-          display:   status === "ready" ? "block" : "none",
-        }}
-      />
+      {/* Wrapper div: React controls show/hide here so it never needs to
+          touch the CPX div's attributes after CPX has rendered into it.
+          key={retryKey} on the inner div causes React to unmount the old
+          node and mount a brand-new empty one on every retry, which is
+          safer than clearing innerHTML (that throws DOMException when CPX
+          has rendered cross-origin iframes inside the div). */}
+      <div style={{ display: status === "ready" ? "block" : "none" }}>
+        <div
+          key={retryKey}
+          ref={containerRef}
+          id={DIV_ID}
+          className="w-full"
+          style={{ minHeight: 400 }}
+        />
+      </div>
     </div>
   )
 }
