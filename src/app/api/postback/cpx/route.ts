@@ -39,9 +39,13 @@ export async function GET(request: NextRequest) {
   const hash      = searchParams.get("hash")        ?? ""
   const amountUsd = searchParams.get("amount_usd") ?? "0"
 
-  // Validate required params
-  if (!userId || !transId || !hash) {
+  // Validate required params — missing identity fields are a bad request;
+  // a present but wrong hash is an auth failure (different status code).
+  if (!userId || !transId) {
     return new NextResponse("0", { status: 400, headers: { "Content-Type": "text/plain" } })
+  }
+  if (!hash) {
+    return new NextResponse("0", { status: 401, headers: { "Content-Type": "text/plain" } })
   }
 
   // status=2 → canceled/fraud. Acknowledge without debiting.

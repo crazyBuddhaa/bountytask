@@ -1,4 +1,5 @@
 import { createHash } from "crypto"
+import { unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export type CpxSettings = {
@@ -8,24 +9,38 @@ export type CpxSettings = {
   secureHashKey: string
 }
 
-export async function getCpxSettings(): Promise<CpxSettings> {
-  const admin = createAdminClient()
-  const { data: rows } = await admin
-    .from("platform_settings")
-    .select("key, value")
-    .in("key", ["cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key"])
+/**
+ * Fetch CPX settings from platform_settings.
+ *
+ * Cached for 60 seconds so that every postback request doesn't pay a DB
+ * round-trip for hash validation. The cache is invalidated immediately
+ * whenever the admin saves CPX settings (revalidateTag("cpx-settings")).
+ *
+ * 60 s is long enough to absorb a burst of concurrent postbacks yet short
+ * enough that a key rotation takes effect within one minute without a deploy.
+ */
+export const getCpxSettings = unstable_cache(
+  async (): Promise<CpxSettings> => {
+    const admin = createAdminClient()
+    const { data: rows } = await admin
+      .from("platform_settings")
+      .select("key, value")
+      .in("key", ["cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key"])
 
-  const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
-  return {
-    // Supabase JSONB returns native booleans, but guard against the string
-    // "false" being stored — Boolean("false") === true which would silently
-    // enable CPX when the admin disabled it.
-    enabled:       s.cpx_enabled === true || s.cpx_enabled === "true",
-    dailyCap:      Number(s.cpx_daily_cap          ?? 10),
-    appId:         String(s.cpx_app_id             ?? ""),
-    secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
-  }
-}
+    const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
+    return {
+      // Supabase JSONB returns native booleans, but guard against the string
+      // "false" being stored — Boolean("false") === true which would silently
+      // enable CPX when the admin disabled it.
+      enabled:       s.cpx_enabled === true || s.cpx_enabled === "true",
+      dailyCap:      Number(s.cpx_daily_cap          ?? 10),
+      appId:         String(s.cpx_app_id             ?? ""),
+      secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
+    }
+  },
+  ["cpx-settings"],
+  { revalidate: 60, tags: ["cpx-settings"] }
+)
 
 /**
  * Generate the CPX Research secure hash.

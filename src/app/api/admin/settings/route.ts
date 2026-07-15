@@ -19,6 +19,16 @@ const VERIFICATION_SETTINGS_KEYS = new Set([
   "min_withdrawal_kobo",
 ])
 
+// Keys that getCpxSettings() reads and caches under "cpx-settings" with a
+// 60-second TTL. Revalidate immediately on write so key rotations take effect
+// without waiting for the TTL to expire.
+const CPX_SETTINGS_KEYS = new Set([
+  "cpx_enabled",
+  "cpx_daily_cap",
+  "cpx_app_id",
+  "cpx_secure_hash_key",
+])
+
 export const dynamic = "force-dynamic"
 
 const settingsSchema = z.object({
@@ -121,6 +131,9 @@ export async function PATCH(request: NextRequest) {
 
   if (entries.some(([key]) => VERIFICATION_SETTINGS_KEYS.has(key))) {
     revalidateTag("verification-settings")
+  }
+  if (entries.some(([key]) => CPX_SETTINGS_KEYS.has(key))) {
+    revalidateTag("cpx-settings")
   }
 
   await auditLog({
