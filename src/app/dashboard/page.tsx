@@ -141,7 +141,7 @@ export default async function DashboardPage() {
 
       {/* Tier status card */}
       {tierStatus.currentTier && (
-        <Link href="/dashboard/referral">
+        <Link href="/dashboard/referral" className="block mt-2">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-primary/20">
             <CardContent className="p-5">
               <div className="flex items-center justify-between gap-4">
