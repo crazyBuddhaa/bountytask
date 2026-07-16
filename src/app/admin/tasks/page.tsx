@@ -39,7 +39,8 @@ export default function AdminTasksPage() {
   const limit = 20
 
   // Derived: is the task being edited a YouTube video task?
-  const isVideo = !!(editing?.youtube_url)
+  // youtube_url === "" means video mode ON but URL not yet typed; null means standard task
+  const isVideo = editing != null && editing.youtube_url !== null && editing.youtube_url !== undefined
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
