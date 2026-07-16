@@ -1,7 +1,8 @@
 "use client"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Bell, LogOut, User, Settings, Menu, Zap, Award } from "lucide-react"
+import { Bell, LogOut, User, Settings, Menu, Award } from "lucide-react"
+import Image from "next/image"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -63,9 +64,7 @@ export function DashboardHeader({ user, balance, unreadCount = 0, currentTier }:
 
         {/* Mobile logo */}
         <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
-          <div className="w-7 h-7 rounded-lg bounty-gradient flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
+          <Image src="/logo.png" alt="BountyTask" width={28} height={28} className="rounded-lg" />
           <span className="font-bold bounty-text-gradient">BountyTask</span>
         </Link>
 

@@ -1,10 +1,11 @@
 "use client"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, ListTodo, CheckSquare, TrendingUp,
-  Banknote, Users, Bell, User, Shield, Zap,
+  Banknote, Users, Bell, User, Shield,
 } from "lucide-react"
 
 const navItems = [
@@ -36,9 +37,7 @@ export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
     >
       <div className="p-6 border-b">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bounty-gradient flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
+          <Image src="/logo.png" alt="BountyTask" width={32} height={32} className="rounded-lg" />
           <span className="font-bold text-lg bounty-text-gradient">BountyTask</span>
         </Link>
       </div>

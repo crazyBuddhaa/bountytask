@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link"
+import Image from "next/image"
 import { useState } from "react"
 import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,7 @@ export function PublicHeader() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 font-bold text-lg">
-          <div className="w-8 h-8 rounded-xl bounty-gradient shadow-sm" />
+          <Image src="/logo.png" alt="BountyTask" width={32} height={32} className="rounded-xl" />
           <span className="bounty-text-gradient">BountyTask</span>
         </Link>
 

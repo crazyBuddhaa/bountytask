@@ -20,6 +20,14 @@ export const metadata: Metadata = {
     "Complete verified tasks and earn Naira credits. Withdraw earnings through secure manual bank transfers. Nigeria's #1 task-to-earn platform.",
   keywords: ["earn money online", "task to earn", "Nigeria", "make money", "gig work"],
   authors: [{ name: "BountyTask" }],
+  icons: {
+    icon: [
+      { url: "/icon.png",     sizes: "32x32",  type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     locale: "en_NG",
