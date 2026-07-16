@@ -138,8 +138,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single()
   const globalAiEnabled = aiSetting?.value === true
 
-  // When global AI is on every task becomes a screenshot task
-  if (globalAiEnabled && !parsed.data.proof_url) {
+  // A task is considered "screenshot-eligible" when it already has some form
+  // of proof requirement. The global AI switch upgrades verification for these
+  // tasks — it never turns a proof-free task into a screenshot task.
+  const taskRequiresScreenshot =
+    task.requires_proof || !!task.social_platform || task.ai_verify_screenshot
+
+  if (globalAiEnabled && taskRequiresScreenshot && !parsed.data.proof_url) {
     return NextResponse.json(
       { data: null, error: "A screenshot is required — AI verification is enabled for all tasks on this platform." },
       { status: 400 }
@@ -151,10 +156,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let completionStatus: "pending" | "approved" =
     (task.type === "unverified" || task.youtube_url) ? "approved" : "pending"
 
-  // ── AI screenshot verification (per-task flag OR global switch) ────────────
+  // ── AI screenshot verification (per-task flag OR global switch for eligible tasks) ──
   let aiVerdict: { verdict: string; confidence: number; reason: string } | null = null
 
-  if ((task.ai_verify_screenshot || globalAiEnabled) && parsed.data.proof_url) {
+  if ((task.ai_verify_screenshot || (globalAiEnabled && taskRequiresScreenshot)) && parsed.data.proof_url) {
     const { verifyScreenshot } = await import("@/lib/ai-vision")
     const verdict = await verifyScreenshot(parsed.data.proof_url, task)
     aiVerdict = verdict
