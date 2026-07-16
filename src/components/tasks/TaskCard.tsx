@@ -100,7 +100,12 @@ export function TaskCard({ task, onClaim, onWatch }: TaskCardProps) {
           </p>
         )}
         {!isSocial && !isVideo && task.requires_proof && (
-          <p className="text-[10px] text-amber-600 mt-2 font-medium">⚠ Proof of completion required</p>
+          <p className="text-[10px] mt-2 font-medium flex items-center gap-1"
+            style={{ color: task.ai_verify_screenshot ? "rgb(79 70 229)" : "rgb(217 119 6)" }}>
+            {task.ai_verify_screenshot
+              ? <><Share2 className="w-3 h-3" />AI-verified screenshot required</>
+              : <>⚠ Proof of completion required</>}
+          </p>
         )}
         {isVideo && (
           <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">

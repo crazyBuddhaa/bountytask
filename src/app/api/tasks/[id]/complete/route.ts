@@ -134,12 +134,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let completionStatus: "pending" | "approved" =
     (task.type === "unverified" || task.youtube_url) ? "approved" : "pending"
 
-  // ── Social task: optional AI screenshot verification ───────────────────────
+  // ── AI screenshot verification (any task type with the flag set) ───────────
   let aiVerdict: { verdict: string; confidence: number; reason: string } | null = null
 
-  if (task.social_platform && task.ai_verify_screenshot && parsed.data.proof_url) {
-    const { verifySocialScreenshot } = await import("@/lib/ai-vision")
-    const verdict = await verifySocialScreenshot(parsed.data.proof_url, task)
+  if (task.ai_verify_screenshot && parsed.data.proof_url) {
+    const { verifyScreenshot } = await import("@/lib/ai-vision")
+    const verdict = await verifyScreenshot(parsed.data.proof_url, task)
     aiVerdict = verdict
 
     if (verdict.verdict === "rejected") {

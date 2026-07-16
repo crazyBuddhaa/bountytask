@@ -40,7 +40,8 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
   const [submitting, setSubmitting]             = useState(false)
   const [aiRejectionReason, setAiRejectionReason] = useState<string | null>(null)
 
-  const isSocial = !!task.social_platform
+  const isSocial  = !!task.social_platform
+  const isAiTask  = !!task.ai_verify_screenshot
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -94,7 +95,7 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                 {task.type === "unverified" ? "Instant Pay" : "Verified"}
               </Badge>
             )}
-            {isSocial && task.ai_verify_screenshot && (
+            {isAiTask && (
               <Badge variant="outline" className="text-[10px] border-indigo-200 text-indigo-600 bg-indigo-50">
                 AI-Verified
               </Badge>
@@ -167,8 +168,75 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                 )
               )}
             </>
+          ) : isAiTask && task.requires_proof ? (
+            /* ── Standard task with AI screenshot verification ──────────────── */
+            <>
+              {/* Instructions */}
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Instructions</p>
+                <p className="text-sm whitespace-pre-line">{task.instructions}</p>
+                {task.verification_url && (
+                  <a href={task.verification_url} target="_blank" rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" />Visit task link
+                  </a>
+                )}
+              </div>
+
+              {/* Upload zone OR AI rejection state */}
+              {aiRejectionReason ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+                  <p className="text-sm font-semibold text-destructive flex items-center gap-1.5">
+                    <XCircle className="w-4 h-4" /> Screenshot not accepted
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-snug">{aiRejectionReason}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-destructive/30 text-destructive hover:bg-destructive/5 mt-1"
+                    onClick={handleRetry}
+                  >
+                    Upload a different screenshot
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>
+                    Upload screenshot{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  {task.proof_instructions && (
+                    <p className="text-xs text-muted-foreground">{task.proof_instructions}</p>
+                  )}
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
+                    <Upload className="w-5 h-5 text-muted-foreground mb-1" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {proofFile ? proofFile.name : "Click or drag screenshot here"}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-0.5">JPG, PNG — max 5 MB</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={e => setProofFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* AI review notice */}
+              {!aiRejectionReason && (
+                <div className="flex items-start gap-2 rounded-lg bg-indigo-50 border border-indigo-100 p-3">
+                  <span className="text-indigo-500 text-sm mt-0.5 shrink-0">ℹ</span>
+                  <p className="text-xs text-indigo-700">
+                    Your screenshot will be checked automatically by AI. Results are usually instant.
+                  </p>
+                </div>
+              )}
+            </>
           ) : (
-            /* ── Standard task variant ──────────────────────────────────────── */
+            /* ── Standard task (manual proof / no proof) ────────────────────── */
             <>
               {/* Instructions */}
               <div className="rounded-lg bg-muted p-4">
@@ -226,7 +294,7 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                 onClick={handleSubmit}
                 disabled={
                   submitting || uploading ||
-                  (isSocial && !proofFile) // social tasks need a screenshot
+                  ((isSocial || (isAiTask && task.requires_proof)) && !proofFile)
                 }
                 className="flex-1"
               >

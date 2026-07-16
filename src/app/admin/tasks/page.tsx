@@ -593,6 +593,80 @@ export default function AdminTasksPage() {
                 </div>
               )}
 
+              {/* Proof & AI verification — standard verified tasks only */}
+              {!isVideo && !isSocial && editing.type === "verified" && (
+                <div className="space-y-3 rounded-lg border border-amber-100 bg-amber-50/30 p-3">
+                  <p className="text-xs font-semibold text-amber-700">Proof & Verification</p>
+
+                  {/* Requires proof toggle */}
+                  <div className="flex items-center justify-between rounded-md border border-amber-100 bg-white px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">Require proof of completion</p>
+                      <p className="text-xs text-muted-foreground">
+                        Users must upload a screenshot or describe how they completed the task.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editing.requires_proof ?? false}
+                      onClick={() => setEditing(prev => ({
+                        ...prev,
+                        requires_proof: !prev?.requires_proof,
+                        // turning off proof disables AI verify too
+                        ai_verify_screenshot: !prev?.requires_proof ? prev?.ai_verify_screenshot : false,
+                      }))}
+                      className={`relative ml-4 h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                        editing.requires_proof ? "bg-amber-500" : "bg-gray-200"
+                      }`}
+                    >
+                      <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                        editing.requires_proof ? "translate-x-5" : "translate-x-0"
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Proof instructions — shown when requires_proof is on */}
+                  {editing.requires_proof && (
+                    <div>
+                      <Label htmlFor="proofInstructions">Proof instructions (optional)</Label>
+                      <Input
+                        id="proofInstructions"
+                        className="mt-1"
+                        placeholder="e.g. Upload a screenshot showing your profile page"
+                        value={(editing as Record<string, string>).proof_instructions ?? ""}
+                        onChange={e => setEditing(prev => ({ ...prev, proof_instructions: e.target.value || null }))}
+                      />
+                    </div>
+                  )}
+
+                  {/* AI verify toggle — only when requires_proof */}
+                  {editing.requires_proof && (
+                    <div className="flex items-center justify-between rounded-md border border-amber-100 bg-white px-3 py-2.5">
+                      <div>
+                        <p className="text-sm font-medium">AI auto-verify screenshots</p>
+                        <p className="text-xs text-muted-foreground">
+                          Gemini Vision checks each screenshot automatically. Approved submissions are credited instantly.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={editing.ai_verify_screenshot ?? false}
+                        onClick={() => setEditing(prev => ({ ...prev, ai_verify_screenshot: !prev?.ai_verify_screenshot }))}
+                        className={`relative ml-4 h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                          editing.ai_verify_screenshot ? "bg-indigo-600" : "bg-gray-200"
+                        }`}
+                      >
+                        <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                          editing.ai_verify_screenshot ? "translate-x-5" : "translate-x-0"
+                        }`} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 {/* Type — locked for video and social tasks */}
                 <div>
