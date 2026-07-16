@@ -591,3 +591,94 @@ Daily caps are enforced server-side via the `ad_task_logs` table — not client-
 - Admin Settings page (`/admin/settings`) loads all five new provider cards; toggle, save, reload → values persist.
 - `PATCH /api/admin/settings` with `{ "ima_daily_cap": 3 }` → `{ updated: ["ima_daily_cap"] }`.
 - `npx tsc --noEmit` passes clean.
+
+---
+
+## ✅ Feature — Social Tasks with Gemini Vision AI verification
+**Pushed:** commit `fe32259`
+**Date:** 2026-07-17
+
+### Built
+- `supabase/migrations/20260717_social_tasks.sql` — adds 6 nullable columns to `tasks` (`social_platform`, `social_action`, `social_target_handle`, `social_target_post_url`, `social_required_comment_text`, `ai_verify_screenshot bool`) and 3 to `task_completions` (`ai_verdict`, `ai_confidence`, `ai_reason`); two supporting indexes.
+- `src/lib/ai-vision.ts` — exports `verifyScreenshot(imageUrl, task)` (routes to `buildSocialPrompt` or `buildGenericPrompt` based on `task.social_platform`); deprecated `verifySocialScreenshot` alias kept for backward compatibility. Core call in `verifyWithPrompt()` via `@google/generative-ai` (`gemini-2.0-flash`).
+- `src/components/tasks/SocialStepGuide.tsx` — three-step how-to UI (open link → do action → screenshot) with platform-specific copy and copy-to-clipboard for required comment text.
+- `src/types/index.ts` — added `SocialPlatform`, `SocialAction`, `AiVerdict` type aliases; social fields and AI verdict fields added to `Task` and `TaskCompletion` interfaces.
+- `package.json` — added `@google/generative-ai: ^0.21.0`.
+- `.env.example` — added `GEMINI_API_KEY`.
+- `src/app/api/tasks/[id]/complete/route.ts` — social tasks require `proof_url`; AI branch fires on `task.ai_verify_screenshot && proof_url`; returns `422 AI_REJECTED` on rejection (no DB row inserted so user can retry); auto-approves on AI approval.
+- `src/app/api/admin/tasks/route.ts` + `[id]/route.ts` — social fields and `ai_verify_screenshot` added to `EDITABLE_TASK_FIELDS` whitelist.
+- `src/app/admin/tasks/page.tsx` — three-button format toggle (Standard / YouTube / Social); social panel with platform/action/handle/post-URL/comment-text/AI-toggle fields; standard "Verified" tasks get a Proof & Verification panel with `requires_proof` toggle, proof instructions, and AI auto-verify toggle (only shown when `requires_proof` is on).
+- `src/app/admin/approvals/page.tsx` — `AiVerdictBadge` component (colour-coded badge + inline reason via native `title` attribute); new "AI Verdict" column in approvals table.
+- `src/components/tasks/TaskCard.tsx` — social cards get platform-coloured left border + action badge; any task with `ai_verify_screenshot` shows "AI-verified screenshot required" hint (indigo); standard verified tasks without AI show "Proof of completion required" (amber).
+- `src/components/tasks/TaskCompletionModal.tsx` — three render branches: (1) social task, (2) standard task with AI + `requires_proof` (screenshot-first upload, AI rejection state, retry UX), (3) standard task without AI (text + optional file). Submit button disabled for AI tasks until a file is selected.
+- `src/app/dashboard/tasks/page.tsx` — `handleComplete` returns `{ ok, aiReason }` instead of boolean; surfaces `AI_REJECTED` reason to the modal for inline display.
+
+### Confidence thresholds
+| Score | Outcome |
+|---|---|
+| ≥ 75 | `approved` — auto-credit, instant |
+| 36–74 | `uncertain` — goes to manual review queue |
+| ≤ 35 | `rejected` — 422 returned, no DB row inserted, user can retry |
+
+### Verify
+- Run `supabase/migrations/20260717_social_tasks.sql` — no errors; new columns present on `tasks` and `task_completions`.
+- Add `GEMINI_API_KEY` to Vercel environment variables (server-side only).
+- Run `pnpm install` to install `@google/generative-ai`.
+- Create a social task (e.g. Twitter follow) → complete with a valid screenshot → AI approves and balance credits immediately.
+- Submit a screenshot of an unrelated image → AI rejects with reason text shown inline; no completion row created; user can try again.
+- `npx tsc --noEmit` passes clean.
+
+---
+
+## ✅ Fix — Registration redirecting to `/sign-in` when email confirmation is disabled
+**Pushed:** commit `6793379`
+**Date:** 2026-07-17
+
+### Found
+New users who registered when Supabase email confirmation was disabled were sent to `/sign-in`, which then re-redirected them in a loop. The register page was unconditionally navigating to `/sign-in` after `signUp()` regardless of whether a session was already live.
+
+### Built
+- `src/app/(auth)/register/page.tsx` — after `signUp()`, checks `signUpData.session`: if non-null (confirmation disabled, session already active) → redirect to `/dashboard` with a welcome toast; if null (confirmation required) → show "check your email" message and navigate to `/sign-in`.
+
+### Verify
+- With Supabase email confirmation **off**: register → lands on `/dashboard` with welcome toast, no redirect loop.
+- With Supabase email confirmation **on**: register → "check your email" message → `/sign-in`.
+
+---
+
+## ✅ Feature — Platform-wide AI verification (any task type)
+**Pushed:** commit `3c030f8`
+**Date:** 2026-07-17
+
+### Built
+Extended Gemini Vision verification from social tasks only to any task type. The per-task `ai_verify_screenshot` toggle on Standard and YouTube tasks now works identically to how it works on social tasks.
+
+- `src/lib/ai-vision.ts` — refactored into a single `verifyScreenshot()` dispatcher: social tasks use `buildSocialPrompt()` (platform/action/handle/required-comment criteria); all other tasks use `buildGenericPrompt()` (task title/description/proof instructions as criteria). Same confidence thresholds and `verifyWithPrompt()` core apply to both paths.
+- `src/app/api/tasks/[id]/complete/route.ts` — AI branch condition changed from `task.social_platform && task.ai_verify_screenshot` to `task.ai_verify_screenshot` alone, so any task type triggers Gemini verification.
+- `src/app/admin/tasks/page.tsx` — Standard "Verified" tasks now expose a **Proof & Verification** panel: `requires_proof` toggle → `proof_instructions` field → AI auto-verify toggle (only shown when `requires_proof` is on).
+- `src/components/tasks/TaskCard.tsx` — standard tasks with `ai_verify_screenshot` show the indigo "AI-verified screenshot required" hint instead of the amber generic proof warning.
+- `src/components/tasks/TaskCompletionModal.tsx` — third modal variant for standard AI-verified tasks: screenshot-primary upload zone, AI review notice, inline rejection reason + retry button. Submit button disabled until a screenshot is selected for any AI task.
+
+### Verify
+- Create a Standard → Verified task with `ai_verify_screenshot` on → submit with a valid screenshot → Gemini checks against the task title/description/instructions and auto-approves or rejects.
+- Social tasks continue to use the platform-specific prompt and behave as before.
+
+---
+
+## ✅ Feature — Global AI verification switch in Admin Settings
+**Pushed:** commit `c5c9c14`
+**Date:** 2026-07-17
+
+### Built
+A single platform-wide toggle in Admin → Settings that forces AI screenshot verification on every task submission, regardless of the per-task `ai_verify_screenshot` flag.
+
+- `supabase/migrations/20260717_ai_global_switch.sql` — seeds `ai_verify_all_tasks = false` in `platform_settings`.
+- `src/app/api/admin/settings/route.ts` — `ai_verify_all_tasks: z.boolean().optional()` added to Zod schema; `TASK_SETTINGS_KEYS` set added; calls `revalidateTag("task-settings")` when the key is written.
+- `src/app/api/tasks/[id]/complete/route.ts` — reads `ai_verify_all_tasks` from `platform_settings` at request time. If global switch is on and no `proof_url` supplied, returns 400 before any task logic. AI block fires on `(task.ai_verify_screenshot || globalAiEnabled) && proof_url` — either flag is sufficient.
+- `src/app/admin/settings/page.tsx` — new **"AI Screenshot Verification"** card at the top of the settings page: indigo-bordered when active, includes a warning reminding admin to confirm `GEMINI_API_KEY` is set in Vercel.
+
+### Verify
+- Run `supabase/migrations/20260717_ai_global_switch.sql` — `ai_verify_all_tasks` row present in `platform_settings`.
+- Toggle on in Admin Settings → every task submission now requires a screenshot processed by Gemini, regardless of task type or per-task flag.
+- Toggle off → per-task `ai_verify_screenshot` flags apply as normal.
+- Per-task flags continue to work independently alongside the global switch — either being on is sufficient.
