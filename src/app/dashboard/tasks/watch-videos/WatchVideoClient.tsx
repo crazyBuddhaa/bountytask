@@ -7,10 +7,11 @@ import { toast } from "sonner"
 import { CheckCircle2, Loader2, PlayCircle, Lock } from "lucide-react"
 import type { Task } from "@/types"
 
-// Extend window for YouTube IFrame API
+// Extend window for YouTube IFrame API (loaded via script tag at runtime)
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
   interface Window {
-    YT: typeof YT
+    YT: any
     onYouTubeIframeAPIReady: () => void
   }
 }
@@ -74,10 +75,11 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
       playerVars: { rel: 0, modestbranding: 1 },
       events: {
         onReady: () => setPlayerReady(true),
-        onStateChange: (event: YT.OnStateChangeEvent) => {
-          if (event.data === window.YT.PlayerState.PLAYING) {
+        onStateChange: (event: { data: number }) => {
+          const S = window.YT.PlayerState
+          if (event.data === S.PLAYING) {
             startHeartbeat()
-          } else if (event.data === window.YT.PlayerState.ENDED) {
+          } else if (event.data === S.ENDED) {
             stopHeartbeat()
             setCanClaim(true)
             setProgress(100)
