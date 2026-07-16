@@ -37,8 +37,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="flex-1 flex flex-col min-w-0">
         <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} currentTier={tierStatus.currentTier} />
         <main className="flex-1 p-4 lg:p-6 animate-fade-in space-y-4">
-          <AdSlot placement="dashboard" />
           {children}
+          <AdSlot placement="dashboard" />
         </main>
       </div>
     </div>
