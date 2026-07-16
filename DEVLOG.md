@@ -682,3 +682,103 @@ A single platform-wide toggle in Admin → Settings that forces AI screenshot ve
 - Toggle on in Admin Settings → every task submission now requires a screenshot processed by Gemini, regardless of task type or per-task flag.
 - Toggle off → per-task `ai_verify_screenshot` flags apply as normal.
 - Per-task flags continue to work independently alongside the global switch — either being on is sufficient.
+
+---
+
+## ✅ Remove — Ayet Studios integration deleted
+**Pushed:** commit `840aed1`
+**Date:** 2026-07-17
+
+### Why
+Ayet Studios rejected the application. All associated code was removed to keep the codebase clean.
+
+### Removed
+- `src/lib/ayet.ts` — entire file deleted
+- `src/app/api/postback/ayet/route.ts` — postback handler deleted
+- `src/app/dashboard/tasks/offers/page.tsx` + `loading.tsx` — offer wall pages deleted
+- `src/lib/ad-providers.ts` — `"ayet"` removed from `AdProvider` union; `validateAyetSignature()` removed; ayet removed from `getAdProviderSettings()`, `getAdTaskStatusForUser()`, `providerLabel`
+- `src/app/api/admin/settings/route.ts` — all `ayet_*` fields removed from Zod schema
+- `src/app/admin/settings/page.tsx` — entire Ayet card removed; unused `Layers` import cleaned up; stale Ayet reference removed from ads.txt note
+- `src/app/api/postback/adgate/route.ts` — stale Ayet comment removed
+
+### Verify
+- `grep -r "ayet" src/` returns zero results.
+- Admin Settings page loads without the Ayet card.
+- `npx tsc --noEmit` passes clean.
+
+---
+
+## ✅ Monetag site verification
+**Pushed:** commit `5bab842`
+**Date:** 2026-07-17
+
+### Built
+- `public/sw_1784242634655.js` — Monetag publisher verification service worker. Must remain at this path permanently; Monetag's Multitag requires the file to verify and continue serving ads.
+
+### Next step (manual)
+- Hit **Verify** on [publishers.monetag.com](https://publishers.monetag.com) after Vercel deploys.
+- Do **not** delete or rename the file — removing it breaks Multitag.
+
+---
+
+## ✅ Feature — Games & Earn (Phase 1: free play, no ad gate)
+**Pushed:** commit `40b5b49`
+**Date:** 2026-07-17
+
+### Overview
+Six skill-based mini-games added under `/dashboard/games`. Phase 1 is completely free — sessions are recorded, weekly leaderboard tracks best scores, no entry fees or ad gates yet.
+
+### DB
+- `supabase/migrations/20260724_games.sql`:
+  - `game_sessions` table — `(user_id, game_slug, score, completed, duration_seconds, metadata, played_at)`; indexes on `(user_id, game_slug)`, `played_at DESC`, `(game_slug, score DESC)`; RLS: users insert/select own rows only
+  - `weekly_leaderboard` view — best completed score per user per game since Monday 00:00 UTC; joined to `users` for display name + avatar
+
+> **Action required:** Run `supabase/migrations/20260724_games.sql` in the Supabase SQL Editor before testing.
+
+### Shared library
+- `src/lib/games.ts` — word list (540+ 5-letter Wordle words), 6-letter Word Scramble pool, `hashString()` deterministic seeder, `getDailyWord()`, `getDailyNumber()`, `seededShuffle()`, `scrambleWord()`
+
+### API routes
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/games/seed` | GET `?game=wordle\|higher-or-lower` | Returns daily word or secret number (date-seeded) |
+| `/api/games/session` | POST | Records a completed session; blocks daily-game repeats with `409 ALREADY_PLAYED` |
+| `/api/games/leaderboard` | GET `?game=&limit=` | Weekly top-N; names masked to `J***` for ranks 4+ unless it's the requesting user |
+| `/api/games/my-stats` | GET | Per-game: `best_score`, `total_plays`, `completed_today` |
+
+### Pages
+| Route | Description |
+|---|---|
+| `/dashboard/games` | Hub — daily vs arcade sections, best score per game, lock icon after daily plays |
+| `/dashboard/games/leaderboard` | Weekly leaderboard with game selector dropdown, gold/silver/bronze rank icons |
+| `/dashboard/games/wordle` | Daily 5-letter Wordle — 6 tries, colour-coded tiles, on-screen keyboard; scoring 100–600 pts by guess count |
+| `/dashboard/games/higher-or-lower` | Daily number 1–100 — 7 guesses, higher/lower arrows; scoring 10–350 pts by guess count |
+| `/dashboard/games/tap-target` | 30 s arcade — targets shrink as time progresses; unlimited replays; score = hits |
+| `/dashboard/games/2048` | Full 2048 — arrow keys + swipe-to-move on mobile; unlimited replays |
+| `/dashboard/games/color-rush` | Stroop colour test — 30 s, 6 colours, word label uses misdirection colour; unlimited replays |
+| `/dashboard/games/word-scramble` | 10 rounds × 15 s — speed bonus (100 base + 10 pts/second remaining); recap table after each game |
+
+### Sidebar
+- `src/components/layout/DashboardSidebar.tsx` — **"Games & Earn"** nav item added with `Gamepad2` icon, positioned between "My Tasks" and "Earnings"
+
+### Scoring summary
+| Game | Points |
+|---|---|
+| Wordle | 100 (6 guesses) → 600 (1 guess) |
+| Higher or Lower | 10 (7 guesses) → 350 (1 guess) |
+| Tap the Target | 1 pt / target hit |
+| 2048 | Raw tile-merge score |
+| Color Rush | 1 pt / correct answer |
+| Word Scramble | 100 base + up to 150 speed bonus per correct word |
+
+### Phases not yet built
+- **Phase 2** — Weekly entry fee (paid from kobo balance), prize pool = 80% of fees, 20% platform cut, admin settlement + `leaderboard_payouts` table
+- **Phase 3** — IMA SDK rewarded-video ad gate per game session (pending Monetag/Propeller Ads approval)
+
+### Verify
+- Run the migration in Supabase SQL Editor.
+- Navigate to `/dashboard/games` — hub loads with 6 game cards.
+- Play Wordle → session saved → hub shows "Come back tomorrow" lock.
+- Play Tap the Target twice → second play allowed (arcade game); leaderboard shows best score.
+- `/dashboard/games/leaderboard` — switch game dropdown → leaderboard reloads.
+- `npx tsc --noEmit` passes clean.
