@@ -38,6 +38,7 @@ export const metadata: Metadata = {
   },
   other: {
     "google-adsense-account": "ca-pub-3580627557521419",
+    "monetag": "689126602663cc000bc9537926f3b8bf",
   },
 };
 
