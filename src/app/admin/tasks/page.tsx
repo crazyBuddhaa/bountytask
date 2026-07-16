@@ -24,7 +24,7 @@ function margin(t: Task) {
 }
 
 function isYouTubeUrl(url: string) {
-  return /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/.test(url)
+  return /^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)/.test(url)
 }
 
 export default function AdminTasksPage() {
