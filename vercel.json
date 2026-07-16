@@ -12,6 +12,14 @@
           "value": "camera=(), microphone=(), geolocation=()"
         }
       ]
+    },
+    {
+      "source": "/sw_(.*).js",
+      "headers": [
+        { "key": "Content-Type", "value": "text/javascript; charset=utf-8" },
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
     }
   ],
   "redirects": [
