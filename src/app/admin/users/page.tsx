@@ -1,7 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import Link from "next/link"
-import { Search, UserCog, ShieldAlert } from "lucide-react"
+import { Search, UserCog, ShieldAlert, UserX, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -20,14 +19,17 @@ interface AdminUser {
 }
 
 export default function AdminUsersPage() {
-  const [users, setUsers]       = useState<AdminUser[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState("")
-  const [role, setRole]         = useState("")
-  const [page, setPage]         = useState(1)
-  const [total, setTotal]       = useState(0)
-  const [editing, setEditing]   = useState<AdminUser | null>(null)
-  const [saving, setSaving]     = useState(false)
+  const [users, setUsers]             = useState<AdminUser[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [search, setSearch]           = useState("")
+  const [role, setRole]               = useState("")
+  const [page, setPage]               = useState(1)
+  const [total, setTotal]             = useState(0)
+  const [editing, setEditing]         = useState<AdminUser | null>(null)
+  const [saving, setSaving]           = useState(false)
+  // Soft-delete confirmation
+  const [confirmUser, setConfirmUser] = useState<AdminUser | null>(null)
+  const [confirming, setConfirming]   = useState(false)
   const limit = 20
 
   const fetchUsers = useCallback(async () => {
@@ -57,6 +59,25 @@ export default function AdminUsersPage() {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u))
     setEditing(null)
     setSaving(false)
+  }
+
+  async function handleToggleActive(user: AdminUser, activate: boolean) {
+    setConfirming(true)
+    const res  = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: activate }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      toast.error(json.error)
+      setConfirming(false)
+      return
+    }
+    toast.success(activate ? "User reactivated" : "User deactivated")
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: activate } : u))
+    setConfirmUser(null)
+    setConfirming(false)
   }
 
   return (
@@ -106,7 +127,7 @@ export default function AdminUsersPage() {
                 <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
               ))
               : users.map(u => (
-                <TableRow key={u.id}>
+                <TableRow key={u.id} className={!u.is_active ? "opacity-60" : ""}>
                   <TableCell>
                     <p className="font-medium text-sm">{u.full_name}</p>
                     <p className="text-xs text-muted-foreground">{u.email}</p>
@@ -119,14 +140,34 @@ export default function AdminUsersPage() {
                   <TableCell className="font-medium tabular-nums">{formatCurrency(u.balance)}</TableCell>
                   <TableCell>
                     <Badge variant={u.is_active ? "success" : "destructive"} className="text-[10px]">
-                      {u.is_active ? "Active" : "Inactive"}
+                      {u.is_active ? "Active" : "Deactivated"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(u.created_at)}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(u)}>
-                      <UserCog className="w-3.5 h-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {/* Edit role / tier */}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit user"
+                        onClick={() => setEditing(u)}>
+                        <UserCog className="w-3.5 h-3.5" />
+                      </Button>
+                      {/* Soft delete / reactivate */}
+                      {u.is_active ? (
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Deactivate account"
+                          onClick={() => setConfirmUser(u)}>
+                          <UserX className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          title="Reactivate account"
+                          onClick={() => setConfirmUser(u)}>
+                          <UserCheck className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -143,7 +184,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Edit modal */}
+      {/* Edit modal — role, tier only */}
       {editing && (
         <Dialog open onOpenChange={() => setEditing(null)}>
           <DialogContent className="max-w-sm">
@@ -162,23 +203,6 @@ export default function AdminUsersPage() {
                 </Select>
               </div>
               <div>
-                <Label>Account Status</Label>
-                <Select defaultValue={editing.is_active ? "active" : "inactive"}
-                  onValueChange={v => setEditing(prev => prev ? { ...prev, is_active: v === "active" } : prev)}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Deactivated</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {!editing.is_active && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  Deactivating will flag this user and block all activity.
-                </p>
-              )}
-              <div>
                 <Label>Tier (manual override)</Label>
                 <Select defaultValue={String(editing.tier)}
                   onValueChange={v => setEditing(prev => prev ? { ...prev, tier: parseInt(v) } : prev)}>
@@ -195,8 +219,60 @@ export default function AdminUsersPage() {
               <div className="flex gap-3 pt-1">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
                 <Button variant="gradient" className="flex-1" disabled={saving}
-                  onClick={() => handleSave(editing.id, { role: editing.role, is_active: editing.is_active, tier: editing.tier })}>
+                  onClick={() => handleSave(editing.id, { role: editing.role, tier: editing.tier })}>
                   Save
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Deactivate / Reactivate confirmation dialog */}
+      {confirmUser && (
+        <Dialog open onOpenChange={() => { if (!confirming) setConfirmUser(null) }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                {confirmUser.is_active ? "Deactivate account?" : "Reactivate account?"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {confirmUser.is_active ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1">
+                  <p className="text-sm font-medium text-destructive flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4" /> This is a soft delete
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">{confirmUser.full_name}</span> ({confirmUser.email}) will be
+                    blocked from logging in and completing tasks. Their balance, earnings history,
+                    and all data are preserved. You can reactivate them at any time.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    To permanently erase this account, use the Supabase dashboard.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-sm text-emerald-800">
+                    <span className="font-medium">{confirmUser.full_name}</span> ({confirmUser.email}) will
+                    regain full access to their account.
+                  </p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" disabled={confirming}
+                  onClick={() => setConfirmUser(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  variant={confirmUser.is_active ? "destructive" : "default"}
+                  disabled={confirming}
+                  onClick={() => handleToggleActive(confirmUser, !confirmUser.is_active)}>
+                  {confirming
+                    ? "Saving…"
+                    : confirmUser.is_active ? "Deactivate" : "Reactivate"}
                 </Button>
               </div>
             </div>
