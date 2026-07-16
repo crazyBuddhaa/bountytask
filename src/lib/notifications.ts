@@ -1,7 +1,21 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { NotificationType } from "@/types";
+import {
+  welcomeEmail,
+  taskApprovedEmail,
+  taskRejectedEmail,
+  withdrawalApprovedEmail,
+  withdrawalRejectedEmail,
+  verificationApprovedEmail,
+  verificationRejectedEmail,
+  adminBroadcastEmail,
+  loginReminderEmail,
+} from "@/lib/emails";
 
-/** Create an in-app notification */
+// ─────────────────────────────────────────────────────────────────────────────
+// In-app notification
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function createNotification({
   userId,
   type,
@@ -27,7 +41,10 @@ export async function createNotification({
   if (error) console.error("Notification insert failed:", error.message);
 }
 
-/** Send email via Resend */
+// ─────────────────────────────────────────────────────────────────────────────
+// Email delivery (Resend)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function sendEmail({
   to,
   subject,
@@ -37,7 +54,13 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
-  if (!process.env.RESEND_API_KEY) return; // email optional
+  if (!process.env.RESEND_API_KEY) return; // email is optional in dev
+
+  const from =
+    `BountyTask <noreply@${
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") ??
+      "bountytask.dpdns.org"
+    }>`;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -45,12 +68,7 @@ export async function sendEmail({
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from: `BountyTask <noreply@${process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") ?? "bountytask.dpdns.org"}>`,
-      to,
-      subject,
-      html,
-    }),
+    body: JSON.stringify({ from, to, subject, html }),
   });
 
   if (!res.ok) {
@@ -59,32 +77,55 @@ export async function sendEmail({
   }
 }
 
-/** Notify and email task approval */
+// ─────────────────────────────────────────────────────────────────────────────
+// Welcome (sent once after email confirmation / first login)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendWelcomeEmail(email: string, name: string) {
+  await sendEmail({
+    to: email,
+    subject: "Welcome to BountyTask — start earning Naira today 🎉",
+    html: welcomeEmail(name),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task approved
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function notifyTaskApproved(
   userId: string,
   email: string,
   taskTitle: string,
   rewardKobo: number,
-  completionId: string
+  completionId: string,
+  newBalanceKobo?: number
 ) {
-  const naira = (rewardKobo / 100).toFixed(2);
+  const rewardNaira  = (rewardKobo / 100).toFixed(2);
+  const balanceNaira = newBalanceKobo != null
+    ? (newBalanceKobo / 100).toFixed(2)
+    : "—";
+
   await Promise.all([
     createNotification({
       userId,
       type: "task_approved",
       title: "Task Approved! 🎉",
-      message: `Your completion of "${taskTitle}" was approved. ₦${naira} has been credited to your account.`,
+      message: `Your completion of "${taskTitle}" was approved. ₦${rewardNaira} has been credited to your account.`,
       refId: completionId,
     }),
     sendEmail({
       to: email,
-      subject: "Task Approved — ₦" + naira + " credited",
-      html: `<p>Your submission for <strong>${taskTitle}</strong> was approved.</p><p><strong>₦${naira}</strong> has been added to your BountyTask balance.</p>`,
+      subject: `Task Approved — ₦${rewardNaira} credited`,
+      html: taskApprovedEmail("there", taskTitle, rewardNaira, balanceNaira),
     }),
   ]);
 }
 
-/** Notify and email task rejection */
+// ─────────────────────────────────────────────────────────────────────────────
+// Task rejected
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function notifyTaskRejected(
   userId: string,
   email: string,
@@ -102,13 +143,16 @@ export async function notifyTaskRejected(
     }),
     sendEmail({
       to: email,
-      subject: "Task Submission Rejected",
-      html: `<p>Your submission for <strong>${taskTitle}</strong> was rejected.</p><p><strong>Reason:</strong> ${reason}</p>`,
+      subject: `Task Submission Rejected — ${taskTitle}`,
+      html: taskRejectedEmail("there", taskTitle, reason),
     }),
   ]);
 }
 
-/** Email user when their withdrawal-verification bank transfer is approved */
+// ─────────────────────────────────────────────────────────────────────────────
+// Bank verification approved
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function notifyVerificationApproved(
   email: string,
   fullName: string
@@ -116,22 +160,14 @@ export async function notifyVerificationApproved(
   await sendEmail({
     to: email,
     subject: "You're verified — withdrawals are now unlocked 🎉",
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#16a34a">Verification Approved!</h2>
-        <p>Hi ${fullName},</p>
-        <p>
-          Your bank transfer has been verified. You can now request withdrawals
-          from your BountyTask balance.
-        </p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
-        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria</p>
-      </div>
-    `,
-  })
+    html: verificationApprovedEmail(fullName),
+  });
 }
 
-/** Email user when their withdrawal-verification bank transfer is rejected */
+// ─────────────────────────────────────────────────────────────────────────────
+// Bank verification rejected
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function notifyVerificationRejected(
   email: string,
   fullName: string,
@@ -139,34 +175,17 @@ export async function notifyVerificationRejected(
 ) {
   await sendEmail({
     to: email,
-    subject: "BountyTask verification request — not approved",
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#dc2626">Verification Not Approved</h2>
-        <p>Hi ${fullName},</p>
-        <p>
-          Unfortunately we could not verify your payment, so your withdrawal
-          verification request has been declined.
-        </p>
-        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
-        <p>
-          If you believe this is a mistake, please reply to this email with your
-          proof of payment and we'll review it again.
-        </p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
-        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria</p>
-      </div>
-    `,
-  })
+    subject: "BountyTask verification — action needed",
+    html: verificationRejectedEmail(fullName, reason),
+  });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin broadcast
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type BroadcastChannel = "in_app" | "email";
 
-/**
- * Send an admin-authored notification to one user or every user, via
- * in-app notification, email, or both. Returns how many recipients
- * were reached so the admin UI can confirm the send.
- */
 export async function sendAdminNotification({
   target,
   userId,
@@ -185,11 +204,18 @@ export async function sendAdminNotification({
   let recipients: { id: string; email: string }[] = [];
   if (target === "user") {
     if (!userId) throw new Error("userId is required when target is 'user'");
-    const { data } = await admin.from("users").select("id, email").eq("id", userId).single();
+    const { data } = await admin
+      .from("users")
+      .select("id, email")
+      .eq("id", userId)
+      .single();
     if (!data) throw new Error("User not found");
     recipients = [data];
   } else {
-    const { data } = await admin.from("users").select("id, email").eq("is_active", true);
+    const { data } = await admin
+      .from("users")
+      .select("id, email")
+      .eq("is_active", true);
     recipients = data ?? [];
   }
 
@@ -204,7 +230,6 @@ export async function sendAdminNotification({
       message,
       read: false,
     }));
-    // Insert in batches to stay well within request size limits.
     const BATCH = 500;
     for (let i = 0; i < rows.length; i += BATCH) {
       await admin.from("notifications").insert(rows.slice(i, i + BATCH));
@@ -212,19 +237,13 @@ export async function sendAdminNotification({
   }
 
   if (wantsEmail) {
-    const html = `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#7c3aed">${title}</h2>
-        <p style="white-space:pre-wrap">${message}</p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
-        <p style="color:#9ca3af;font-size:12px">BountyTask Nigeria</p>
-      </div>
-    `;
-    // Fire sequentially in small batches to avoid hammering the email API.
+    const html = adminBroadcastEmail(title, message);
     const BATCH = 20;
     for (let i = 0; i < recipients.length; i += BATCH) {
       await Promise.all(
-        recipients.slice(i, i + BATCH).map((r) => sendEmail({ to: r.email, subject: title, html }))
+        recipients
+          .slice(i, i + BATCH)
+          .map((r) => sendEmail({ to: r.email, subject: title, html }))
       );
     }
   }
@@ -232,7 +251,10 @@ export async function sendAdminNotification({
   return { recipientCount: recipients.length };
 }
 
-/** Notify withdrawal status change */
+// ─────────────────────────────────────────────────────────────────────────────
+// Withdrawal status
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function notifyWithdrawalUpdate(
   userId: string,
   email: string,
@@ -241,8 +263,9 @@ export async function notifyWithdrawalUpdate(
   reason?: string,
   withdrawalId?: string
 ) {
-  const naira = (amountKobo / 100).toFixed(2);
+  const naira    = (amountKobo / 100).toFixed(2);
   const approved = status === "approved";
+
   await Promise.all([
     createNotification({
       userId,
@@ -255,10 +278,29 @@ export async function notifyWithdrawalUpdate(
     }),
     sendEmail({
       to: email,
-      subject: approved ? "Withdrawal Approved" : "Withdrawal Rejected",
+      subject: approved
+        ? `Withdrawal Approved — ₦${naira} on the way`
+        : `Withdrawal Update — ₦${naira}`,
       html: approved
-        ? `<p>Your withdrawal of <strong>₦${naira}</strong> has been approved. You will receive your funds via bank transfer.</p>`
-        : `<p>Your withdrawal of <strong>₦${naira}</strong> was rejected.</p><p><strong>Reason:</strong> ${reason}</p>`,
+        ? withdrawalApprovedEmail("there", naira)
+        : withdrawalRejectedEmail("there", naira, reason),
     }),
   ]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Login / re-engagement reminder
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendLoginReminderEmail(
+  email: string,
+  name: string,
+  balanceKobo: number
+) {
+  const balanceNaira = (balanceKobo / 100).toFixed(2);
+  await sendEmail({
+    to: email,
+    subject: `${name}, new tasks are waiting for you on BountyTask`,
+    html: loginReminderEmail(name, balanceNaira),
+  });
 }

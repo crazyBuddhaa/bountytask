@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { creditSignupBonusIfNew } from "@/lib/referrals"
+import { sendWelcomeEmail } from "@/lib/notifications"
 import { z } from "zod"
 
 export const dynamic = "force-dynamic"
@@ -39,6 +40,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await creditSignupBonusIfNew(user_id, referral_code)
+
+    // Send welcome email on first-time signup (creditSignupBonusIfNew is a
+    // no-op for existing users, so `credited` being true means new user).
+    if (result?.credited) {
+      const name =
+        (authUser.user.user_metadata?.full_name as string | undefined) ??
+        (authUser.user.email?.split("@")[0] ?? "there")
+      sendWelcomeEmail(authUser.user.email ?? "", name).catch((e) =>
+        console.error("Welcome email failed:", e)
+      )
+    }
+
     return NextResponse.json({ data: result, error: null })
   } catch (e) {
     return NextResponse.json(
