@@ -1,6 +1,9 @@
 // ─── Core Domain Types ────────────────────────────────────────────────────────
 
 export type UserRole = "user" | "admin" | "super_admin";
+export type SocialPlatform = "twitter_x" | "instagram" | "tiktok" | "youtube" | "facebook" | "threads";
+export type SocialAction = "follow" | "like" | "comment" | "repost" | "subscribe";
+export type AiVerdict = "approved" | "rejected" | "uncertain";
 export type TaskType = "verified" | "unverified";
 export type TaskStatus = "draft" | "active" | "paused" | "completed" | "archived";
 export type CompletionStatus = "pending" | "approved" | "rejected" | "flagged";
@@ -93,6 +96,13 @@ export interface Task {
   submission_id: string | null;
   youtube_url: string | null;
   min_watch_seconds: number | null;
+  // ── Social media task fields ──────────────────────────────────
+  social_platform: SocialPlatform | null;
+  social_action: SocialAction | null;
+  social_target_handle: string | null;       // e.g. "@Nike"
+  social_target_post_url: string | null;     // post/video URL (like, comment, repost)
+  social_required_comment_text: string | null; // exact text user must post
+  ai_verify_screenshot: boolean;             // run Gemini Vision on the proof screenshot
   created_at: string;
   updated_at: string;
 }
@@ -138,6 +148,10 @@ export interface TaskCompletion {
   reviewed_at: string | null;
   reviewed_by: string | null;
   rejection_reason: string | null;
+  // ── AI verification fields ────────────────────────────────────
+  ai_verdict: AiVerdict | null;
+  ai_confidence: number | null; // 0–100
+  ai_reason: string | null;
   created_at: string;
 }
 

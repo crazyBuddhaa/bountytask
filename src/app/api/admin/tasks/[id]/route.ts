@@ -21,6 +21,9 @@ const EDITABLE_TASK_FIELDS = [
   "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
   "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
   "youtube_url", "min_watch_seconds",
+  // Social media task fields
+  "social_platform", "social_action", "social_target_handle", "social_target_post_url",
+  "social_required_comment_text", "ai_verify_screenshot",
 ] as const
 
 function sanitizeTaskBody(body: Record<string, unknown>) {

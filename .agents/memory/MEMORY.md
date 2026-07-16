@@ -1,0 +1,1 @@
+- [Social Tasks Feature](social-tasks.md) — social media task type with Gemini Vision AI screenshot verification; all files and migration written

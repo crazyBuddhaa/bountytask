@@ -43,6 +43,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (task.max_completions !== null && task.current_completions >= task.max_completions) {
     return NextResponse.json({ data: null, error: "Task is fully claimed" }, { status: 400 })
   }
+
+  // Social tasks always require a screenshot (proof_url); check before the generic requires_proof check
+  if (task.social_platform && !parsed.data.proof_url) {
+    return NextResponse.json(
+      { data: null, error: "A screenshot is required for this social media task." },
+      { status: 400 }
+    )
+  }
+
   if (task.requires_proof && !parsed.data.proof_url && !parsed.data.proof_text) {
     return NextResponse.json({ data: null, error: "This task requires proof of completion" }, { status: 400 })
   }
@@ -64,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const watchedSeconds = session.heartbeat_count * 10
-    const required = task.min_watch_seconds ?? 30 // minimum 30 s even if not set
+    const required = task.min_watch_seconds ?? 30
 
     if (watchedSeconds < required) {
       const remaining = Math.ceil((required - watchedSeconds) / 60)
@@ -120,17 +129,53 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const now = new Date().toISOString()
-  // Video tasks are always instant-pay (unverified flow)
+
+  // Video and instant tasks are auto-approved; verified and social tasks default to pending
   let completionStatus: "pending" | "approved" =
     (task.type === "unverified" || task.youtube_url) ? "approved" : "pending"
+
+  // ── Social task: optional AI screenshot verification ───────────────────────
+  let aiVerdict: { verdict: string; confidence: number; reason: string } | null = null
+
+  if (task.social_platform && task.ai_verify_screenshot && parsed.data.proof_url) {
+    const { verifySocialScreenshot } = await import("@/lib/ai-vision")
+    const verdict = await verifySocialScreenshot(parsed.data.proof_url, task)
+    aiVerdict = verdict
+
+    if (verdict.verdict === "rejected") {
+      // Return without inserting a completion row so the user can retry with a
+      // better screenshot. Rejected completions don't count toward the per-user cap.
+      return NextResponse.json(
+        { data: null, error: verdict.reason, code: "AI_REJECTED" },
+        { status: 422 }
+      )
+    }
+
+    // AI approved → instant credit (no admin review needed)
+    if (verdict.verdict === "approved") {
+      completionStatus = "approved"
+    }
+    // AI uncertain → stays "pending" for manual review
+  }
+  // ───────────────────────────────────────────────────────────────────────────
 
   // Insert completion
   const { data: completion, error: compErr } = await admin
     .from("task_completions")
     .insert({
-      task_id: taskId, user_id: user.id, status: completionStatus,
-      proof_url: parsed.data.proof_url ?? null, proof_text: parsed.data.proof_text ?? null,
-      submitted_at: now, reviewed_at: completionStatus === "approved" ? now : null,
+      task_id: taskId,
+      user_id: user.id,
+      status: completionStatus,
+      proof_url: parsed.data.proof_url ?? null,
+      proof_text: parsed.data.proof_text ?? null,
+      submitted_at: now,
+      reviewed_at: completionStatus === "approved" ? now : null,
+      // AI verdict (null for non-AI tasks)
+      ...(aiVerdict ? {
+        ai_verdict: aiVerdict.verdict,
+        ai_confidence: aiVerdict.confidence,
+        ai_reason: aiVerdict.reason,
+      } : {}),
     })
     .select().single()
 
@@ -139,7 +184,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ data: null, error: compErr.message }, { status: 500 })
   }
 
-  // Auto-approve
+  // Auto-approve: credit ledger + notifications
   if (completionStatus === "approved") {
     const [ledgerEntry] = await Promise.all([
       appendLedger({

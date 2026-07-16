@@ -72,7 +72,10 @@ export default function TasksPage() {
 
   useEffect(() => { fetchTierUsage() }, [fetchTierUsage])
 
-  async function handleComplete(taskId: string, proof?: { url?: string; text?: string }) {
+  async function handleComplete(
+    taskId: string,
+    proof?: { url?: string; text?: string }
+  ): Promise<{ ok: boolean; aiReason?: string }> {
     const fp = await getFingerprint()
     const res = await fetch(`/api/tasks/${taskId}/complete`, {
       method: "POST",
@@ -80,11 +83,16 @@ export default function TasksPage() {
       body: JSON.stringify({ proof_url: proof?.url, proof_text: proof?.text, device_fingerprint: fp }),
     })
     const json = await res.json()
-    if (!res.ok) { toast.error(json.error); return false }
+    if (!res.ok) {
+      // AI rejection — pass the reason back to the modal so it shows inline
+      if (json.code === "AI_REJECTED") return { ok: false, aiReason: json.error }
+      toast.error(json.error)
+      return { ok: false }
+    }
     toast.success(json.data.status === "approved" ? "Task completed! Credits added." : "Submission received! Pending review.")
     fetchTasks()
     fetchTierUsage()
-    return true
+    return { ok: true }
   }
 
   const limitReached = !!tierUsage && tierUsage.tasksCompletedToday >= tierUsage.dailyLimit
