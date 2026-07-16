@@ -20,6 +20,7 @@ const EDITABLE_TASK_FIELDS = [
   "title", "description", "instructions", "category_id", "type", "status",
   "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
   "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
+  "youtube_url", "min_watch_seconds",
 ] as const
 
 function sanitizeTaskBody(body: Record<string, unknown>) {

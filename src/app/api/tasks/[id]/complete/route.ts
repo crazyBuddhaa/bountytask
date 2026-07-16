@@ -47,8 +47,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ data: null, error: "This task requires proof of completion" }, { status: 400 })
   }
 
-  // Per-user completion limit check (replaces the old hasCompletedTask single-submission guard)
-  // max_completions_per_user: null = no per-user limit, 1 = once (default), N = up to N times
+  // ── Video task: server-side watch verification ──────────────────────────────
+  if (task.youtube_url) {
+    const { data: session } = await admin
+      .from("video_watch_sessions")
+      .select("heartbeat_count")
+      .eq("user_id", user.id)
+      .eq("task_id", taskId)
+      .single()
+
+    if (!session || session.heartbeat_count === 0) {
+      return NextResponse.json({
+        data: null,
+        error: "You must watch the video before claiming the reward.",
+      }, { status: 403 })
+    }
+
+    const watchedSeconds = session.heartbeat_count * 10
+    const required = task.min_watch_seconds ?? 30 // minimum 30 s even if not set
+
+    if (watchedSeconds < required) {
+      const remaining = Math.ceil((required - watchedSeconds) / 60)
+      return NextResponse.json({
+        data: null,
+        error: `Keep watching — you need at least ${remaining} more minute${remaining === 1 ? "" : "s"} of watch time.`,
+      }, { status: 403 })
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Per-user completion limit check
   const perUserLimit = task.max_completions_per_user ?? 1
   const { count: userCount } = await admin
     .from("task_completions")
@@ -92,7 +120,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const now = new Date().toISOString()
-  let completionStatus: "pending" | "approved" = task.type === "unverified" ? "approved" : "pending"
+  // Video tasks are always instant-pay (unverified flow)
+  let completionStatus: "pending" | "approved" =
+    (task.type === "unverified" || task.youtube_url) ? "approved" : "pending"
 
   // Insert completion
   const { data: completion, error: compErr } = await admin
@@ -109,7 +139,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ data: null, error: compErr.message }, { status: 500 })
   }
 
-  // Auto-approve unverified tasks
+  // Auto-approve
   if (completionStatus === "approved") {
     const [ledgerEntry] = await Promise.all([
       appendLedger({
@@ -123,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       creditReferralBonus(user.id),
       recalcUserTier(user.id),
     ])
-    void ledgerEntry // used above
+    void ledgerEntry
   }
 
   return NextResponse.json({ data: completion, error: null }, { status: 201 })

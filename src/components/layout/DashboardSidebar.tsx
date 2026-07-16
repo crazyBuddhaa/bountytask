@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, ListTodo, CheckSquare, TrendingUp,
-  Banknote, Users, Bell, User, Shield,
+  Banknote, Users, Bell, User, Shield, Youtube,
 } from "lucide-react"
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/tasks", label: "Available Tasks", icon: ListTodo },
+  { href: "/dashboard/tasks/watch-videos", label: "Watch & Earn", icon: Youtube },
   { href: "/dashboard/my-tasks", label: "My Tasks", icon: CheckSquare },
   { href: "/dashboard/earnings", label: "Earnings", icon: TrendingUp },
   { href: "/dashboard/withdrawal", label: "Withdrawal", icon: Banknote },

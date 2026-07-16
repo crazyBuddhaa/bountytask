@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { Plus, Pencil, Archive } from "lucide-react"
+import { Plus, Pencil, Archive, Youtube } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +23,10 @@ function margin(t: Task) {
   return t.advertiser_cost_kobo - t.reward_amount
 }
 
+function isYouTubeUrl(url: string) {
+  return /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/.test(url)
+}
+
 export default function AdminTasksPage() {
   const [tasks, setTasks]       = useState<Task[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
@@ -33,6 +37,9 @@ export default function AdminTasksPage() {
   const [editing, setEditing]   = useState<Partial<Task> | null>(null)
   const [saving, setSaving]     = useState(false)
   const limit = 20
+
+  // Derived: is the task being edited a YouTube video task?
+  const isVideo = !!(editing?.youtube_url)
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
@@ -47,26 +54,19 @@ export default function AdminTasksPage() {
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
   useEffect(() => {
-    fetch("/api/admin/tasks?limit=1")
+    fetch("/api/tasks?limit=100")
       .then(r => r.json())
-      .then(() => {
-        fetch("/api/tasks?limit=1")
-          .then(r => r.json())
-          .then(j => {
-            const cats = Array.from(new Map((j.data ?? []).map((t: Task) => [t.category_id, t.category])).values()).filter(Boolean)
-            setCategories(cats as { id: string; name: string }[])
-          })
+      .then(j => {
+        const cats = Array.from(new Map((j.data ?? []).map((t: Task) => [t.category_id, t.category])).values()).filter(Boolean)
+        setCategories(cats as { id: string; name: string }[])
       })
   }, [])
 
-  // Only these keys are real, writable columns on `tasks`. `editing` also carries
-  // read-only/joined fields (e.g. the `category` object joined from task_categories,
-  // current_completions, created_at, ...) that must never be sent back on save —
-  // Supabase's update() rejects unknown columns with a schema-cache error.
   const EDITABLE_TASK_FIELDS = [
     "title", "description", "instructions", "category_id", "type", "status",
     "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
     "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
+    "youtube_url", "min_watch_seconds",
   ] as const
 
   function toTaskPayload(t: Partial<Task>) {
@@ -79,6 +79,13 @@ export default function AdminTasksPage() {
 
   async function handleSave() {
     if (!editing) return
+
+    // Validate YouTube URL if provided
+    if (editing.youtube_url && !isYouTubeUrl(editing.youtube_url)) {
+      toast.error("Please enter a valid YouTube URL (youtube.com/watch?v=... or youtu.be/...)")
+      return
+    }
+
     setSaving(true)
     const isNew = !editing.id
     const url   = isNew ? "/api/admin/tasks" : `/api/admin/tasks/${editing.id}`
@@ -102,6 +109,19 @@ export default function AdminTasksPage() {
     setTasks(prev => prev.filter(t => t.id !== id))
   }
 
+  function openNew() {
+    setEditing({ status: "draft", type: "unverified", reward_amount: 0, requires_proof: false, max_completions_per_user: 1, youtube_url: null, min_watch_seconds: null })
+  }
+
+  function setVideoMode(on: boolean) {
+    if (on) {
+      // Video tasks: instant pay, one per user, no proof needed
+      setEditing(prev => ({ ...prev, youtube_url: "", type: "unverified", requires_proof: false, max_completions_per_user: 1 }))
+    } else {
+      setEditing(prev => ({ ...prev, youtube_url: null, min_watch_seconds: null }))
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -109,7 +129,7 @@ export default function AdminTasksPage() {
           <h1 className="text-2xl font-bold">Tasks</h1>
           <p className="text-muted-foreground text-sm mt-1">{total.toLocaleString()} tasks</p>
         </div>
-        <Button variant="gradient" size="sm" onClick={() => setEditing({ status: "draft", type: "unverified", reward_amount: 0, requires_proof: false, max_completions_per_user: 1 })}>
+        <Button variant="gradient" size="sm" onClick={openNew}>
           <Plus className="w-4 h-4" /> New Task
         </Button>
       </div>
@@ -149,13 +169,20 @@ export default function AdminTasksPage() {
               : tasks.map(t => (
                 <TableRow key={t.id}>
                   <TableCell className="max-w-xs">
-                    <p className="font-medium text-sm truncate">{t.title}</p>
+                    <div className="flex items-center gap-1.5">
+                      {t.youtube_url && <Youtube className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                      <p className="font-medium text-sm truncate">{t.title}</p>
+                    </div>
                     <p className="text-xs text-muted-foreground">{(t as Task & { category?: { name: string } }).category?.name}</p>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={t.type === "unverified" ? "success" : "pending"} className="text-[10px]">
-                      {t.type === "unverified" ? "Instant" : "Verified"}
-                    </Badge>
+                    {t.youtube_url ? (
+                      <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">Video</Badge>
+                    ) : (
+                      <Badge variant={t.type === "unverified" ? "success" : "pending"} className="text-[10px]">
+                        {t.type === "unverified" ? "Instant" : "Verified"}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="font-medium tabular-nums">{formatCurrency(t.reward_amount)}</TableCell>
                   <TableCell className="text-sm tabular-nums">
@@ -211,8 +238,69 @@ export default function AdminTasksPage() {
               <DialogTitle>{editing.id ? "Edit Task" : "Create New Task"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+
+              {/* Task format toggle */}
+              <div>
+                <Label>Task Format</Label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {[
+                    { value: false, label: "Standard task" },
+                    { value: true,  label: "YouTube video" },
+                  ].map(opt => (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setVideoMode(opt.value)}
+                      className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+                        isVideo === opt.value
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-input text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {opt.value && <Youtube className="w-3.5 h-3.5 text-red-500" />}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* YouTube URL + min watch (only for video tasks) */}
+              {isVideo && (
+                <div className="space-y-3 rounded-lg border border-red-100 bg-red-50/40 p-3">
+                  <div>
+                    <Label htmlFor="youtubeUrl">YouTube URL <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="youtubeUrl"
+                      className="mt-1"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={editing.youtube_url ?? ""}
+                      onChange={e => setEditing(prev => ({ ...prev, youtube_url: e.target.value || null }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Paste the full YouTube link. Users will watch this embedded in the app.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="minWatch">Minimum watch time (seconds)</Label>
+                    <Input
+                      id="minWatch"
+                      type="number"
+                      min={30}
+                      className="mt-1"
+                      placeholder="e.g. 300 for a 5-min video"
+                      value={editing.min_watch_seconds ?? ""}
+                      onChange={e => setEditing(prev => ({ ...prev, min_watch_seconds: e.target.value ? parseInt(e.target.value) : null }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      How many seconds a user must actively watch before claiming. Leave blank to default to 30 s.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Core fields */}
               {[
-                { id: "title",        label: "Title",        type: "input",  field: "title"       },
+                { id: "title",        label: "Title",        type: "input",    field: "title"       },
                 { id: "description",  label: "Description",  type: "textarea", field: "description" },
                 { id: "instructions", label: "Instructions", type: "textarea", field: "instructions" },
               ].map(({ id, label, type, field }) => (
@@ -225,24 +313,36 @@ export default function AdminTasksPage() {
                         onChange={e => setEditing(prev => ({ ...prev, [field]: e.target.value }))} />}
                 </div>
               ))}
-              <div>
-                <Label htmlFor="verificationUrl">Task Link</Label>
-                <Input id="verificationUrl" className="mt-1" placeholder="https://..."
-                  value={editing.verification_url ?? ""}
-                  onChange={e => setEditing(prev => ({ ...prev, verification_url: e.target.value }))} />
-                <p className="text-xs text-muted-foreground mt-1">The URL users are sent to complete this task (e.g. the page to follow, sign up, or download).</p>
-              </div>
+
+              {/* Task link — hidden for video tasks (youtube_url serves the same purpose) */}
+              {!isVideo && (
+                <div>
+                  <Label htmlFor="verificationUrl">Task Link</Label>
+                  <Input id="verificationUrl" className="mt-1" placeholder="https://..."
+                    value={editing.verification_url ?? ""}
+                    onChange={e => setEditing(prev => ({ ...prev, verification_url: e.target.value }))} />
+                  <p className="text-xs text-muted-foreground mt-1">The URL users are sent to complete this task.</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
+                {/* Type — locked to Instant for video tasks */}
                 <div>
                   <Label>Type</Label>
-                  <Select value={editing.type ?? "unverified"}
-                    onValueChange={v => setEditing(prev => ({ ...prev, type: v as "verified" | "unverified" }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unverified">Instant Pay</SelectItem>
-                      <SelectItem value="verified">Verified</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isVideo ? (
+                    <div className="mt-1 flex h-10 items-center rounded-md border bg-muted/50 px-3 text-sm text-muted-foreground">
+                      Instant Pay (video)
+                    </div>
+                  ) : (
+                    <Select value={editing.type ?? "unverified"}
+                      onValueChange={v => setEditing(prev => ({ ...prev, type: v as "verified" | "unverified" }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unverified">Instant Pay</SelectItem>
+                        <SelectItem value="verified">Verified</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div>
                   <Label>Status</Label>
@@ -258,6 +358,7 @@ export default function AdminTasksPage() {
                   </Select>
                 </div>
               </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="reward">Reward (kobo)</Label>
@@ -275,33 +376,44 @@ export default function AdminTasksPage() {
                 </div>
                 <div>
                   <Label htmlFor="perUserCap">Per-user Limit</Label>
-                  <Input id="perUserCap" type="number" min={1} className="mt-1" placeholder="No limit"
-                    value={editing.max_completions_per_user ?? ""}
-                    onChange={e => setEditing(prev => ({ ...prev, max_completions_per_user: e.target.value ? parseInt(e.target.value) : null }))} />
-                  <p className="text-xs text-muted-foreground mt-1">Times per user</p>
+                  <Input
+                    id="perUserCap"
+                    type="number"
+                    min={1}
+                    className="mt-1"
+                    placeholder="No limit"
+                    disabled={isVideo}
+                    value={isVideo ? 1 : (editing.max_completions_per_user ?? "")}
+                    onChange={e => setEditing(prev => ({ ...prev, max_completions_per_user: e.target.value ? parseInt(e.target.value) : null }))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {isVideo ? "Locked to 1 for videos" : "Times per user"}
+                  </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Cost Type</Label>
-                  <Select value={editing.cost_type ?? "flat"}
-                    onValueChange={v => setEditing(prev => ({ ...prev, cost_type: v as "flat" | "cpa" }))}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="flat">Flat (advertiser pre-paid budget)</SelectItem>
-                      <SelectItem value="cpa">CPA (paid per completion)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">Affects the margin calculation only — doesn't change payouts.</p>
+
+              {!isVideo && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Cost Type</Label>
+                    <Select value={editing.cost_type ?? "flat"}
+                      onValueChange={v => setEditing(prev => ({ ...prev, cost_type: v as "flat" | "cpa" }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="flat">Flat (pre-paid budget)</SelectItem>
+                        <SelectItem value="cpa">CPA (per completion)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="advCost">Advertiser Cost (kobo)</Label>
+                    <Input id="advCost" type="number" className="mt-1" placeholder="No external revenue"
+                      value={editing.advertiser_cost_kobo ?? ""}
+                      onChange={e => setEditing(prev => ({ ...prev, advertiser_cost_kobo: e.target.value ? parseInt(e.target.value) : null }))} />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="advCost">Advertiser Cost (kobo)</Label>
-                  <Input id="advCost" type="number" className="mt-1" placeholder="No external revenue"
-                    value={editing.advertiser_cost_kobo ?? ""}
-                    onChange={e => setEditing(prev => ({ ...prev, advertiser_cost_kobo: e.target.value ? parseInt(e.target.value) : null }))} />
-                  <p className="text-xs text-muted-foreground mt-1">What you're paid per completion. Leave blank for ordinary internal tasks.</p>
-                </div>
-              </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
                 <Button variant="gradient" className="flex-1" disabled={saving} onClick={handleSave}>

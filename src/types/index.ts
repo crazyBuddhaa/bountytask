@@ -91,6 +91,8 @@ export interface Task {
   cost_type: "flat" | "cpa";
   advertiser_cost_kobo: number | null; // platform revenue per completion, in kobo — null for tasks with no external revenue
   submission_id: string | null;
+  youtube_url: string | null;
+  min_watch_seconds: number | null;
   created_at: string;
   updated_at: string;
 }
