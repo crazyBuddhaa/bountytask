@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserTierStatus } from "@/lib/tiers"
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"
+import { AdSlot } from "@/components/ads/AdSlot"
 import type { UserProfile } from "@/types"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} currentTier={tierStatus.currentTier} />
         <main className="flex-1 p-4 lg:p-6 animate-fade-in space-y-4">
           {children}
+          <AdSlot placement="dashboard" />
         </main>
       </div>
     </div>
