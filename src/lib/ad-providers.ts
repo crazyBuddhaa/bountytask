@@ -6,8 +6,7 @@
  *  - Session/transaction deduplication (idempotent postbacks)
  *  - Unified completion recorder (ad_task_logs + ledger + notification)
  *  - IMA SDK one-time HMAC token (generate + validate)
- *  - Postback signature validators for Ayet (HMAC-SHA256), CPX (MD5),
- *    and Lootably (HMAC-SHA256)
+ *  - Postback signature validators for CPX (MD5) and Lootably (HMAC-SHA256)
  */
 
 import { createHmac, createHash, timingSafeEqual } from "crypto"
@@ -15,13 +14,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { recalcUserTier } from "@/lib/tiers"
-import { getAyetSettings } from "@/lib/ayet"
 import { getCpxSettings } from "@/lib/cpx"
 import { getLootablySettings } from "@/lib/lootably"
 import { getAdGateSettings } from "@/lib/adgate"
 import { getAsterraSettings } from "@/lib/asterra"
 
-export type AdProvider = "ima" | "lootably" | "ayet" | "cpx" | "adgate" | "asterra"
+export type AdProvider = "ima" | "lootably" | "cpx" | "adgate" | "asterra"
 export type AdType = "video" | "survey" | "offer" | "mixed"
 
 // ─── Daily Cap ────────────────────────────────────────────────────────────────
@@ -127,7 +125,6 @@ export async function recordAdCompletion({
   const providerLabel: Record<AdProvider, string> = {
     ima: "video ad",
     lootably: "offer",
-    ayet: "survey/offer",
     cpx: "survey",
     adgate: "offer",
     asterra: "smartlink offer",
@@ -195,31 +192,6 @@ export function validateImaToken(token: string): string | null {
 // ─── Postback Signature Validators ───────────────────────────────────────────
 
 /**
- * Ayet Studios: HMAC-SHA256 over sorted `key=value` pairs (excluding `sig`).
- * Ayet sorts all postback params alphabetically, joins with `&`, then signs.
- */
-export function validateAyetSignature(
-  params: Record<string, string>,
-  secretKey: string
-): boolean {
-  const receivedSig = params["sig"]
-  if (!receivedSig) return false
-  const sorted = Object.keys(params)
-    .filter((k) => k !== "sig")
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&")
-  const expected = createHmac("sha256", secretKey).update(sorted).digest("hex")
-  try {
-    return timingSafeEqual(Buffer.from(receivedSig), Buffer.from(expected))
-  } catch {
-    // Different-length buffers (e.g. malformed/forged sig) throw instead of
-    // returning false — treat as an invalid signature, not a server error.
-    return false
-  }
-}
-
-/**
  * Lootably: HMAC-SHA256(secret, userId + transactionId)
  * Lootably sends `sig` as a query parameter on the postback.
  */
@@ -258,7 +230,6 @@ export async function getAdProviderSettings() {
   const keys = [
     "ima_enabled", "ima_daily_cap", "ima_reward_kobo", "ima_ad_tag_url",
     "lootably_enabled", "lootably_daily_cap", "lootably_api_key", "lootably_secret",
-    "ayet_enabled", "ayet_daily_cap", "ayet_placement_key", "ayet_secret_key",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
     "adgate_enabled", "adgate_daily_cap", "adgate_wall_id", "adgate_postback_ip",
     "asterra_enabled", "asterra_daily_cap", "asterra_reward_kobo", "asterra_smartlink_url",
@@ -283,12 +254,6 @@ export async function getAdProviderSettings() {
       dailyCap:   Number(s.lootably_daily_cap  ?? 10),
       apiKey:     String(s.lootably_api_key    ?? ""),
       secret:     String(s.lootably_secret     ?? ""),
-    },
-    ayet: {
-      enabled:      Boolean(s.ayet_enabled       ?? false),
-      dailyCap:     Number(s.ayet_daily_cap       ?? 10),
-      placementKey: String(s.ayet_placement_key   ?? ""),
-      secretKey:    String(s.ayet_secret_key      ?? ""),
     },
     cpx: {
       enabled:       Boolean(s.cpx_enabled          ?? false),
@@ -330,10 +295,9 @@ export interface AdTaskStatus {
  * omitted entirely rather than shown as "coming soon" in the main grid.
  */
 export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
-  const [ima, lootably, ayet, cpx, adgate, asterra] = await Promise.all([
+  const [ima, lootably, cpx, adgate, asterra] = await Promise.all([
     getAdProviderSettings().then((s) => s.ima),
     getLootablySettings(),
-    getAyetSettings(),
     getCpxSettings(),
     getAdGateSettings(),
     getAsterraSettings(),
@@ -359,16 +323,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       href: "/dashboard/tasks/mixed-offers",
       rewardKobo: null,
       dailyCap: lootably.dailyCap,
-    })
-  }
-  if (ayet.enabled && ayet.placementKey && ayet.secretKey) {
-    candidates.push({
-      provider: "ayet",
-      title: "Surveys & Offers",
-      description: "Complete surveys, sign-ups, and offers from verified advertisers.",
-      href: "/dashboard/tasks/offers",
-      rewardKobo: null,
-      dailyCap: ayet.dailyCap,
     })
   }
   if (cpx.enabled && cpx.appId && cpx.secureHashKey) {

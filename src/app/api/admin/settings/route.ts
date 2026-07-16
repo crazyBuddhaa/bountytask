@@ -75,12 +75,6 @@ const settingsSchema = z.object({
   lootably_api_key:   z.string().max(200).optional(),
   lootably_secret:    z.string().max(200).optional(),
 
-  // ── Ayet Studios ───────────────────────────────────────────────────────────
-  ayet_enabled:        z.boolean().optional(),
-  ayet_daily_cap:      z.number().int().min(1).max(20).optional(),
-  ayet_placement_key:  z.string().max(200).optional(),
-  ayet_secret_key:     z.string().max(200).optional(),
-
   // ── CPX Research ───────────────────────────────────────────────────────────
   cpx_enabled:          z.boolean().optional(),
   cpx_daily_cap:        z.number().int().min(1).max(20).optional(),

@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  Layers, ClipboardList, Key, Gift, ScanEye,
+  ClipboardList, Key, Gift, ScanEye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,11 +45,6 @@ type Settings = {
   lootably_daily_cap: number
   lootably_api_key: string
   lootably_secret: string
-  // Ayet Studios
-  ayet_enabled: boolean
-  ayet_daily_cap: number
-  ayet_placement_key: string
-  ayet_secret_key: string
   // CPX Research
   cpx_enabled: boolean
   cpx_daily_cap: number
@@ -96,10 +91,6 @@ const DEFAULTS: Settings = {
   lootably_daily_cap: 10,
   lootably_api_key: "",
   lootably_secret: "",
-  ayet_enabled: false,
-  ayet_daily_cap: 10,
-  ayet_placement_key: "",
-  ayet_secret_key: "",
   cpx_enabled: false,
   cpx_daily_cap: 10,
   cpx_app_id: "",
@@ -157,10 +148,6 @@ export default function AdminSettingsPage() {
             lootably_daily_cap: data.lootably_daily_cap ?? 10,
             lootably_api_key:   data.lootably_api_key   ?? "",
             lootably_secret:    data.lootably_secret    ?? "",
-            ayet_enabled:       data.ayet_enabled       ?? false,
-            ayet_daily_cap:     data.ayet_daily_cap     ?? 10,
-            ayet_placement_key: data.ayet_placement_key ?? "",
-            ayet_secret_key:    data.ayet_secret_key    ?? "",
             cpx_enabled:         data.cpx_enabled          ?? false,
             cpx_daily_cap:       data.cpx_daily_cap         ?? 10,
             cpx_app_id:          data.cpx_app_id            ?? "",
@@ -615,99 +602,6 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Ayet Studios ────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Layers className="w-4 h-4" /> Ayet Studios — Surveys &amp; Offers
-          </CardTitle>
-          <CardDescription>
-            Strong survey and offer inventory — recommended as the primary offer wall for Nigerian
-            traffic. Offerwall postbacks are authenticated with a static secret you control (not
-            HMAC). Reversal callbacks are supported — enable them in the Ayet dashboard.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Enable Ayet Studios</p></div>
-            <Switch
-              checked={settings.ayet_enabled}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, ayet_enabled: v }))}
-            />
-          </div>
-          {settings.ayet_enabled && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="ayet_cap">Daily cap per user</Label>
-                <Input id="ayet_cap" type="number" min={1} max={20}
-                  value={settings.ayet_daily_cap}
-                  onChange={(e) => setSettings((s) => ({ ...s, ayet_daily_cap: parseInt(e.target.value) || 10 }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ayet_placement" className="flex items-center gap-1">
-                  <Key className="w-3 h-3" /> Placement Key
-                </Label>
-                <Input id="ayet_placement" placeholder="e.g. pl-23749"
-                  value={settings.ayet_placement_key}
-                  onChange={(e) => setSettings((s) => ({ ...s, ayet_placement_key: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  Found in Ayet dashboard → your placement → Overview (e.g. <code className="bg-muted px-1 rounded">PL-23749</code>).
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ayet_secret" className="flex items-center gap-1">
-                  <Key className="w-3 h-3" /> Postback Secret
-                </Label>
-                <Input id="ayet_secret" type="password" placeholder="Random secret you generated (e.g. openssl rand -hex 24)"
-                  value={settings.ayet_secret_key}
-                  onChange={(e) => setSettings((s) => ({ ...s, ayet_secret_key: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  A random token <strong>you choose</strong> — not provided by Ayet. Ayet offerwall
-                  postbacks carry no HMAC; this static secret appended to the callback URL is the
-                  only auth mechanism. Generate one with{" "}
-                  <code className="bg-muted px-1 rounded">openssl rand -hex 24</code>, paste it
-                  here, then paste the same value into the callback URL below.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Key className="w-3 h-3" /> Conversion Callback URL
-                </Label>
-                <div className="relative">
-                  <code className="block text-xs bg-muted rounded p-3 pr-10 break-all leading-relaxed select-all">
-                    {`${APP_URL}/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=`}
-                    {settings.ayet_secret_key
-                      ? <span className="text-green-600 dark:text-green-400">{settings.ayet_secret_key}</span>
-                      : <span className="text-destructive">YOUR_SECRET_HERE</span>}
-                  </code>
-                  <button
-                    type="button"
-                    className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
-                    title="Copy callback URL"
-                    onClick={() => {
-                      const secret = settings.ayet_secret_key || "YOUR_SECRET_HERE"
-                      navigator.clipboard.writeText(
-                        `${APP_URL}/api/postback/ayet?uid={external_identifier}&txn_id={transaction_id}&payout_usd={payout_usd}&currency={currency_amount}&chargeback={is_chargeback}&secret=${secret}`
-                      )
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                    </svg>
-                  </button>
-                </div>
-                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                  <li><code className="bg-muted px-1 rounded">{"{external_identifier}"}</code> — your internal user ID</li>
-                  <li><code className="bg-muted px-1 rounded">{"{transaction_id}"}</code> — dedup key; reversals reuse the same ID</li>
-                  <li><code className="bg-muted px-1 rounded">{"{payout_usd}"}</code> — actual USD value, converted to NGN at credit time</li>
-                  <li><code className="bg-muted px-1 rounded">{"{is_chargeback}"}</code> — 0 on completion, 1 on reversal (enable Reversal Callbacks in Ayet dashboard)</li>
-                </ul>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ── CPX Research ────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
@@ -905,7 +799,7 @@ export default function AdminSettingsPage() {
                 <p>
                   Check your Adsterra publisher dashboard for the required{" "}
                   <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">ads.txt</code>{" "}
-                  entry and add it to <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">public/ads.txt</code> alongside the Ayet line.
+                  entry and add it to <code className="bg-amber-100 dark:bg-amber-900/50 px-1 rounded">public/ads.txt</code>.
                   Adsterra will not serve properly without it.
                 </p>
               </div>

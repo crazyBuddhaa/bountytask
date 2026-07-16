@@ -4,7 +4,7 @@
  * AdGate calls: GET /api/postback/adgate?conversion_id={id}&user_id={s1}&payout={usd}&state={state}&offer_id={id}&offer_name={name}
  * (macro names configured in the wall's Postback field on the AdGate panel)
  *
- * Unlike Ayet/Lootably/CPX, AdGate does not sign postbacks with a hash —
+ * Unlike Lootably/CPX, AdGate does not sign postbacks with a hash —
  * it verifies by source IP instead. The IP shown on your affiliate panel
  * under the wall's Postback section must be saved in admin settings.
  *
