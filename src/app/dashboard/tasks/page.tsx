@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Search, Filter, Zap, Clock, CheckCircle, Gauge } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
@@ -21,6 +22,7 @@ interface TierUsage {
 }
 
 export default function TasksPage() {
+  const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>([])
   const [categories, setCategories] = useState<TaskCategory[]>([])
   const [adTasks, setAdTasks] = useState<AdTaskStatus[]>([])
@@ -175,7 +177,12 @@ export default function TasksPage() {
             <AdTaskCard key={adTask.provider} task={adTask} />
           ))}
           {type !== "ads" && tasks.map(task => (
-            <TaskCard key={task.id} task={task} onClaim={() => setSelectedTask(task)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onClaim={() => setSelectedTask(task)}
+              onWatch={task.youtube_url ? () => router.push("/dashboard/tasks/watch-videos") : undefined}
+            />
           ))}
         </div>
       )}

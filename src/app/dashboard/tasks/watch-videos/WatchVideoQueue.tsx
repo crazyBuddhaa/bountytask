@@ -18,13 +18,25 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
   const [claimed, setClaimed]     = useState(false)
   const [totalEarned, setTotalEarned] = useState(0)
   const [remaining, setRemaining] = useState(initialRemaining)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const fetchNext = useCallback(async () => {
     setTask(undefined) // loading
+    setFetchError(null)
     setClaimed(false)
-    const res = await fetch("/api/tasks/video/next")
-    const json = await res.json()
-    setTask(json.data ?? null)
+    try {
+      const res = await fetch("/api/tasks/video/next")
+      const json = await res.json()
+      if (!res.ok) {
+        setFetchError(json.error ?? "Failed to load video. Please refresh and try again.")
+        setTask(null)
+        return
+      }
+      setTask(json.data ?? null)
+    } catch {
+      setFetchError("Network error. Please check your connection and refresh.")
+      setTask(null)
+    }
   }, [])
 
   useEffect(() => { fetchNext() }, [fetchNext])
@@ -44,6 +56,19 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
           <Skeleton className="h-5 w-3/4" />
           <Skeleton className="aspect-video w-full rounded-lg" />
           <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Error state
+  if (task === null && fetchError) {
+    return (
+      <Card className="border-destructive/30">
+        <CardContent className="p-8 space-y-3 text-center">
+          <CardTitle className="text-base text-destructive">Something went wrong</CardTitle>
+          <CardDescription>{fetchError}</CardDescription>
+          <Button variant="outline" size="sm" onClick={fetchNext}>Try again</Button>
         </CardContent>
       </Card>
     )

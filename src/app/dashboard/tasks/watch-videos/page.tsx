@@ -31,20 +31,6 @@ export default async function WatchVideosPage() {
   const watchedCount = completedIds?.length ?? 0
   const remaining    = Math.max((totalVideos ?? 0) - watchedCount, 0)
 
-  if ((totalVideos ?? 0) === 0) {
-    return (
-      <div className="max-w-2xl space-y-6">
-        <Header />
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">No videos yet</CardTitle>
-            <CardDescription>Video tasks aren&apos;t available yet. Check back soon.</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="max-w-2xl space-y-6">
       <Header />
