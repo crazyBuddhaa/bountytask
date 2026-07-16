@@ -27,7 +27,7 @@ function extractVideoId(url: string): string {
 }
 
 export default function WatchVideoClient({ task, onClaimed }: Props) {
-  const playerRef        = useRef<YT.Player | null>(null)
+  const playerRef        = useRef<any>(null)
   const heartbeatRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const localCountRef    = useRef(0)
   const [playerReady, setPlayerReady]   = useState(false)
