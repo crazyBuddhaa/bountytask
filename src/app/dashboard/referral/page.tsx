@@ -44,6 +44,12 @@ export default function ReferralPage() {
   const [loading, setLoading]       = useState(true)
   const [copied, setCopied]         = useState<"code" | "url" | null>(null)
 
+  // Always build the referral URL from the browser's real origin so share
+  // links point to the correct public domain, not an internal proxy hostname.
+  const referralUrl = data?.referral_code
+    ? `${window.location.origin}/register?ref=${data.referral_code}`
+    : (data?.referral_url ?? "")
+
   useEffect(() => {
     fetch("/api/referrals")
       .then(r => r.json())
@@ -61,13 +67,13 @@ export default function ReferralPage() {
   }
 
   const shareOnWhatsApp = () => {
-    const text = `Join BountyTask and earn real ₦ completing tasks! Use my referral link: ${data?.referral_url}`
+    const text = `Join BountyTask and earn real ₦ completing tasks! Use my referral link: ${referralUrl}`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank")
   }
 
   const shareOnTwitter = () => {
     const text = `I'm earning real ₦ on BountyTask! Join with my referral link and we both get bonuses 🎁`
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(data?.referral_url ?? "")}`, "_blank")
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(referralUrl)}`, "_blank")
   }
 
   return (
@@ -243,9 +249,9 @@ export default function ReferralPage() {
               {/* URL */}
               <div className="flex items-center gap-2">
                 <div className="flex-1 text-xs text-muted-foreground truncate bg-muted rounded-lg px-3 py-2 font-mono">
-                  {data?.referral_url}
+                  {referralUrl}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => copy(data?.referral_url ?? "", "url")}>
+                <Button variant="outline" size="sm" onClick={() => copy(referralUrl, "url")}>
                   {copied === "url" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   Copy link
                 </Button>
