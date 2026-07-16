@@ -86,6 +86,12 @@ const settingsSchema = z.object({
   adgate_daily_cap:    z.number().int().min(1).max(20).optional(),
   adgate_wall_id:      z.string().max(200).optional(),
   adgate_postback_ip:  z.string().max(45).optional(), // IPv4 or IPv6
+
+  // ── Adsterra Smartlink ─────────────────────────────────────────────────────
+  asterra_enabled:       z.boolean().optional(),
+  asterra_daily_cap:     z.number().int().min(1).max(10).optional(),
+  asterra_reward_kobo:   z.number().int().min(1).optional(),
+  asterra_smartlink_url: z.string().max(500).optional(),
 })
 
 async function assertAdmin(userId: string) {
