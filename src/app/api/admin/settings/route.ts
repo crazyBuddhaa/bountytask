@@ -19,6 +19,12 @@ const VERIFICATION_SETTINGS_KEYS = new Set([
   "min_withdrawal_kobo",
 ])
 
+// Keys that affect task completion behaviour. Revalidate immediately so the
+// global AI switch takes effect without waiting for any cache TTL.
+const TASK_SETTINGS_KEYS = new Set([
+  "ai_verify_all_tasks",
+])
+
 // Keys that getCpxSettings() reads and caches under "cpx-settings" with a
 // 60-second TTL. Revalidate immediately on write so key rotations take effect
 // without waiting for the TTL to expire.
@@ -92,6 +98,9 @@ const settingsSchema = z.object({
   asterra_daily_cap:     z.number().int().min(1).max(10).optional(),
   asterra_reward_kobo:   z.number().int().min(1).optional(),
   asterra_smartlink_url: z.string().max(500).optional(),
+
+  // ── Global AI verification ─────────────────────────────────────────────────
+  ai_verify_all_tasks: z.boolean().optional(),
 })
 
 async function assertAdmin(userId: string) {
@@ -140,6 +149,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (entries.some(([key]) => CPX_SETTINGS_KEYS.has(key))) {
     revalidateTag("cpx-settings")
+  }
+  if (entries.some(([key]) => TASK_SETTINGS_KEYS.has(key))) {
+    revalidateTag("task-settings")
   }
 
   await auditLog({

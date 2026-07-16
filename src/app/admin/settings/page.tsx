@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  Layers, ClipboardList, Key, Gift,
+  Layers, ClipboardList, Key, Gift, ScanEye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,6 +65,8 @@ type Settings = {
   asterra_daily_cap: number
   asterra_reward_kobo: number
   asterra_smartlink_url: string
+  // Global AI verification
+  ai_verify_all_tasks: boolean
 }
 
 const DEFAULTS: Settings = {
@@ -110,6 +112,7 @@ const DEFAULTS: Settings = {
   asterra_daily_cap: 3,
   asterra_reward_kobo: 250,
   asterra_smartlink_url: "",
+  ai_verify_all_tasks: false,
 }
 
 const APP_URL =
@@ -170,6 +173,7 @@ export default function AdminSettingsPage() {
             asterra_daily_cap:     data.asterra_daily_cap     ?? 3,
             asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
             asterra_smartlink_url: data.asterra_smartlink_url ?? "",
+            ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
           })
         }
       })
@@ -209,6 +213,44 @@ export default function AdminSettingsPage() {
           Configure withdrawals, verification, advertiser intake, display ads, and rewarded ad providers.
         </p>
       </div>
+
+      {/* ── AI Screenshot Verification ──────────────────────────────────── */}
+      <Card className={settings.ai_verify_all_tasks ? "border-indigo-500 ring-1 ring-indigo-500/40" : ""}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ScanEye className="w-4 h-4 text-indigo-500" /> AI Screenshot Verification
+          </CardTitle>
+          <CardDescription>
+            When enabled, every task submission across the platform must include a screenshot,
+            which Gemini Vision checks automatically. Overrides the per-task setting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/40">
+            <div>
+              <p className="font-medium text-sm">Require AI-verified screenshots for all tasks</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Users must upload a screenshot on every submission.
+                Gemini rates it — ≥75 % confidence auto-approves, 36–74 % goes to manual review, ≤35 % is rejected instantly.
+              </p>
+            </div>
+            <Switch
+              checked={settings.ai_verify_all_tasks}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, ai_verify_all_tasks: v }))}
+            />
+          </div>
+          {settings.ai_verify_all_tasks && (
+            <div className="rounded-md border border-indigo-200 bg-indigo-50 dark:border-indigo-900 dark:bg-indigo-950/30 p-3 text-xs text-indigo-800 dark:text-indigo-300 space-y-1">
+              <p className="font-medium">Active — all tasks now require a screenshot</p>
+              <p>
+                Make sure <code className="bg-indigo-100 dark:bg-indigo-900/50 px-1 rounded">GEMINI_API_KEY</code> is
+                set in your Vercel environment variables, or submissions will fail with a server error.
+                Per-task AI toggles still work independently alongside this switch.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Minimum Withdrawal ──────────────────────────────────────────── */}
       <Card>
