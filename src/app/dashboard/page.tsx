@@ -32,7 +32,7 @@ export default async function DashboardPage() {
 
   const admin = createAdminClient()
 
-  const [balance, { entries: recentLedger }, completionsResult, tasksResult, tierStatus] = await Promise.all([
+  const [balance, { entries: recentLedger }, recentCompletions, approvedCountResult, pendingCountResult, tasksResult, tierStatus] = await Promise.all([
     getLiveBalance(user.id),
     getLedgerHistory(user.id, { page: 1, limit: 5 }),
     admin
@@ -42,15 +42,25 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(5),
     admin
+      .from("task_completions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "approved"),
+    admin
+      .from("task_completions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "pending"),
+    admin
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
     getUserTierStatus(user.id),
   ])
 
-  const completions = (completionsResult.data ?? []) as unknown as (TaskCompletion & { task: { title: string } })[]
-  const approvedCount = completions.filter(c => c.status === "approved").length
-  const pendingCount = completions.filter(c => c.status === "pending").length
+  const completions = (recentCompletions.data ?? []) as unknown as (TaskCompletion & { task: { title: string } })[]
+  const approvedCount = approvedCountResult.count ?? 0
+  const pendingCount = pendingCountResult.count ?? 0
   const activeTaskCount = tasksResult.count ?? 0
 
   const stats = [
