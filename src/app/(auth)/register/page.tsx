@@ -88,8 +88,15 @@ function RegisterForm() {
         }
       }
 
-      toast.success("Account created! Check your email to verify.", { duration: 6000 })
-      router.push("/sign-in")
+      if (signUpData.session) {
+        // Email confirmation is disabled — user is immediately active.
+        toast.success("Account created! Welcome to BountyTask.", { duration: 4000 })
+        router.push("/dashboard")
+      } else {
+        // Email confirmation is enabled — user must click the link first.
+        toast.success("Account created! Check your email to verify.", { duration: 6000 })
+        router.push("/sign-in")
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     }
