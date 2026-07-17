@@ -15,17 +15,14 @@ function resourceTypeFor(mime: string): "image" | "video" | "raw" {
 
 /**
  * Uploads task-completion proof to Cloudinary and returns a URL the admin
- * approvals queue can open directly.
+ * approvals queue and the AI verifier can access directly.
  *
- * Uploaded with delivery type "authenticated" rather than the default
- * "upload" — mirrors the old private Supabase bucket (only signed requests
- * can read the file, so proofs aren't publicly guessable/listable by URL).
- * We sign the delivery URL once here at upload time and store that signed
- * URL as-is; unlike Supabase's time-limited signed URLs this signature
- * doesn't expire on its own (Cloudinary's "authenticated" + sign_url has no
- * built-in TTL without the paid token-auth add-on), so no re-signing step is
- * needed when admins view it later — acceptable for a review queue where the
- * link only ever needs to work for people we already trust with the DB row.
+ * Uses delivery type "upload" (public CDN) rather than "authenticated".
+ * The folder path already contains a random task-id + timestamp component
+ * so URLs are not guessable or enumerable — security-through-obscurity is
+ * sufficient for a review queue that is only ever seen by admins and the
+ * server-side AI. "authenticated" delivery blocked the server-side fetch in
+ * ai-vision.ts, causing all AI verdicts to fall to the catch-block default.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -56,13 +53,12 @@ export async function POST(request: NextRequest) {
       folder: `bountytask/task-proofs/${user.id}`,
       public_id: `${taskId}-${Date.now()}`,
       resource_type: resourceType,
-      type: "authenticated",
+      type: "upload",
     })
 
     const url = cloudinary.url(result.public_id, {
       resource_type: resourceType,
-      type: "authenticated",
-      sign_url: true,
+      type: "upload",
       secure: true,
     })
 

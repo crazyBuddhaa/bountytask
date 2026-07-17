@@ -4,7 +4,7 @@ import type { Task } from "@/types"
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-2.5-flash",
 })
 
 export interface AiVerdict {
@@ -184,11 +184,12 @@ async function verifyWithPrompt(imageUrl: string, prompt: string): Promise<AiVer
       reason: String(parsed.reason ?? "No reason provided.").slice(0, 500),
     }
   } catch (err) {
-    console.error("AI vision error:", err instanceof Error ? err.message : err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("AI vision error:", msg)
     return {
       verdict: "uncertain",
       confidence: 0,
-      reason: "AI verification is temporarily unavailable. Your submission has been queued for manual review.",
+      reason: `AI verification failed (${msg.slice(0, 120)}). Your submission has been queued for manual review.`,
     }
   }
 }
