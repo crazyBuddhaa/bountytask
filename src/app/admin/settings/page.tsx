@@ -62,6 +62,14 @@ type Settings = {
   asterra_smartlink_url: string
   // Global AI verification
   ai_verify_all_tasks: boolean
+  // Games entry fees
+  game_entry_fees_enabled: boolean
+  game_entry_fee_wordle: number
+  game_entry_fee_higher_or_lower: number
+  game_entry_fee_tap_target: number
+  game_entry_fee_2048: number
+  game_entry_fee_color_rush: number
+  game_entry_fee_word_scramble: number
 }
 
 const DEFAULTS: Settings = {
@@ -104,6 +112,13 @@ const DEFAULTS: Settings = {
   asterra_reward_kobo: 250,
   asterra_smartlink_url: "",
   ai_verify_all_tasks: false,
+  game_entry_fees_enabled: false,
+  game_entry_fee_wordle: 1000,
+  game_entry_fee_higher_or_lower: 1000,
+  game_entry_fee_tap_target: 500,
+  game_entry_fee_2048: 500,
+  game_entry_fee_color_rush: 500,
+  game_entry_fee_word_scramble: 500,
 }
 
 const APP_URL =
@@ -161,6 +176,13 @@ export default function AdminSettingsPage() {
             asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
             asterra_smartlink_url: data.asterra_smartlink_url ?? "",
             ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
+            game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
+            game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
+            game_entry_fee_higher_or_lower: data.game_entry_fee_higher_or_lower ?? 1000,
+            game_entry_fee_tap_target:      data.game_entry_fee_tap_target      ?? 500,
+            game_entry_fee_2048:            data.game_entry_fee_2048            ?? 500,
+            game_entry_fee_color_rush:      data.game_entry_fee_color_rush      ?? 500,
+            game_entry_fee_word_scramble:   data.game_entry_fee_word_scramble   ?? 500,
           })
         }
       })
@@ -804,6 +826,61 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Games & Entry Fees ───────────────────────────────────────────── */}
+      <Card className={settings.game_entry_fees_enabled ? "border-green-500 ring-1 ring-green-500/40" : ""}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Gift className="w-4 h-4 text-green-500" /> Games & Entry Fees
+          </CardTitle>
+          <CardDescription>
+            Charge players an entry fee per game session. 80% goes to the weekly prize pool; 20% is kept by the platform. Set to 0 to keep a game free.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>Enable entry fees globally</Label>
+            <Switch
+              checked={settings.game_entry_fees_enabled}
+              onCheckedChange={v => setSettings(s => ({ ...s, game_entry_fees_enabled: v }))}
+            />
+          </div>
+          {settings.game_entry_fees_enabled && (
+            <div className="space-y-3 pt-2">
+              {(
+                [
+                  { key: "game_entry_fee_wordle",          label: "Wordle",          emoji: "🟩" },
+                  { key: "game_entry_fee_higher_or_lower", label: "Higher or Lower", emoji: "🔢" },
+                  { key: "game_entry_fee_tap_target",      label: "Tap the Target",  emoji: "🎯" },
+                  { key: "game_entry_fee_2048",            label: "2048",            emoji: "🧩" },
+                  { key: "game_entry_fee_color_rush",      label: "Color Rush",      emoji: "🎨" },
+                  { key: "game_entry_fee_word_scramble",   label: "Word Scramble",   emoji: "📝" },
+                ] as const
+              ).map(({ key, label, emoji }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="w-6 text-center">{emoji}</span>
+                  <Label className="w-36 shrink-0">{label}</Label>
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-sm text-muted-foreground">₦</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={Math.round(settings[key] / 100)}
+                      onChange={e => setSettings(s => ({ ...s, [key]: Math.round(Number(e.target.value) * 100) }))}
+                      className="w-28"
+                    />
+                    <span className="text-xs text-muted-foreground">{settings[key] === 0 ? "free" : `${settings[key].toLocaleString()} kobo`}</span>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground pt-1">
+                Prize splits: 🥇 50% · 🥈 30% · 🥉 20%. Settle weekly pools from the <strong>Games</strong> admin page.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

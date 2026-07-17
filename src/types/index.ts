@@ -16,7 +16,9 @@ export type LedgerRef =
   | "withdrawal_debit"
   | "withdrawal_reversal"
   | "admin_adjustment"
-  | "penalty";
+  | "penalty"
+  | "game_entry_fee"
+  | "game_prize";
 export type FraudSeverity = "low" | "medium" | "high" | "critical";
 export type NotificationType =
   | "task_approved"

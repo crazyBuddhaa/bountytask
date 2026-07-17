@@ -6,11 +6,13 @@ import type { GameSlug } from "@/lib/games"
 import { z } from "zod"
 
 const schema = z.object({
-  game_slug: z.enum([...GAME_SLUGS] as [GameSlug, ...GameSlug[]]),
-  score: z.number().int().min(0),
-  completed: z.boolean(),
+  game_slug:        z.enum([...GAME_SLUGS] as [GameSlug, ...GameSlug[]]),
+  score:            z.number().int().min(0),
+  completed:        z.boolean(),
   duration_seconds: z.number().int().min(0).max(3600).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata:         z.record(z.unknown()).optional(),
+  entry_id:         z.string().uuid().nullable().optional(), // ledger row id from /api/games/enter
+  entry_fee_kobo:   z.number().int().min(0).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
 
-  const { game_slug, score, completed, duration_seconds, metadata } = parsed.data
+  const { game_slug, score, completed, duration_seconds, metadata, entry_id, entry_fee_kobo } = parsed.data
   const admin = createAdminClient()
 
   // Daily game: check if already played today
@@ -51,12 +53,13 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from("game_sessions")
     .insert({
-      user_id: user.id,
+      user_id:          user.id,
       game_slug,
       score,
       completed,
       duration_seconds: duration_seconds ?? null,
-      metadata: metadata ?? {},
+      metadata:         { ...metadata ?? {}, ...(entry_id ? { entry_id } : {}) },
+      entry_fee_kobo:   entry_fee_kobo ?? 0,
     })
     .select("id,score,played_at")
     .single()

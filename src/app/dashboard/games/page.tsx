@@ -1,7 +1,9 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import Link from "next/link"
-import { Trophy, Gamepad2, Lock } from "lucide-react"
+import { Trophy, Gamepad2, Lock, Loader2, Coins } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -18,16 +20,30 @@ const GAME_COLORS: Record<GameSlug, string> = {
   'word-scramble':   'from-pink-500/20 to-pink-600/10 border-pink-500/30',
 }
 
-export default function GamesPage() {
-  const [stats, setStats] = useState<Record<GameSlug, GameStat> | null>(null)
-  const [loading, setLoading] = useState(true)
+interface StatsPayload {
+  data: Record<GameSlug, GameStat>
+  fees_enabled: boolean
+  entry_fees: Record<GameSlug, number>
+  balance: number
+}
 
-  useEffect(() => {
+export default function GamesPage() {
+  const [payload, setPayload] = useState<StatsPayload | null>(null)
+  const [loading, setLoading]  = useState(true)
+
+  const refresh = useCallback(() => {
     fetch("/api/games/my-stats")
       .then(r => r.json())
-      .then(j => { setStats(j.data ?? null); setLoading(false) })
+      .then((j: StatsPayload) => { setPayload(j); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const stats      = payload?.data        ?? null
+  const entryFees  = payload?.entry_fees  ?? ({} as Record<GameSlug, number>)
+  const balance    = payload?.balance     ?? 0
+  const feesOn     = payload?.fees_enabled ?? false
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -52,16 +68,26 @@ export default function GamesPage() {
       {/* Info banner */}
       <div className="rounded-xl bounty-gradient p-4 text-white flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
-          <p className="font-semibold text-sm">🏆 Weekly Leaderboard</p>
+          <p className="font-semibold text-sm">🏆 Weekly Prize Pool</p>
           <p className="text-xs opacity-90 mt-0.5">
-            Top players earn prizes every Monday. Entry fees and prize pools coming soon — for now, play free!
+            {feesOn
+              ? "Entry fees fund the weekly prize pool — top 3 players split 80 % every Monday."
+              : "Top players earn prizes every Monday. Entry fees and prize pools are coming soon — for now, play free!"}
           </p>
         </div>
-        <Link href="/dashboard/games/leaderboard">
-          <Button size="sm" className="bg-white/20 hover:bg-white/30 border-0 text-white shrink-0">
-            View Rankings
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          {feesOn && (
+            <div className="bg-white/20 rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5">
+              <Coins className="w-3.5 h-3.5" />
+              Balance: ₦{(balance / 100).toFixed(2)}
+            </div>
+          )}
+          <Link href="/dashboard/games/leaderboard">
+            <Button size="sm" className="bg-white/20 hover:bg-white/30 border-0 text-white">
+              View Rankings
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Daily games */}
@@ -69,7 +95,15 @@ export default function GamesPage() {
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Daily Games</h2>
         <div className="grid sm:grid-cols-2 gap-4">
           {(['wordle', 'higher-or-lower'] as GameSlug[]).map(slug => (
-            <GameCard key={slug} slug={slug} stat={stats?.[slug]} loading={loading} />
+            <GameCard
+              key={slug}
+              slug={slug}
+              stat={stats?.[slug]}
+              loading={loading}
+              entryFeeKobo={entryFees[slug] ?? 0}
+              balance={balance}
+              feesEnabled={feesOn}
+            />
           ))}
         </div>
       </section>
@@ -79,7 +113,15 @@ export default function GamesPage() {
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Arcade Games</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-2 gap-4">
           {(['tap-target', '2048', 'color-rush', 'word-scramble'] as GameSlug[]).map(slug => (
-            <GameCard key={slug} slug={slug} stat={stats?.[slug]} loading={loading} />
+            <GameCard
+              key={slug}
+              slug={slug}
+              stat={stats?.[slug]}
+              loading={loading}
+              entryFeeKobo={entryFees[slug] ?? 0}
+              balance={balance}
+              feesEnabled={feesOn}
+            />
           ))}
         </div>
       </section>
@@ -87,10 +129,56 @@ export default function GamesPage() {
   )
 }
 
-function GameCard({ slug, stat, loading }: { slug: GameSlug; stat?: GameStat; loading: boolean }) {
+function GameCard({
+  slug, stat, loading, entryFeeKobo, balance, feesEnabled,
+}: {
+  slug: GameSlug
+  stat?: GameStat
+  loading: boolean
+  entryFeeKobo: number
+  balance: number
+  feesEnabled: boolean
+}) {
+  const router = useRouter()
   const meta = GAME_META[slug]
   const alreadyPlayed = meta.isDaily && stat?.completed_today
   const colorClass = GAME_COLORS[slug]
+  const hasFee = feesEnabled && entryFeeKobo > 0
+  const canAfford = balance >= entryFeeKobo
+  const [entering, setEntering] = useState(false)
+
+  async function handlePlay() {
+    if (!hasFee) {
+      router.push(`/dashboard/games/${slug}`)
+      return
+    }
+    if (!canAfford) {
+      toast.error(`You need ₦${(entryFeeKobo / 100).toFixed(2)} to play. Top up your balance first.`)
+      return
+    }
+    setEntering(true)
+    try {
+      const r = await fetch("/api/games/enter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game_slug: slug }),
+      })
+      const j = await r.json()
+      if (!r.ok) {
+        toast.error(j.error ?? "Could not start game")
+        return
+      }
+      const { entry_id, fee_kobo } = j.data as { entry_id: string | null; fee_kobo: number }
+      const params = new URLSearchParams()
+      if (entry_id) params.set("entry_id", entry_id)
+      if (fee_kobo) params.set("entry_fee", fee_kobo.toString())
+      router.push(`/dashboard/games/${slug}?${params.toString()}`)
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setEntering(false)
+    }
+  }
 
   return (
     <div className={`relative rounded-xl border bg-gradient-to-br ${colorClass} p-5 flex flex-col gap-4 transition-shadow hover:shadow-md`}>
@@ -102,9 +190,15 @@ function GameCard({ slug, stat, loading }: { slug: GameSlug; stat?: GameStat; lo
             <p className="text-xs text-muted-foreground mt-0.5">{meta.description}</p>
           </div>
         </div>
-        {meta.isDaily && (
-          <Badge variant="secondary" className="text-xs shrink-0">Daily</Badge>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {meta.isDaily && <Badge variant="secondary" className="text-xs shrink-0">Daily</Badge>}
+          {hasFee && (
+            <Badge variant="outline" className="text-xs shrink-0 gap-1 border-amber-400 text-amber-600 dark:text-amber-400">
+              <Coins className="w-3 h-3" />
+              ₦{(entryFeeKobo / 100).toFixed(2)}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -124,12 +218,22 @@ function GameCard({ slug, stat, loading }: { slug: GameSlug; stat?: GameStat; lo
             <Lock className="w-3 h-3" />
             Come back tomorrow
           </div>
+        ) : hasFee && !canAfford ? (
+          <div className="flex items-center gap-1.5 text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-1.5">
+            Insufficient balance
+          </div>
         ) : (
-          <Link href={`/dashboard/games/${slug}`}>
-            <Button size="sm" className="bounty-gradient text-white border-0">
-              Play Now
-            </Button>
-          </Link>
+          <Button
+            size="sm"
+            className="bounty-gradient text-white border-0"
+            disabled={entering}
+            onClick={handlePlay}
+          >
+            {entering
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : hasFee ? `Play · ₦${(entryFeeKobo / 100).toFixed(2)}` : "Play Now"
+            }
+          </Button>
         )}
       </div>
     </div>

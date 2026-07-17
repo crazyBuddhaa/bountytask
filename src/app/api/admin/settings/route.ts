@@ -95,6 +95,15 @@ const settingsSchema = z.object({
 
   // ── Global AI verification ─────────────────────────────────────────────────
   ai_verify_all_tasks: z.boolean().optional(),
+
+  // ── Games entry fees ───────────────────────────────────────────────────────
+  game_entry_fees_enabled:       z.boolean().optional(),
+  game_entry_fee_wordle:         z.number().int().min(0).optional(),
+  game_entry_fee_higher_or_lower: z.number().int().min(0).optional(),
+  game_entry_fee_tap_target:     z.number().int().min(0).optional(),
+  game_entry_fee_2048:           z.number().int().min(0).optional(),
+  game_entry_fee_color_rush:     z.number().int().min(0).optional(),
+  game_entry_fee_word_scramble:  z.number().int().min(0).optional(),
 })
 
 async function assertAdmin(userId: string) {
