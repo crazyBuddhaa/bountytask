@@ -6,7 +6,7 @@ import type { GameSlug } from "@/lib/games"
 import { z } from "zod"
 
 const schema = z.object({
-  game_slug: z.enum(GAME_SLUGS as [GameSlug, ...GameSlug[]]),
+  game_slug: z.enum([...GAME_SLUGS] as [GameSlug, ...GameSlug[]]),
   score: z.number().int().min(0),
   completed: z.boolean(),
   duration_seconds: z.number().int().min(0).max(3600).optional(),
