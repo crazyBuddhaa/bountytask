@@ -6,16 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Payout {
   id: string
@@ -153,9 +150,26 @@ export default function AdminGamesPage() {
 
 function PoolCard({ pool, onSettle, settling }: { pool: Pool; onSettle: (p: Pool) => void; settling: boolean }) {
   const payouts = [...pool.leaderboard_payouts].sort((a, b) => a.rank - b.rank)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
     <Card className={pool.settled ? "opacity-70" : "border-amber-400/60"}>
+      {/* Confirm settle dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Settle {pool.game_slug} — {weekLabel(pool.week_start)}?</DialogTitle>
+            <DialogDescription>
+              This will credit {fmt(pool.prize_pool_kobo)} to the top-3 players (50&nbsp;%&nbsp;/&nbsp;30&nbsp;%&nbsp;/&nbsp;20&nbsp;%) and cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setConfirmOpen(false); onSettle(pool) }}>Confirm &amp; Settle</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -170,26 +184,10 @@ function PoolCard({ pool, onSettle, settling }: { pool: Pool; onSettle: (p: Pool
             <CardDescription className="mt-0.5">{weekLabel(pool.week_start)}</CardDescription>
           </div>
           {!pool.settled && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" disabled={settling} className="shrink-0">
-                  {settling ? <Loader2 className="animate-spin w-4 h-4" /> : <Trophy className="w-4 h-4" />}
-                  Settle
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Settle {pool.game_slug} — {weekLabel(pool.week_start)}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will credit {fmt(pool.prize_pool_kobo)} to the top-3 players (50 % / 30 % / 20 %) and cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => onSettle(pool)}>Confirm & Settle</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button size="sm" disabled={settling} className="shrink-0" onClick={() => setConfirmOpen(true)}>
+              {settling ? <Loader2 className="animate-spin w-4 h-4" /> : <Trophy className="w-4 h-4" />}
+              Settle
+            </Button>
           )}
         </div>
       </CardHeader>
