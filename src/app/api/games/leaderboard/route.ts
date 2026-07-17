@@ -46,7 +46,8 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((row, i) => {
-      const u = row.users as { username: string; full_name: string; avatar_url: string } | null
+      const uRaw = row.users as { username: string; full_name: string; avatar_url: string } | { username: string; full_name: string; avatar_url: string }[] | null
+      const u = Array.isArray(uRaw) ? (uRaw[0] ?? null) : uRaw
       const isMe = row.user_id === user.id
       const rank = i + 1
       // Mask names for ranks 4+, unless it's the current user
