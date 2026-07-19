@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
 const GAME_DURATION = 30 // seconds
-const BASE_TIME_PER_Q = 3000 // ms (shrinks as game progresses)
-const MIN_TIME_PER_Q = 1200
 
 interface ColorDef { name: string; hex: string }
 
@@ -100,9 +98,7 @@ export default function ColorRushPage() {
     }, 1000)
   }
 
-  function nextRound(currentScore: number) {
-    const elapsed = (GAME_DURATION - timeLeft) / GAME_DURATION
-    const timeForQ = Math.max(MIN_TIME_PER_Q, BASE_TIME_PER_Q - elapsed * 1800)
+  function nextRound() {
     setFeedback(null)
     setRound(generateRound())
   }
@@ -120,7 +116,7 @@ export default function ColorRushPage() {
       setWrong(w => w + 1)
     }
 
-    setTimeout(() => nextRound(scoreRef.current), 400)
+    setTimeout(() => nextRound(), 400)
   }
 
   const progress = ((GAME_DURATION - timeLeft) / GAME_DURATION) * 100

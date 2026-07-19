@@ -55,13 +55,22 @@ function move(board: Board, dir: Direction): { board: Board; gain: number; moved
   let totalGain = 0
   let moved = false
 
+  // Rotate the board clockwise so that the target direction becomes "left",
+  // slide all rows left, then rotate back.
+  //
+  // Proof (rotateRight = 90° clockwise):
+  //   • up   → 3 CW rotations (≡ 1 CCW): original top row aligns with left edge
+  //             → sliding left = moving toward row 0 = UP   ✓
+  //   • down → 1 CW rotation: original bottom row aligns with left edge
+  //             → sliding left = moving toward row SIZE-1 = DOWN ✓
+  //   • right → 2 CW rotations: original right column aligns with left edge ✓
   const rotateRight = (b: Board): Board =>
     Array.from({ length: SIZE }, (_, r) =>
       Array.from({ length: SIZE }, (_, c) => b[SIZE - 1 - c][r])
     ) as Board
 
-  const rotations = { left: 0, up: 1, right: 2, down: 3 }
-  const reverseRotations = { left: 0, up: 3, right: 2, down: 1 }
+  const rotations        = { left: 0, up: 3, right: 2, down: 1 }
+  const reverseRotations = { left: 0, up: 1, right: 2, down: 3 }
 
   for (let i = 0; i < rotations[dir]; i++) b = rotateRight(b)
 
@@ -108,6 +117,9 @@ export default function Game2048Page() {
   const [phase, setPhase] = useState<"playing" | "won" | "lost">("playing")
   const [submitted, setSubmitted] = useState(false)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
+  // Use a ref for score so rapid key presses inside the setBoard updater
+  // always read the latest value, not a stale closure snapshot.
+  const scoreRef = useRef(0)
 
   const saveSession = useCallback(async (finalScore: number) => {
     if (submitted) return
@@ -130,7 +142,10 @@ export default function Game2048Page() {
       const { board: next, gain, moved } = move(prev, dir)
       if (!moved) return prev
 
-      const newScore = score + gain
+      // Update score via ref so concurrent updater calls always accumulate
+      // from the true running total, not a stale closure value.
+      scoreRef.current += gain
+      const newScore = scoreRef.current
       setScore(newScore)
       setBestScore(b => Math.max(b, newScore))
 
@@ -150,7 +165,7 @@ export default function Game2048Page() {
       }
       return withNew
     })
-  }, [phase, score, saveSession])
+  }, [phase, saveSession])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -177,6 +192,7 @@ export default function Game2048Page() {
   }
 
   function restart() {
+    scoreRef.current = 0
     setBoard(initBoard())
     setScore(0)
     setPhase("playing")
@@ -230,14 +246,17 @@ export default function Game2048Page() {
         </div>
       </div>
 
-      {/* Controls */}
+      {/* D-pad controls — proper cross layout */}
       <div className="grid grid-cols-3 gap-2 mt-1">
         <div />
         <Button variant="outline" size="sm" onClick={() => handleMove("up")}>↑</Button>
         <div />
         <Button variant="outline" size="sm" onClick={() => handleMove("left")}>←</Button>
-        <Button variant="outline" size="sm" onClick={() => handleMove("down")}>↓</Button>
+        <div />
         <Button variant="outline" size="sm" onClick={() => handleMove("right")}>→</Button>
+        <div />
+        <Button variant="outline" size="sm" onClick={() => handleMove("down")}>↓</Button>
+        <div />
       </div>
 
       {/* Result */}
