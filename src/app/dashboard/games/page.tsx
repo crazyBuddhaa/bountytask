@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
-import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight } from "lucide-react"
+import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +16,11 @@ interface StatsPayload {
   fees_enabled: boolean
   entry_fees: Record<GameSlug, number>
   balance: number
+}
+
+interface PoolPayload {
+  total_prize_pool_kobo: number
+  by_game: Record<GameSlug, { prize_pool_kobo: number; total_entries: number }>
 }
 
 const THEME: Record<GameSlug, { bg: string; border: string; iconBg: string; glow: string }> = {
@@ -32,22 +37,28 @@ const ARCADE_SLUGS: GameSlug[] = ['tap-target', '2048', 'color-rush', 'word-scra
 
 export default function GamesPage() {
   const [payload, setPayload] = useState<StatsPayload | null>(null)
+  const [pools, setPools]     = useState<PoolPayload | null>(null)
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(() => {
-    fetch("/api/games/my-stats")
-      .then(r => r.json())
-      .then((j: StatsPayload) => { setPayload(j); setLoading(false) })
-      .catch(() => setLoading(false))
+    Promise.all([
+      fetch("/api/games/my-stats").then(r => r.json()),
+      fetch("/api/games/pools").then(r => r.json()),
+    ]).then(([stats, poolData]) => {
+      setPayload(stats)
+      if (poolData?.data) setPools(poolData.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
-  const stats     = payload?.data        ?? null
-  const entryFees = payload?.entry_fees  ?? ({} as Record<GameSlug, number>)
-  const balance   = payload?.balance     ?? 0
-  const feesOn    = payload?.fees_enabled ?? false
-  const dailyDone = DAILY_SLUGS.filter(s => stats?.[s]?.completed_today).length
+  const stats      = payload?.data        ?? null
+  const entryFees  = payload?.entry_fees  ?? ({} as Record<GameSlug, number>)
+  const balance    = payload?.balance     ?? 0
+  const feesOn     = payload?.fees_enabled ?? false
+  const dailyDone  = DAILY_SLUGS.filter(s => stats?.[s]?.completed_today).length
+  const totalPool  = pools?.total_prize_pool_kobo ?? 0
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -72,21 +83,35 @@ export default function GamesPage() {
 
       {/* Prize pool strip */}
       <div className="bounty-gradient p-px rounded-xl">
-        <div className="rounded-[calc(0.75rem-1px)] bg-card/90 backdrop-blur-sm px-5 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🏆</span>
-            <div>
+        <div className="rounded-[calc(0.75rem-1px)] bg-card/90 backdrop-blur-sm px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-2xl shrink-0">🏆</span>
+            <div className="min-w-0">
               <p className="font-semibold text-sm">Weekly Prize Pool</p>
-              <p className="text-xs text-muted-foreground">
-                {feesOn
-                  ? "Entry fees fund the pool — top 3 split 80% every Monday"
-                  : "Top players win prizes every Monday · Free to play now"}
-              </p>
+              {feesOn ? (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {loading ? (
+                    <Skeleton className="h-3 w-24" />
+                  ) : totalPool > 0 ? (
+                    <>
+                      <TrendingUp className="w-3 h-3 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        ₦{(totalPool / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-xs text-muted-foreground">accumulated · top 3 split 80 % Monday</span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No entries yet — be the first!</span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-0.5">Top players win prizes every Monday · Free to play now</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {feesOn && (
-              <div className="text-xs font-medium flex items-center gap-1.5 bg-primary/10 text-primary rounded-lg px-3 py-1.5">
+              <div className="text-xs font-medium flex items-center gap-1.5 bg-primary/10 text-primary rounded-lg px-3 py-1.5 tabular-nums">
                 <Coins className="w-3.5 h-3.5" />
                 ₦{(balance / 100).toFixed(2)}
               </div>
