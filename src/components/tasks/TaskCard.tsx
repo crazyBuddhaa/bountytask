@@ -1,9 +1,64 @@
-import { Clock, Zap, Users, ArrowRight, Youtube, Share2 } from "lucide-react"
+import { Clock, Zap, Users, ArrowRight, Youtube, Share2, PlayCircle } from "lucide-react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/utils"
 import type { Task } from "@/types"
+
+// ─── Watch & Earn bundle card ─────────────────────────────────────────────────
+
+interface WatchEarnBundleCardProps {
+  tasks: Task[]
+  onWatch: () => void
+}
+
+export function WatchEarnBundleCard({ tasks, onWatch }: WatchEarnBundleCardProps) {
+  const count = tasks.length
+  const rewardPerVideo = tasks[0]?.reward_amount ?? 0
+  const allSame = tasks.every(t => t.reward_amount === rewardPerVideo)
+
+  return (
+    <Card className="flex flex-col hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group border-l-4 border-l-red-500">
+      <CardContent className="p-5 flex-1">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <Badge variant="outline" className="text-[10px] border-red-200 text-red-600 bg-red-50 gap-1">
+            <Youtube className="w-2.5 h-2.5" /> Watch &amp; Earn
+          </Badge>
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <PlayCircle className="w-2.5 h-2.5" /> {count} video{count !== 1 ? "s" : ""}
+          </Badge>
+        </div>
+
+        <h3 className="font-semibold text-sm leading-snug mb-2 group-hover:text-primary transition-colors">
+          YouTube Watch Tasks
+        </h3>
+        <p className="text-xs text-muted-foreground line-clamp-2">
+          {count} video{count !== 1 ? "s" : ""} available. Watch each to the end and earn instantly — one reward per video.
+        </p>
+
+        <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
+          <Youtube className="w-3 h-3" /> Watch the full video to earn instantly
+        </p>
+      </CardContent>
+
+      <CardFooter className="p-5 pt-0 flex items-center justify-between border-t mt-2">
+        <div>
+          <p className="text-lg font-bold text-primary">
+            {allSame ? formatCurrency(rewardPerVideo) : `up to ${formatCurrency(Math.max(...tasks.map(t => t.reward_amount)))}`}
+            <span className="text-xs font-normal text-muted-foreground ml-1">/ video</span>
+          </p>
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <Zap className="w-2.5 h-2.5 text-primary" /> Instant pay · {count} video{count !== 1 ? "s" : ""} in queue
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onWatch}
+          className="gap-1 border-red-200 text-red-600 hover:bg-red-50">
+          <Youtube className="w-3 h-3" /> Watch
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+}
 
 // ─── Social platform accent colours ──────────────────────────────────────────
 const PLATFORM_BORDER: Record<string, string> = {

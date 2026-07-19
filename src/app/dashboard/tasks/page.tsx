@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TaskCard } from "@/components/tasks/TaskCard"
+import { TaskCard, WatchEarnBundleCard } from "@/components/tasks/TaskCard"
 import { AdTaskCard } from "@/components/tasks/AdTaskCard"
 import { TaskCompletionModal } from "@/components/tasks/TaskCompletionModal"
 import { AdSlot } from "@/components/ads/AdSlot"
@@ -184,14 +184,27 @@ export default function TasksPage() {
           {visibleAdTasks.map(adTask => (
             <AdTaskCard key={adTask.provider} task={adTask} />
           ))}
-          {type !== "ads" && tasks.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onClaim={() => setSelectedTask(task)}
-              onWatch={task.youtube_url ? () => router.push("/dashboard/tasks/watch-videos") : undefined}
-            />
-          ))}
+          {type !== "ads" && (() => {
+            const videoTasks = tasks.filter(t => !!t.youtube_url)
+            const otherTasks = tasks.filter(t => !t.youtube_url)
+            return (
+              <>
+                {videoTasks.length > 0 && (
+                  <WatchEarnBundleCard
+                    tasks={videoTasks}
+                    onWatch={() => router.push("/dashboard/tasks/watch-videos")}
+                  />
+                )}
+                {otherTasks.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClaim={() => setSelectedTask(task)}
+                  />
+                ))}
+              </>
+            )
+          })()}
         </div>
       )}
 
