@@ -4,7 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
-import { getMonetagSettings } from "@/lib/monetag";
+import { getMonetagSettings, parseMonetagSnippet } from "@/lib/monetag";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -56,15 +56,11 @@ export default async function RootLayout({
 }) {
   const monetag = await getMonetagSettings();
 
-  // Strip <script> wrapper tags if the admin pasted the full HTML snippet.
-  const multitag_js =
-    monetag.enabled && monetag.multitag_script.trim()
-      ? monetag.multitag_script
-          .trim()
-          .replace(/^<script[^>]*>/i, "")
-          .replace(/<\/script>$/i, "")
-          .trim()
-      : "";
+  // Parse the admin-pasted snippet into a typed structure.
+  // Handles both external src-based scripts and inline JS blocks.
+  const multitag = monetag.enabled
+    ? parseMonetagSnippet(monetag.multitag_script)
+    : { kind: "empty" as const };
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -76,15 +72,27 @@ export default async function RootLayout({
           crossOrigin="anonymous"
           strategy="beforeInteractive"
         />
+
         {/* Monetag Multitag — sitewide passive ads (OnClick, In-Page Push, Vignette).
-            Only injected when admin has enabled Monetag and pasted their zone script. */}
-        {multitag_js && (
+            Only injected when admin has enabled Monetag and pasted their zone script.
+            Supports both external src-based tags and inline JS snippets. */}
+        {multitag.kind === "src" && (
+          <Script
+            id="monetag-multitag"
+            src={multitag.src}
+            strategy="afterInteractive"
+            data-zone={multitag.dataZone}
+            data-cfasync={multitag.dataCfasync}
+          />
+        )}
+        {multitag.kind === "inline" && (
           <Script
             id="monetag-multitag"
             strategy="afterInteractive"
-            dangerouslySetInnerHTML={{ __html: multitag_js }}
+            dangerouslySetInnerHTML={{ __html: multitag.js }}
           />
         )}
+
         <PageViewTracker />
         {children}
         <Toaster

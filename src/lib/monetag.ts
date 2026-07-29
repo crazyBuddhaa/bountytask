@@ -18,6 +18,11 @@
  * No rewards are credited to users for these — they are passive revenue formats
  * that monetize traffic, not user-action tasks. The existing service worker
  * (public/sw_*.js) handles Monetag Multitag verification automatically.
+ *
+ * Script snippet formats supported by parseMonetagSnippet():
+ *  - External src tag:  <script src="https://..." data-zone="123" ...></script>
+ *  - Inline JS tag:     <script>(function(a,b,...){...})()</script>
+ *  - Raw inline JS:     (function(a,b,...){...})()
  */
 import { unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -31,6 +36,63 @@ export type MonetagSettings = {
   games_interstitial_enabled: boolean
   /** Full <script> snippet for the interstitial zone (games pages only). */
   games_interstitial_script: string
+}
+
+/**
+ * Parsed representation of a Monetag script snippet.
+ *
+ * - `src`    — an external script (<script src="..." data-zone="..." ...>)
+ * - `inline` — raw JavaScript to inject via dangerouslySetInnerHTML
+ * - `empty`  — blank/missing snippet; nothing should be rendered
+ */
+export type ParsedMonetagSnippet =
+  | { kind: "src"; src: string; dataZone?: string; dataCfasync?: string }
+  | { kind: "inline"; js: string }
+  | { kind: "empty" }
+
+/**
+ * Parse a Monetag script snippet pasted by the admin into one of three forms:
+ *
+ * 1. External src tag  →  { kind: "src", src, dataZone?, dataCfasync? }
+ *    e.g. <script src="https://quge5.com/88/tag.min.js" data-zone="265156" async data-cfasync="false"></script>
+ *
+ * 2. Inline JS  →  { kind: "inline", js }
+ *    e.g. <script>(function(a,b,c,d){...})()</script>   or just raw JS without a wrapper tag.
+ *
+ * 3. Empty  →  { kind: "empty" }
+ *    Blank string; caller should render nothing.
+ *
+ * The old stripScriptTags() approach only handled inline JS. This replaces it.
+ */
+export function parseMonetagSnippet(snippet: string): ParsedMonetagSnippet {
+  const trimmed = snippet.trim()
+  if (!trimmed) return { kind: "empty" }
+
+  // ── Detect an external src-based <script> tag ────────────────────────────
+  //   Matches: <script ... src="https://..." ... >
+  const srcMatch = trimmed.match(/^<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/i)
+  if (srcMatch) {
+    const src = srcMatch[1]
+    const zoneMatch  = trimmed.match(/\bdata-zone=["']([^"']+)["']/i)
+    const cfasyncMatch = trimmed.match(/\bdata-cfasync=["']([^"']+)["']/i)
+    return {
+      kind: "src",
+      src,
+      dataZone:    zoneMatch    ? zoneMatch[1]    : undefined,
+      dataCfasync: cfasyncMatch ? cfasyncMatch[1] : undefined,
+    }
+  }
+
+  // ── Strip <script> wrapper and treat the inner content as inline JS ──────
+  const inner = trimmed
+    .replace(/^<script[^>]*>/i, "")
+    .replace(/<\/script>$/i, "")
+    .trim()
+
+  if (inner) return { kind: "inline", js: inner }
+
+  // A <script> tag with no src and no inner content — nothing to render.
+  return { kind: "empty" }
 }
 
 async function _getMonetagSettings(): Promise<MonetagSettings> {
