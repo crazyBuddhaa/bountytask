@@ -49,6 +49,9 @@ const NEWS_SETTINGS_KEYS = new Set([
   "news_earn_enabled",
   "news_earn_kobo_per_read",
   "news_earn_daily_cap",
+  "news_earn_kobo_per_minute",
+  "news_earn_max_minutes_per_article",
+  "news_earn_daily_cap_minutes",
 ])
 
 export const dynamic = "force-dynamic"
@@ -107,10 +110,13 @@ const settingsSchema = z.object({
   ai_verify_all_tasks: z.boolean().optional(),
 
   // ── News feed ──────────────────────────────────────────────────────────────
-  news_enabled:            z.boolean().optional(),
-  news_earn_enabled:       z.boolean().optional(),
-  news_earn_kobo_per_read: z.number().int().min(0).optional(),
-  news_earn_daily_cap:     z.number().int().min(1).max(200).optional(),
+  news_enabled:                       z.boolean().optional(),
+  news_earn_enabled:                  z.boolean().optional(),
+  news_earn_kobo_per_read:            z.number().int().min(0).optional(),
+  news_earn_daily_cap:                z.number().int().min(1).max(200).optional(),
+  news_earn_kobo_per_minute:          z.number().int().min(0).optional(),
+  news_earn_max_minutes_per_article:  z.number().int().min(1).max(60).optional(),
+  news_earn_daily_cap_minutes:        z.number().int().min(1).max(300).optional(),
 
   // ── Games entry fees ───────────────────────────────────────────────────────
   game_entry_fees_enabled:       z.boolean().optional(),

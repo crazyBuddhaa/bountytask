@@ -127,6 +127,12 @@ export default function GamesPage() {
                   ₦{(balance / 100).toFixed(2)}
                 </div>
               )}
+              <Link href="/dashboard/games/payouts">
+                <Button variant="outline" size="sm" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+                  <Trophy className="w-3.5 h-3.5" />
+                  My Winnings
+                </Button>
+              </Link>
               <Link href="/dashboard/games/leaderboard">
                 <Button size="sm" className="bounty-gradient text-white border-0 gap-1.5 shadow-lg shadow-primary/30">
                   View Rankings

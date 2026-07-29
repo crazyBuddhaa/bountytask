@@ -22,10 +22,18 @@ const RSS_FEEDS: { url: string; name: string }[] = [
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 export interface NewsSettings {
-  enabled:         boolean
-  earnEnabled:     boolean
-  earnKoboPerRead: number
-  earnDailyCap:    number
+  enabled:               boolean
+  earnEnabled:           boolean
+  /** Legacy flat reward per article open — kept for backward compat. */
+  earnKoboPerRead:       number
+  /** New: reward per minute spent reading. */
+  earnKoboPerMinute:     number
+  /** Max minutes credited per single article. */
+  earnMaxMinutesPerArticle: number
+  /** Max total minutes credited per day across all articles. */
+  earnDailyCapMinutes:   number
+  /** Legacy article daily cap (kept for backward compat). */
+  earnDailyCap:          number
 }
 
 export const getNewsSettings = unstable_cache(
@@ -34,16 +42,27 @@ export const getNewsSettings = unstable_cache(
     const { data: rows } = await admin
       .from("platform_settings")
       .select("key, value")
-      .in("key", ["news_enabled", "news_earn_enabled", "news_earn_kobo_per_read", "news_earn_daily_cap"])
+      .in("key", [
+        "news_enabled",
+        "news_earn_enabled",
+        "news_earn_kobo_per_read",
+        "news_earn_daily_cap",
+        "news_earn_kobo_per_minute",
+        "news_earn_max_minutes_per_article",
+        "news_earn_daily_cap_minutes",
+      ])
 
     const map = Object.fromEntries((rows ?? []).map(r => [r.key, r.value]))
 
     const parseBool = (v: unknown) => v === "true" || v === true
     return {
-      enabled:         parseBool(map.news_enabled),
-      earnEnabled:     parseBool(map.news_earn_enabled),
-      earnKoboPerRead: Number(map.news_earn_kobo_per_read) || 5,
-      earnDailyCap:    Number(map.news_earn_daily_cap)     || 20,
+      enabled:                  parseBool(map.news_enabled),
+      earnEnabled:              parseBool(map.news_earn_enabled),
+      earnKoboPerRead:          Number(map.news_earn_kobo_per_read)          || 5,
+      earnKoboPerMinute:        Number(map.news_earn_kobo_per_minute)        || 200,
+      earnMaxMinutesPerArticle: Number(map.news_earn_max_minutes_per_article) || 5,
+      earnDailyCapMinutes:      Number(map.news_earn_daily_cap_minutes)      || 30,
+      earnDailyCap:             Number(map.news_earn_daily_cap)              || 20,
     }
   },
   ["news-settings"],
@@ -100,44 +119,40 @@ function inferCategory(title: string, snippet: string | null): string {
   const text = `${title} ${snippet ?? ""}`.toLowerCase()
   if (/politic|senate|house of rep|presidency|governor|election|minister|aso rock|lawmaker/.test(text)) return "politics"
   if (/economy|business|market|stock|naira|inflation|gdp|cbn|investment|banking|trade|revenue/.test(text)) return "business"
-  if (/tech|technology|startup|software|app|internet|data|cyber|artificial intelligence|ai /.test(text)) return "tech"
-  if (/football|soccer|sport|nfl|nba|athlete|match|goal|league|tournament|supereagles/.test(text)) return "sports"
-  if (/music|nollywood|actor|actress|celebrity|movie|film|entertainment|concert|award|bbnaija/.test(text)) return "entertainment"
+  if (/tech|technology|startup|software|app|ai|artificial intelligence|digital|cyber|internet/.test(text)) return "tech"
+  if (/sport|football|soccer|nfl|nba|cricket|tennis|olympic|fifa|premier league|laliga/.test(text)) return "sports"
+  if (/entertainment|music|movie|film|celebrity|nollywood|award|concert|album/.test(text)) return "entertainment"
   return "general"
 }
 
 /** Parse all <item> blocks from an RSS XML string. */
 function parseRssItems(xml: string): RssItem[] {
   const items: RssItem[] = []
-  const itemRe = /<item>([\s\S]*?)<\/item>/g
-  let match
+  const itemRe = /<item[^>]*>([\s\S]*?)<\/item>/gi
+  let match: RegExpExecArray | null
 
   while ((match = itemRe.exec(xml)) !== null) {
-    const chunk = match[1]
+    const block = match[1]
 
-    const title = getTagContent(chunk, "title")
-    if (!title) continue
+    const title   = getTagContent(block, "title")
+    const link    = getTagContent(block, "link") ?? getTagContent(block, "guid")
+    if (!title || !link) continue
 
-    // Link resolution: <link>, <link href="...">, or <guid isPermaLink="true">
-    let link: string | null = getTagContent(chunk, "link")
-    if (!link) link = getAttr(chunk, "link", "href")
-    if (!link) {
-      const guidM = /<guid[^>]*>([^<]+)<\/guid>/i.exec(chunk)
-      if (guidM && guidM[1].trim().startsWith("http")) link = guidM[1].trim()
+    const descRaw = getTagContent(block, "description") ?? getTagContent(block, "summary") ?? ""
+    const snippet = descRaw ? stripHtml(descRaw) : null
+
+    // Thumbnail: try media:content, media:thumbnail, then enclosure
+    let thumbnail =
+      getAttr(block, "media:content", "url") ??
+      getAttr(block, "media:thumbnail", "url") ??
+      getAttr(block, "enclosure", "url")
+
+    // Filter out non-image enclosures (audio/video)
+    if (thumbnail && !/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(thumbnail)) {
+      thumbnail = null
     }
-    if (!link) continue
 
-    const rawDesc = getTagContent(chunk, "description") ?? ""
-    const snippet = rawDesc ? stripHtml(rawDesc) : null
-
-    // Thumbnail priority: media:content > media:thumbnail > enclosure
-    const thumbnail =
-      getAttr(chunk, "media:content",   "url") ??
-      getAttr(chunk, "media:thumbnail", "url") ??
-      getAttr(chunk, "enclosure",       "url") ??
-      null
-
-    const pubDate = getTagContent(chunk, "pubDate") ?? null
+    const pubDate = getTagContent(block, "pubDate") ?? getTagContent(block, "dc:date")
 
     items.push({ title, link, snippet, thumbnail, pubDate })
   }
@@ -145,9 +160,9 @@ function parseRssItems(xml: string): RssItem[] {
   return items
 }
 
-// ─── Fetch & store ────────────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-export interface FeedResult {
+interface FeedResult {
   source:   string
   fetched:  number
   inserted: number
@@ -155,9 +170,8 @@ export interface FeedResult {
 }
 
 /**
- * Fetches all configured RSS feeds, parses them, and upserts new articles into
- * the news_articles table. Existing articles (by URL) are silently skipped.
- * Articles older than 7 days are pruned after each run.
+ * Fetch all configured RSS feeds, parse items, and upsert into news_articles.
+ * Prunes articles older than 7 days at the end.
  */
 export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
   const admin   = createAdminClient()
@@ -166,7 +180,7 @@ export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
   for (const feed of RSS_FEEDS) {
     try {
       const res = await fetch(feed.url, {
-        headers: { "User-Agent": "BountyTask/1.0 (+https://bountytask.dpdns.org)" },
+        headers: { "User-Agent": "BountyTask/1.0 RSS Reader" },
         signal:  AbortSignal.timeout(10_000),
       })
 

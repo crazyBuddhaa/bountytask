@@ -1,12 +1,9 @@
 /**
  * GET /api/news/[id]/content
  *
- * Returns the full extracted text of an article.
+ * Returns the full article row (metadata + extracted body text).
  * On first call the article URL is fetched, the main body is extracted and
  * stored in news_articles.content so every subsequent call is instant.
- *
- * The client displays ~65 % of the text inline with an ad slot at the split
- * point, then a hard link to the original publisher for the remainder.
  */
 
 import { NextRequest, NextResponse } from "next/server"
@@ -38,26 +35,26 @@ function stripHtml(html: string): string {
 /**
  * Pull the most relevant block of text from raw HTML.
  * Priority: <article> → <main> → largest <div class="*content*"> → <body>
- * Caps at 8 000 characters (plenty for 65 % display + overflow CTA).
+ * Caps at 12 000 characters (full article, no truncation for display).
  */
 function extractBody(html: string): string {
   // Try <article> first
   const articleM = /<article[^>]*>([\s\S]*?)<\/article>/i.exec(html)
-  if (articleM) return stripHtml(articleM[1]).slice(0, 8000)
+  if (articleM) return stripHtml(articleM[1]).slice(0, 12000)
 
   // Try <main>
   const mainM = /<main[^>]*>([\s\S]*?)<\/main>/i.exec(html)
-  if (mainM) return stripHtml(mainM[1]).slice(0, 8000)
+  if (mainM) return stripHtml(mainM[1]).slice(0, 12000)
 
   // Try a div whose class contains "content", "article", "post", or "story"
   const divM = /<div[^>]*class="[^"]*(?:content|article|post|story|entry)[^"]*"[^>]*>([\s\S]*?)<\/div>/i.exec(html)
-  if (divM) return stripHtml(divM[1]).slice(0, 8000)
+  if (divM) return stripHtml(divM[1]).slice(0, 12000)
 
   // Fall back to the full body (will be noisier but still readable)
   const bodyM = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)
-  if (bodyM) return stripHtml(bodyM[1]).slice(0, 8000)
+  if (bodyM) return stripHtml(bodyM[1]).slice(0, 12000)
 
-  return stripHtml(html).slice(0, 8000)
+  return stripHtml(html).slice(0, 12000)
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +72,10 @@ export async function GET(
   const { id: articleId } = await params
   const admin = createAdminClient()
 
-  // Fetch the article row (need url + cached content)
+  // Fetch the full article row
   const { data: article } = await admin
     .from("news_articles")
-    .select("id, article_url, content")
+    .select("id, title, snippet, thumbnail_url, source_name, article_url, category, published_at, content")
     .eq("id", articleId)
     .eq("is_active", true)
     .maybeSingle()
@@ -87,10 +84,10 @@ export async function GET(
 
   // Return cached content if we already have it
   if (article.content) {
-    return NextResponse.json({ content: article.content })
+    return NextResponse.json({ article })
   }
 
-  // Fetch the article page
+  // Fetch the article page and extract body
   let content = ""
   try {
     const res = await fetch(article.article_url, {
@@ -107,7 +104,7 @@ export async function GET(
       content = extractBody(html)
     }
   } catch {
-    // Network failure — return empty so the client degrades gracefully
+    // Network failure — return the article without content so client degrades gracefully
   }
 
   // Cache in DB (fire-and-forget, don't block the response)
@@ -119,5 +116,5 @@ export async function GET(
       .then(() => {})
   }
 
-  return NextResponse.json({ content })
+  return NextResponse.json({ article: { ...article, content: content || null } })
 }

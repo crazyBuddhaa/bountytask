@@ -62,6 +62,9 @@ type Settings = {
   news_earn_enabled: boolean
   news_earn_kobo_per_read: number
   news_earn_daily_cap: number
+  news_earn_kobo_per_minute: number
+  news_earn_max_minutes_per_article: number
+  news_earn_daily_cap_minutes: number
   game_entry_fees_enabled: boolean
   game_entry_fee_wordle: number
   game_entry_fee_higher_or_lower: number
@@ -111,6 +114,9 @@ const DEFAULTS: Settings = {
   news_earn_enabled: false,
   news_earn_kobo_per_read: 5,
   news_earn_daily_cap: 20,
+  news_earn_kobo_per_minute: 200,
+  news_earn_max_minutes_per_article: 5,
+  news_earn_daily_cap_minutes: 30,
   game_entry_fees_enabled: false,
   game_entry_fee_wordle: 1000,
   game_entry_fee_higher_or_lower: 1000,
@@ -171,10 +177,13 @@ export default function AdminSettingsPage() {
             monetag_games_interstitial_enabled: data.monetag_games_interstitial_enabled ?? false,
             monetag_games_interstitial_script:  data.monetag_games_interstitial_script  ?? "",
             ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
-            news_enabled:            data.news_enabled            ?? false,
-            news_earn_enabled:       data.news_earn_enabled       ?? false,
-            news_earn_kobo_per_read: Number(data.news_earn_kobo_per_read) || 5,
-            news_earn_daily_cap:     Number(data.news_earn_daily_cap)     || 20,
+            news_enabled:                       data.news_enabled                       ?? false,
+            news_earn_enabled:                  data.news_earn_enabled                  ?? false,
+            news_earn_kobo_per_read:            Number(data.news_earn_kobo_per_read)            || 5,
+            news_earn_daily_cap:                Number(data.news_earn_daily_cap)                || 20,
+            news_earn_kobo_per_minute:          Number(data.news_earn_kobo_per_minute)          || 200,
+            news_earn_max_minutes_per_article:  Number(data.news_earn_max_minutes_per_article)  || 5,
+            news_earn_daily_cap_minutes:        Number(data.news_earn_daily_cap_minutes)        || 30,
             game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
             game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
             game_entry_fee_higher_or_lower: data.game_entry_fee_higher_or_lower ?? 1000,
@@ -876,45 +885,66 @@ export default function AdminSettingsPage() {
               {settings.news_earn_enabled && (
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="news_earn_kobo">Reward per article (₦)</Label>
+                    <Label htmlFor="news_earn_per_min">Reward per minute read (₦)</Label>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-muted-foreground">₦</span>
                       <Input
-                        id="news_earn_kobo"
+                        id="news_earn_per_min"
                         type="number"
                         min={0}
                         step={0.01}
-                        value={(settings.news_earn_kobo_per_read / 100).toFixed(2)}
+                        value={((settings.news_earn_kobo_per_minute ?? 200) / 100).toFixed(2)}
                         onChange={e =>
                           setSettings(s => ({
                             ...s,
-                            news_earn_kobo_per_read: Math.round(Number(e.target.value) * 100),
+                            news_earn_kobo_per_minute: Math.round(Number(e.target.value) * 100),
                           }))
                         }
                         className="w-28"
                       />
                       <span className="text-xs text-muted-foreground">
-                        ({settings.news_earn_kobo_per_read} kobo)
+                        ({settings.news_earn_kobo_per_minute ?? 200} kobo)
                       </span>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Credited every 60 s a user actively reads an article.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="news_daily_cap">Daily article cap</Label>
+                    <Label htmlFor="news_max_per_article">Max minutes per article</Label>
                     <Input
-                      id="news_daily_cap"
+                      id="news_max_per_article"
                       type="number"
                       min={1}
-                      max={200}
-                      value={settings.news_earn_daily_cap}
+                      max={60}
+                      value={settings.news_earn_max_minutes_per_article ?? 5}
                       onChange={e =>
-                        setSettings(s => ({ ...s, news_earn_daily_cap: Number(e.target.value) }))
+                        setSettings(s => ({ ...s, news_earn_max_minutes_per_article: Number(e.target.value) }))
                       }
                       className="w-28"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Max articles credited per user per day.
-                      Max daily earn: ₦{((settings.news_earn_daily_cap * settings.news_earn_kobo_per_read) / 100).toFixed(2)}.
+                      Caps earn per single article. Max per article: ₦{(((settings.news_earn_max_minutes_per_article ?? 5) * (settings.news_earn_kobo_per_minute ?? 200)) / 100).toFixed(2)}.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="news_daily_cap_min">Daily cap (minutes)</Label>
+                    <Input
+                      id="news_daily_cap_min"
+                      type="number"
+                      min={1}
+                      max={300}
+                      value={settings.news_earn_daily_cap_minutes ?? 30}
+                      onChange={e =>
+                        setSettings(s => ({ ...s, news_earn_daily_cap_minutes: Number(e.target.value) }))
+                      }
+                      className="w-28"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Total minutes credited across all articles per day.
+                      Max daily earn: ₦{((( settings.news_earn_daily_cap_minutes ?? 30) * (settings.news_earn_kobo_per_minute ?? 200)) / 100).toFixed(2)}.
                     </p>
                   </div>
                 </div>

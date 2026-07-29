@@ -1,31 +1,30 @@
 /**
  * POST /api/news/[id]/read
  *
- * Marks an article as read for the authenticated user.
- * If earn-on-read is enabled and the user hasn't hit the daily cap,
- * credits a small ledger entry and returns { credited: true, kobo: N }.
+ * Marks an article as opened and creates the news_reads row that the
+ * heartbeat endpoint requires. Does NOT credit anything — earning now
+ * happens via /api/news/[id]/heartbeat (per-minute time-on-page).
  *
- * Idempotent: a second call for the same article returns { alreadyRead: true }
- * without touching the ledger.
+ * Idempotent: calling it a second time is a no-op (returns alreadyRead: true).
  */
 
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getNewsSettings } from "@/lib/news"
-import { appendLedger } from "@/lib/ledger"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(
-  _request: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: articleId } = await params
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { id: articleId } = await params
   const admin = createAdminClient()
 
   // Verify the article exists and is active
@@ -38,48 +37,35 @@ export async function POST(
 
   if (!article) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // Idempotency: already read?
+  // Idempotency check
   const { data: existing } = await admin
     .from("news_reads")
-    .select("id, credited")
-    .eq("user_id",   user.id)
+    .select("id, minutes_credited")
+    .eq("user_id", user.id)
     .eq("article_id", articleId)
     .maybeSingle()
 
-  if (existing) return NextResponse.json({ credited: false, alreadyRead: true })
-
-  // ── Earn logic ────────────────────────────────────────────────────────────
-  const settings = await getNewsSettings()
-  let credited   = false
-
-  if (settings.earnEnabled && settings.earnKoboPerRead > 0) {
-    // Count articles credited today (UTC)
-    const startOfDay = new Date()
-    startOfDay.setUTCHours(0, 0, 0, 0)
-
-    const { count: readsToday } = await admin
-      .from("news_reads")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id",  user.id)
-      .eq("credited", true)
-      .gte("read_at", startOfDay.toISOString())
-
-    if ((readsToday ?? 0) < settings.earnDailyCap) {
-      await appendLedger({ userId: user.id, type: "credit", delta: settings.earnKoboPerRead, refType: "news_read_reward", refId: articleId })
-      credited = true
-    }
+  if (existing) {
+    return NextResponse.json({
+      alreadyRead:    true,
+      minutesCredited: existing.minutes_credited ?? 0,
+    })
   }
 
-  // Insert the read record
+  // Create the read record — earning happens via heartbeat
   await admin.from("news_reads").insert({
     user_id:    user.id,
     article_id: articleId,
-    credited,
+    credited:   false,
   })
 
+  const settings = await getNewsSettings()
+
   return NextResponse.json({
-    credited,
-    alreadyRead: false,
-    kobo: credited ? settings.earnKoboPerRead : 0,
+    alreadyRead:         false,
+    earnEnabled:         settings.earnEnabled,
+    koboPerMinute:       settings.earnKoboPerMinute,
+    maxMinutesPerArticle: settings.earnMaxMinutesPerArticle,
+    dailyCapMinutes:     settings.earnDailyCapMinutes,
   })
 }
