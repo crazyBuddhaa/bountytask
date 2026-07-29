@@ -65,7 +65,7 @@ export async function POST(
       .gte("read_at", startOfDay.toISOString())
 
     if ((readsToday ?? 0) < settings.earnDailyCap) {
-      await appendLedger(user.id, "credit", settings.earnKoboPerRead, "news_read_reward", articleId)
+      await appendLedger({ userId: user.id, type: "credit", delta: settings.earnKoboPerRead, refType: "news_read_reward", refId: articleId })
       credited = true
     }
   }
