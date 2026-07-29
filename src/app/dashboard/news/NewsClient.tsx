@@ -1,14 +1,16 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { toast } from "sonner"
 import {
   ExternalLink, Newspaper, Clock, TrendingUp, RefreshCw,
+  ChevronDown, ChevronUp, X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
+import { AdSlot } from "@/components/ads/AdSlot"
 import type { NewsSettings } from "@/lib/news"
 import { formatDistanceToNow } from "date-fns"
 
@@ -33,7 +35,7 @@ interface Props {
   readsToday:      number
 }
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
   { value: "all",           label: "All"           },
@@ -54,7 +56,252 @@ const CATEGORY_STYLES: Record<string, string> = {
   general:       "bg-gray-50   text-gray-700   border-gray-200   dark:bg-gray-950/40   dark:text-gray-300   dark:border-gray-800",
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Article reader component ─────────────────────────────────────────────────
+
+interface ArticleReaderProps {
+  article:   NewsArticle
+  onClose:   () => void
+  onCredited: () => void
+  earnEnabled:     boolean
+  earnKoboPerRead: number
+}
+
+function ArticleReader({ article, onClose, onCredited, earnEnabled, earnKoboPerRead }: ArticleReaderProps) {
+  const [content,  setContent]  = useState<string | null>(null)
+  const [loading,  setLoading]  = useState(true)
+  const readerRef = useRef<HTMLDivElement>(null)
+
+  // Scroll the reader into view
+  useEffect(() => {
+    readerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [])
+
+  // Fetch content + fire read tracking in parallel on mount
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchContent = async () => {
+      try {
+        const res  = await fetch(`/api/news/${article.id}/content`)
+        const json = await res.json()
+        if (!cancelled) setContent(json.content || null)
+      } catch {
+        if (!cancelled) setContent(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    const trackRead = async () => {
+      if (article.read) return
+      try {
+        const res  = await fetch(`/api/news/${article.id}/read`, { method: "POST" })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json.credited) {
+          onCredited()
+          toast.success(`+₦${(json.kobo / 100).toFixed(2)} earned!`, {
+            description: "Credited for reading an article.",
+            duration: 3000,
+          })
+        }
+      } catch { /* silent */ }
+    }
+
+    fetchContent()
+    trackRead()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article.id])
+
+  // Split content at 65 %
+  const previewText  = content ? content.slice(0, Math.floor(content.length * 0.65)) : null
+  const hasMore      = content ? content.length > Math.floor(content.length * 0.65) : false
+
+  return (
+    <div ref={readerRef} className="rounded-2xl border border-primary/30 bg-card shadow-sm overflow-hidden">
+      {/* Article header */}
+      <div className="p-5 border-b border-border">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${
+                  CATEGORY_STYLES[article.category] ?? CATEGORY_STYLES.general
+                }`}
+              >
+                {article.category}
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">{article.source_name}</span>
+              {article.published_at && (
+                <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                  <Clock className="w-2.5 h-2.5" />
+                  {formatDistanceToNow(new Date(article.published_at), { addSuffix: true })}
+                </span>
+              )}
+            </div>
+            <h2 className="font-bold text-base leading-snug">{article.title}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Close reader"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Thumbnail */}
+        {article.thumbnail_url && (
+          <div className="mt-3 rounded-xl overflow-hidden max-h-52 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={article.thumbnail_url}
+              alt={article.title}
+              className="w-full object-cover max-h-52"
+              onError={e => { (e.currentTarget as HTMLImageElement).parentElement?.classList.add("hidden") }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Article body */}
+      <div className="p-5 space-y-4">
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className={`h-4 ${i % 3 === 2 ? "w-4/5" : "w-full"}`} />
+            ))}
+          </div>
+        ) : !previewText ? (
+          <p className="text-sm text-muted-foreground italic">
+            Content preview isn&apos;t available for this article.
+          </p>
+        ) : (
+          <>
+            {/* First 65 % of the content */}
+            <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+              {previewText}
+            </p>
+
+            {/* ── Inline ad slot ── */}
+            <div className="rounded-xl overflow-hidden border border-border">
+              <AdSlot placement="news" />
+            </div>
+
+            {/* Fade-out teaser for remaining 35 % */}
+            {hasMore && (
+              <div className="relative">
+                <p className="text-sm leading-relaxed text-muted-foreground line-clamp-3 whitespace-pre-line">
+                  {content!.slice(Math.floor(content!.length * 0.65))}
+                </p>
+                <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* CTA row */}
+        <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3 border-t border-border">
+          <a
+            href={article.article_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bounty-gradient text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Read full article on {article.source_name}
+          </a>
+          {earnEnabled && !article.read && (
+            <span className="text-xs text-muted-foreground">
+              +₦{(earnKoboPerRead / 100).toFixed(2)} credited for opening this article
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Article card (collapsed) ─────────────────────────────────────────────────
+
+interface ArticleCardProps {
+  article:    NewsArticle
+  isExpanded: boolean
+  onToggle:   () => void
+}
+
+function ArticleCard({ article, isExpanded, onToggle }: ArticleCardProps) {
+  return (
+    <article
+      className={`group rounded-2xl border bg-card transition-all duration-200 overflow-hidden cursor-pointer ${
+        isExpanded
+          ? "border-primary/40 shadow-sm"
+          : article.read
+            ? "opacity-60 hover:opacity-100 hover:border-primary/30"
+            : "hover:border-primary/30 hover:shadow-sm"
+      }`}
+      onClick={onToggle}
+    >
+      <div className="p-4 flex gap-4">
+        {/* Thumbnail */}
+        {article.thumbnail_url && (
+          <div className="w-24 h-20 rounded-lg overflow-hidden shrink-0 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={article.thumbnail_url}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={e => { (e.currentTarget as HTMLImageElement).parentElement?.classList.add("hidden") }}
+            />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${
+                CATEGORY_STYLES[article.category] ?? CATEGORY_STYLES.general
+              }`}
+            >
+              {article.category}
+            </span>
+            <span className="text-xs font-medium text-muted-foreground">{article.source_name}</span>
+            {article.published_at && (
+              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                <Clock className="w-2.5 h-2.5" />
+                {formatDistanceToNow(new Date(article.published_at), { addSuffix: true })}
+              </span>
+            )}
+            {article.read && (
+              <span className="text-[10px] text-muted-foreground/60 italic">read</span>
+            )}
+          </div>
+
+          <h3 className="font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-2 mb-1">
+            {article.title}
+          </h3>
+
+          {article.snippet && (
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-2">
+              {article.snippet}
+            </p>
+          )}
+
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+            {isExpanded
+              ? <><ChevronUp className="w-3 h-3" /> Collapse</>
+              : <><ChevronDown className="w-3 h-3" /> Read article</>
+            }
+          </span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function NewsClient({
   initialArticles,
@@ -69,8 +316,9 @@ export function NewsClient({
   const [page,        setPage]        = useState(1)
   const [hasMore,     setHasMore]     = useState(initialHasMore)
   const [readsToday,  setReadsToday]  = useState(initialReadsToday)
+  const [expandedId,  setExpandedId]  = useState<string | null>(null)
 
-  // ── Fetch helpers ──────────────────────────────────────────────────────────
+  // ── Feed fetching ──────────────────────────────────────────────────────────
 
   const fetchPage = useCallback(async (cat: string, pg: number, append = false) => {
     if (!append) setLoading(true)
@@ -81,6 +329,7 @@ export function NewsClient({
       if (!res.ok) throw new Error(json.error)
       setArticles(prev => append ? [...prev, ...json.data] : json.data)
       setHasMore(json.hasMore)
+      setExpandedId(null)
     } catch {
       toast.error("Failed to load news")
     } finally {
@@ -102,34 +351,15 @@ export function NewsClient({
     fetchPage(category, next, true)
   }, [page, category, fetchPage])
 
-  // ── Read tracking ──────────────────────────────────────────────────────────
+  // ── Article open / collapse ────────────────────────────────────────────────
 
-  const handleOpen = useCallback(async (article: NewsArticle) => {
-    // Open immediately — don't make the user wait for tracking
-    window.open(article.article_url, "_blank", "noopener,noreferrer")
-    if (article.read) return
+  const toggleArticle = useCallback((id: string) => {
+    setExpandedId(prev => prev === id ? null : id)
+  }, [])
 
-    // Fire read in background
-    try {
-      const res  = await fetch(`/api/news/${article.id}/read`, { method: "POST" })
-      if (!res.ok) return
-      const json = await res.json()
-
-      // Mark as read locally
-      setArticles(prev =>
-        prev.map(a => a.id === article.id ? { ...a, read: true } : a)
-      )
-
-      if (json.credited) {
-        setReadsToday(prev => prev + 1)
-        toast.success(`+₦${(json.kobo / 100).toFixed(2)} earned!`, {
-          description: "Credited for reading an article.",
-          duration: 3000,
-        })
-      }
-    } catch {
-      // Fail silently — don't block the user
-    }
+  const handleCredited = useCallback((articleId: string) => {
+    setReadsToday(prev => prev + 1)
+    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, read: true } : a))
   }, [])
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -230,79 +460,30 @@ export function NewsClient({
       ) : (
         <div className="space-y-3">
           {articles.map((article, index) => (
-            <div key={article.id}>
-              {/* Native ad slot placeholder every 6 articles */}
+            <div key={article.id} className="space-y-3">
+              {/* Ad slot every 6 articles (between cards, not inside them) */}
               {index > 0 && index % 6 === 0 && (
-                <div className="h-px bg-border my-1" aria-hidden="true" />
+                <div className="rounded-xl overflow-hidden border border-border">
+                  <AdSlot placement="news" />
+                </div>
               )}
 
-              <article
-                className={`group rounded-2xl border bg-card transition-all duration-200 overflow-hidden cursor-pointer hover:border-primary/40 hover:shadow-sm ${
-                  article.read ? "opacity-60" : ""
-                }`}
-                onClick={() => handleOpen(article)}
-              >
-                <div className="p-4 flex gap-4">
-                  {/* Thumbnail */}
-                  {article.thumbnail_url && (
-                    <div className="w-24 h-20 rounded-lg overflow-hidden shrink-0 bg-muted">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={article.thumbnail_url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        onError={e => {
-                          const el = e.currentTarget as HTMLImageElement
-                          el.parentElement?.classList.add("hidden")
-                        }}
-                      />
-                    </div>
-                  )}
+              <ArticleCard
+                article={article}
+                isExpanded={expandedId === article.id}
+                onToggle={() => toggleArticle(article.id)}
+              />
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    {/* Meta row */}
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${
-                          CATEGORY_STYLES[article.category] ?? CATEGORY_STYLES.general
-                        }`}
-                      >
-                        {article.category}
-                      </span>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {article.source_name}
-                      </span>
-                      {article.published_at && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                          <Clock className="w-2.5 h-2.5" />
-                          {formatDistanceToNow(new Date(article.published_at), { addSuffix: true })}
-                        </span>
-                      )}
-                      {article.read && (
-                        <span className="text-[10px] text-muted-foreground/60 italic">read</span>
-                      )}
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-2 mb-1">
-                      {article.title}
-                    </h3>
-
-                    {/* Snippet */}
-                    {article.snippet && (
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-2">
-                        {article.snippet}
-                      </p>
-                    )}
-
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-                      <ExternalLink className="w-3 h-3" />
-                      Read full article
-                    </span>
-                  </div>
-                </div>
-              </article>
+              {/* Inline reader — appears directly below the card when expanded */}
+              {expandedId === article.id && (
+                <ArticleReader
+                  article={article}
+                  onClose={() => setExpandedId(null)}
+                  onCredited={() => handleCredited(article.id)}
+                  earnEnabled={settings.earnEnabled && !capHit}
+                  earnKoboPerRead={settings.earnKoboPerRead}
+                />
+              )}
             </div>
           ))}
 
@@ -310,10 +491,7 @@ export function NewsClient({
             <div className="text-center pt-2">
               <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Loading…
-                  </>
+                  <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Loading…</>
                 ) : (
                   "Load more articles"
                 )}

@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 
-type Placement = "dashboard" | "tasklist" | "earnings"
+type Placement = "dashboard" | "tasklist" | "earnings" | "news"
 
 /**
  * Renders an admin-configured ad snippet for a given placement.
@@ -27,6 +27,7 @@ export function AdSlot({ placement }: { placement: Placement }) {
         const html =
           placement === "dashboard" ? data.dashboard_snippet :
           placement === "tasklist"  ? data.tasklist_snippet :
+          placement === "news"      ? (data.news_snippet ?? data.dashboard_snippet) :
           /* earnings */              (data.dashboard_snippet ?? "")
         if (html?.trim()) {
           setSnippet(html)
