@@ -166,12 +166,20 @@ interface FeedResult {
   source:   string
   fetched:  number
   inserted: number
+  deleted:  number
   error?:   string
 }
 
 /**
  * Fetch all configured RSS feeds, parse items, and upsert into news_articles.
- * Prunes articles older than 7 days at the end.
+ *
+ * After each successful feed fetch the function immediately deletes every
+ * stored article from that source whose URL is no longer in the live feed.
+ * This keeps the table exactly as fresh as the upstream RSS — no 7-day
+ * accumulation, no stale rows.
+ *
+ * Feeds that fail (network error, bad HTTP status, zero items) are skipped
+ * for the delete step so a transient outage never wipes good articles.
  */
 export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
   const admin   = createAdminClient()
@@ -190,9 +198,13 @@ export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
       const items = parseRssItems(xml)
 
       if (items.length === 0) {
-        results.push({ source: feed.name, fetched: 0, inserted: 0 })
+        // Feed returned nothing — skip upsert AND delete to avoid wiping articles
+        // due to an empty / malformed response.
+        results.push({ source: feed.name, fetched: 0, inserted: 0, deleted: 0 })
         continue
       }
+
+      const currentUrls = items.map(i => i.link)
 
       const rows = items.map(item => ({
         title:         item.title,
@@ -208,28 +220,29 @@ export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
         is_active:     true,
       }))
 
+      // Upsert fresh articles (skip duplicates so we don't overwrite cached content)
       const { error, count } = await admin
         .from("news_articles")
         .upsert(rows, { onConflict: "article_url", ignoreDuplicates: true, count: "exact" })
 
+      // Delete stale articles for this source — anything not in the live feed right now
+      const { count: deleted } = await admin
+        .from("news_articles")
+        .delete({ count: "exact" })
+        .eq("source_name", feed.name)
+        .not("article_url", "in", `(${currentUrls.map(u => `"${u}"`).join(",")})`)
+
       results.push({
         source:   feed.name,
         fetched:  items.length,
-        inserted: count ?? 0,
+        inserted: count   ?? 0,
+        deleted:  deleted ?? 0,
         error:    error?.message,
       })
     } catch (err) {
-      results.push({ source: feed.name, fetched: 0, inserted: 0, error: String(err) })
+      results.push({ source: feed.name, fetched: 0, inserted: 0, deleted: 0, error: String(err) })
     }
   }
-
-  // Prune articles older than 7 days to keep the table small
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - 7)
-  await admin
-    .from("news_articles")
-    .delete()
-    .lt("published_at", cutoff.toISOString())
 
   return results
 }
