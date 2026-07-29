@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle } from "lucide-react"
+import Image from "next/image"
+import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -18,7 +19,7 @@ interface GuessRecord { value: number; hint: "higher" | "lower" | "correct" }
 function Stars({ won, guesses }: { won: boolean; guesses: number }) {
   const n = !won ? 0 : guesses <= 3 ? 3 : guesses <= 5 ? 2 : 1
   return (
-    <div className="flex justify-center gap-1">
+    <div className="flex justify-center gap-1.5">
       {[1, 2, 3].map(i => (
         <span key={i} className={`text-2xl ${i <= n ? "" : "opacity-20 grayscale"}`}>⭐</span>
       ))}
@@ -27,17 +28,16 @@ function Stars({ won, guesses }: { won: boolean; guesses: number }) {
 }
 
 export default function HigherOrLowerPage() {
-  const [secret, setSecret] = useState(0)
-  const [date, setDate] = useState("")
-  const [guess, setGuess] = useState("")
+  const [secret, setSecret]   = useState(0)
+  const [date, setDate]       = useState("")
+  const [guess, setGuess]     = useState("")
   const [history, setHistory] = useState<GuessRecord[]>([])
   const [gameOver, setGameOver] = useState(false)
-  const [won, setWon] = useState(false)
+  const [won, setWon]         = useState(false)
   const [loading, setLoading] = useState(true)
   const [alreadyPlayed, setAlreadyPlayed] = useState(false)
-  // Track remaining possible range for the range bar
-  const [minVal, setMinVal] = useState(1)
-  const [maxVal, setMaxVal] = useState(100)
+  const [minVal, setMinVal]   = useState(1)
+  const [maxVal, setMaxVal]   = useState(100)
   const sessionSaved = useRef(false)
 
   useEffect(() => {
@@ -72,7 +72,6 @@ export default function HigherOrLowerPage() {
     setHistory(newHistory)
     setGuess("")
 
-    // Narrow the range
     if (hint === "higher") setMinVal(Math.max(minVal, num + 1))
     if (hint === "lower")  setMaxVal(Math.min(maxVal, num - 1))
 
@@ -88,68 +87,81 @@ export default function HigherOrLowerPage() {
     }
   }
 
-  const remaining  = MAX_GUESSES - history.length
-  const rangeSpan  = maxVal - minVal
-  const barWidth   = Math.max(4, (rangeSpan / 99) * 100)
-  const barLeft    = ((minVal - 1) / 99) * 100
+  const remaining = MAX_GUESSES - history.length
+  const rangeSpan = maxVal - minVal
+  const barWidth  = Math.max(4, (rangeSpan / 99) * 100)
+  const barLeft   = ((minVal - 1) / 99) * 100
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
-      <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
     </div>
   )
 
   return (
-    <div className="flex flex-col gap-6 max-w-md mx-auto">
+    <div className="flex flex-col gap-5 max-w-md mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/dashboard/games" className="text-muted-foreground hover:text-foreground">
+        <Link href="/dashboard/games" className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">🔢 Higher or Lower</h1>
-          <p className="text-xs text-muted-foreground">Guess 1–100 · {date}</p>
+          <h1 className="font-black text-xl text-blue-600 dark:text-blue-400">Higher or Lower</h1>
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Calendar className="w-3 h-3" /> {date} · Guess 1–100
+          </p>
         </div>
-        <div className="text-xs font-semibold bg-muted rounded-lg px-3 py-1.5 tabular-nums">
+        <div className={`text-xs font-bold px-3 py-1.5 rounded-lg border tabular-nums ${
+          remaining <= 2
+            ? "bg-destructive/10 text-destructive border-destructive/30"
+            : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+        }`}>
           {remaining} guess{remaining !== 1 ? "es" : ""} left
         </div>
       </div>
 
       {alreadyPlayed && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-center text-muted-foreground">
-          You've already played today — come back tomorrow!
+        <div className="rounded-xl border border-blue-500/30 bg-blue-500/8 px-4 py-3 text-sm text-center text-blue-700 dark:text-blue-400 font-medium">
+          ✅ You've already played today — come back tomorrow!
         </div>
       )}
 
       {/* Mystery number display */}
-      <div className="rounded-xl border bg-card p-6 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">I'm thinking of…</p>
-        <div className="text-7xl font-black text-primary tabular-nums">
-          {gameOver && won ? secret : "?"}
+      <div className="relative rounded-2xl overflow-hidden border border-blue-500/30 bg-card">
+        <div className="absolute inset-0 opacity-10">
+          <Image src="/games/higher-or-lower.jpg" alt="" fill className="object-cover" sizes="100vw" />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">Between 1 and 100</p>
+        <div className="relative px-6 py-8 text-center">
+          <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">I'm thinking of…</p>
+          <div className={`text-8xl font-black tabular-nums transition-all duration-500 ${
+            gameOver && won ? "text-emerald-500 drop-shadow-lg" : "text-blue-500 dark:text-blue-400"
+          }`}>
+            {gameOver && won ? secret : "?"}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">A number between 1 and 100</p>
+          {!gameOver && history.length > 0 && (
+            <p className="text-sm font-bold text-blue-400 mt-1">
+              Narrowed to {minVal}–{maxVal}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Range bar — narrows with each guess */}
+      {/* Range bar */}
       {history.length > 0 && !gameOver && (
-        <div className="space-y-2">
+        <div className="space-y-2 px-1">
           <div className="flex justify-between text-xs text-muted-foreground font-medium">
             <span>Possible range</span>
-            <span className="tabular-nums">{minVal} – {maxVal}</span>
+            <span className="tabular-nums font-bold text-blue-500">{minVal} – {maxVal}</span>
           </div>
           <div className="relative h-3 bg-muted rounded-full overflow-hidden">
-            {/* Eliminated zones */}
-            <div className="absolute inset-0 bg-muted rounded-full" />
-            {/* Remaining range */}
             <div
-              className="absolute top-0 h-full bounty-gradient opacity-60 rounded-full transition-all duration-500"
+              className="absolute top-0 h-full bg-blue-500/60 rounded-full transition-all duration-500"
               style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
             />
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
-            <span>1</span>
-            <span>50</span>
-            <span>100</span>
+            <span>1</span><span>50</span><span>100</span>
           </div>
         </div>
       )}
@@ -165,9 +177,9 @@ export default function HigherOrLowerPage() {
             value={guess}
             onChange={e => setGuess(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleGuess()}
-            className="text-center text-xl font-bold"
+            className="text-center text-xl font-black border-blue-500/30 focus:border-blue-500"
           />
-          <Button onClick={handleGuess} className="bounty-gradient text-white border-0 px-5">
+          <Button onClick={handleGuess} className="bg-blue-500 hover:bg-blue-600 text-white border-0 px-6 font-bold shadow-md shadow-blue-500/30">
             Guess
           </Button>
         </div>
@@ -176,24 +188,24 @@ export default function HigherOrLowerPage() {
       {/* History */}
       {history.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your guesses</p>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your guesses</p>
           <div className="space-y-1.5">
             {history.map((g, i) => (
               <div
                 key={i}
                 className={`flex items-center justify-between rounded-xl px-4 py-3 border transition-all ${
                   g.hint === "correct"
-                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    ? "border-emerald-500/40 bg-emerald-500/10"
                     : g.hint === "higher"
-                    ? "border-blue-500/25 bg-blue-500/8"
-                    : "border-amber-500/25 bg-amber-500/8"
+                    ? "border-blue-500/30 bg-blue-500/8"
+                    : "border-amber-500/30 bg-amber-500/8"
                 }`}
               >
-                <span className="text-lg font-bold tabular-nums">{g.value}</span>
-                <div className={`flex items-center gap-1.5 text-sm font-semibold ${
-                  g.hint === "correct" ? "text-emerald-600 dark:text-emerald-400"
-                  : g.hint === "higher" ? "text-blue-600 dark:text-blue-400"
-                  : "text-amber-600 dark:text-amber-400"
+                <span className="text-lg font-black tabular-nums">{g.value}</span>
+                <div className={`flex items-center gap-1.5 text-sm font-bold ${
+                  g.hint === "correct" ? "text-emerald-500"
+                  : g.hint === "higher" ? "text-blue-500"
+                  : "text-amber-500"
                 }`}>
                   {g.hint === "correct" && <><CheckCircle className="w-4 h-4" /> Correct!</>}
                   {g.hint === "higher"  && <><ArrowUp className="w-4 h-4" /> Go higher</>}
@@ -207,26 +219,27 @@ export default function HigherOrLowerPage() {
 
       {/* Result */}
       {gameOver && (
-        <div className={`rounded-xl border p-6 text-center space-y-3 animate-bounce-in ${
-          won ? "border-emerald-500/30 bg-emerald-500/8" : "border-destructive/30 bg-destructive/8"
+        <div className={`rounded-2xl border p-6 text-center space-y-4 animate-bounce-in ${
+          won ? "border-emerald-500/40 bg-emerald-500/8" : "border-destructive/30 bg-destructive/8"
         }`}>
           <Stars won={won} guesses={history.length} />
-          {won
-            ? <>
-                <p className="font-bold text-emerald-700 dark:text-emerald-400 text-lg">
-                  🎉 Found it in {history.length} {history.length === 1 ? "guess" : "guesses"}!
-                </p>
-                <p className="text-sm text-muted-foreground">+{scoreFromGuesses(history.length)} points earned</p>
-              </>
-            : <>
-                <p className="font-bold text-destructive text-lg">😔 Out of guesses!</p>
-                <p className="text-sm text-muted-foreground">
-                  The number was <span className="text-2xl font-black text-foreground">{secret}</span>
-                </p>
-              </>
-          }
+          {won ? (
+            <>
+              <p className="font-black text-emerald-500 text-xl">
+                🎉 Found it in {history.length} {history.length === 1 ? "guess" : "guesses"}!
+              </p>
+              <p className="text-sm text-muted-foreground font-semibold">+{scoreFromGuesses(history.length)} points earned</p>
+            </>
+          ) : (
+            <>
+              <p className="font-black text-destructive text-xl">😔 Out of guesses!</p>
+              <p className="text-sm text-muted-foreground">
+                The number was <span className="text-3xl font-black text-foreground">{secret}</span>
+              </p>
+            </>
+          )}
           <Link href="/dashboard/games">
-            <Button variant="outline" size="sm" className="mt-1">← Back to Games</Button>
+            <Button variant="outline" size="sm">← Back to Games</Button>
           </Link>
         </div>
       )}

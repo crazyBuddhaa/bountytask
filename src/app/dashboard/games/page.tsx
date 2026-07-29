@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
-import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight, TrendingUp } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import Image from "next/image"
+import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight, TrendingUp, Zap, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { GAME_META, GAME_SLUGS } from "@/lib/games"
@@ -23,13 +23,19 @@ interface PoolPayload {
   by_game: Record<GameSlug, { prize_pool_kobo: number; total_entries: number }>
 }
 
-const THEME: Record<GameSlug, { bg: string; border: string; iconBg: string; glow: string }> = {
-  'wordle':          { bg: 'from-emerald-500/10 to-transparent', border: 'border-emerald-500/20', iconBg: 'bg-emerald-500/15', glow: 'hover:shadow-emerald-500/10' },
-  'higher-or-lower': { bg: 'from-blue-500/10 to-transparent',   border: 'border-blue-500/20',   iconBg: 'bg-blue-500/15',   glow: 'hover:shadow-blue-500/10' },
-  'tap-target':      { bg: 'from-red-500/10 to-transparent',    border: 'border-red-500/20',    iconBg: 'bg-red-500/15',    glow: 'hover:shadow-red-500/10' },
-  '2048':            { bg: 'from-amber-500/10 to-transparent',  border: 'border-amber-500/20',  iconBg: 'bg-amber-500/15',  glow: 'hover:shadow-amber-500/10' },
-  'color-rush':      { bg: 'from-violet-500/10 to-transparent', border: 'border-violet-500/20', iconBg: 'bg-violet-500/15', glow: 'hover:shadow-violet-500/10' },
-  'word-scramble':   { bg: 'from-pink-500/10 to-transparent',   border: 'border-pink-500/20',   iconBg: 'bg-pink-500/15',   glow: 'hover:shadow-pink-500/10' },
+const THEME: Record<GameSlug, {
+  accent: string
+  accentBg: string
+  glowColor: string
+  border: string
+  badgeClass: string
+}> = {
+  'wordle':          { accent: 'text-emerald-400', accentBg: 'bg-emerald-500', glowColor: 'hover:shadow-emerald-500/25', border: 'border-emerald-500/30', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+  'higher-or-lower': { accent: 'text-blue-400',    accentBg: 'bg-blue-500',    glowColor: 'hover:shadow-blue-500/25',   border: 'border-blue-500/30',   badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+  'tap-target':      { accent: 'text-red-400',     accentBg: 'bg-red-500',     glowColor: 'hover:shadow-red-500/25',    border: 'border-red-500/30',    badgeClass: 'bg-red-500/20 text-red-300 border-red-500/30' },
+  '2048':            { accent: 'text-amber-400',   accentBg: 'bg-amber-500',   glowColor: 'hover:shadow-amber-500/25',  border: 'border-amber-500/30',  badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+  'color-rush':      { accent: 'text-violet-400',  accentBg: 'bg-violet-500',  glowColor: 'hover:shadow-violet-500/25', border: 'border-violet-500/30', badgeClass: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
+  'word-scramble':   { accent: 'text-pink-400',    accentBg: 'bg-pink-500',    glowColor: 'hover:shadow-pink-500/25',   border: 'border-pink-500/30',   badgeClass: 'bg-pink-500/20 text-pink-300 border-pink-500/30' },
 }
 
 const DAILY_SLUGS:  GameSlug[] = ['wordle', 'higher-or-lower']
@@ -61,85 +67,95 @@ export default function GamesPage() {
   const totalPool  = pools?.total_prize_pool_kobo ?? 0
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
+    <div className="space-y-8 max-w-5xl">
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Gamepad2 className="w-6 h-6 text-primary" />
-            Games & Earn
+          <h1 className="text-3xl font-black flex items-center gap-2.5 tracking-tight">
+            <Gamepad2 className="w-7 h-7 text-primary" />
+            <span className="bounty-text-gradient">Games & Earn</span>
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Play skill-based games and compete on the weekly leaderboard
+          <p className="text-muted-foreground text-sm mt-1">
+            Play skill-based games · climb the leaderboard · win prizes
           </p>
         </div>
         <Link href="/dashboard/games/leaderboard">
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Trophy className="w-4 h-4 text-amber-500" />
+          <Button variant="outline" size="sm" className="gap-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+            <Trophy className="w-4 h-4" />
             Leaderboard
           </Button>
         </Link>
       </div>
 
-      {/* Prize pool strip */}
-      <div className="bounty-gradient p-px rounded-xl">
-        <div className="rounded-[calc(0.75rem-1px)] bg-card/90 backdrop-blur-sm px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-2xl shrink-0">🏆</span>
-            <div className="min-w-0">
-              <p className="font-semibold text-sm">Weekly Prize Pool</p>
-              {feesOn ? (
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {loading ? (
-                    <Skeleton className="h-3 w-24" />
-                  ) : totalPool > 0 ? (
-                    <>
-                      <TrendingUp className="w-3 h-3 text-emerald-500 shrink-0" />
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                        ₦{(totalPool / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                      </span>
-                      <span className="text-xs text-muted-foreground">accumulated · top 3 split 80 % Monday</span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No entries yet — be the first!</span>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-0.5">Top players win prizes every Monday · Free to play now</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {feesOn && (
-              <div className="text-xs font-medium flex items-center gap-1.5 bg-primary/10 text-primary rounded-lg px-3 py-1.5 tabular-nums">
-                <Coins className="w-3.5 h-3.5" />
-                ₦{(balance / 100).toFixed(2)}
+      {/* ── Prize pool banner ──────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bounty-gradient p-px">
+        <div className="relative rounded-[calc(1rem-1px)] bg-card/95 backdrop-blur-sm px-6 py-5 overflow-hidden">
+          {/* Decorative glow blob */}
+          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+          <div className="relative flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="w-12 h-12 rounded-xl bounty-gradient flex items-center justify-center shrink-0 shadow-lg shadow-primary/30">
+                <Trophy className="w-6 h-6 text-white" />
               </div>
-            )}
-            <Link href="/dashboard/games/leaderboard">
-              <Button size="sm" className="bounty-gradient text-white border-0 text-xs gap-1">
-                View Rankings
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Button>
-            </Link>
+              <div className="min-w-0">
+                <p className="font-bold text-base">Weekly Prize Pool</p>
+                {feesOn ? (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {loading ? (
+                      <Skeleton className="h-3 w-32" />
+                    ) : totalPool > 0 ? (
+                      <>
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="text-sm font-black text-emerald-500 tabular-nums">
+                          ₦{(totalPool / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-xs text-muted-foreground">accumulated · top 3 win 80% Monday</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No entries yet — be the first!</span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-0.5">Top players win prizes every Monday · Free to play now</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              {feesOn && (
+                <div className="text-sm font-bold flex items-center gap-1.5 bg-primary/10 text-primary rounded-xl px-3.5 py-2 tabular-nums border border-primary/20">
+                  <Coins className="w-4 h-4" />
+                  ₦{(balance / 100).toFixed(2)}
+                </div>
+              )}
+              <Link href="/dashboard/games/leaderboard">
+                <Button size="sm" className="bounty-gradient text-white border-0 gap-1.5 shadow-lg shadow-primary/30">
+                  View Rankings
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Daily games */}
-      <section className="space-y-3">
+      {/* ── Daily games ────────────────────────────────────────────── */}
+      <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-primary" />
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Daily Games</h2>
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 bg-primary/10 text-primary rounded-lg px-3 py-1.5 border border-primary/20">
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="text-xs font-bold uppercase tracking-wider">Daily Games</span>
+            </div>
+            <span className="text-xs text-muted-foreground">One play per day</span>
           </div>
           {!loading && (
-            <p className="text-xs text-muted-foreground tabular-nums">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className={`w-2 h-2 rounded-full ${dailyDone === DAILY_SLUGS.length ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               {dailyDone}/{DAILY_SLUGS.length} played today
-            </p>
+            </div>
           )}
         </div>
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-5">
           {DAILY_SLUGS.map((slug, i) => (
             <GameCard
               key={slug}
@@ -155,13 +171,16 @@ export default function GamesPage() {
         </div>
       </section>
 
-      {/* Arcade games */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Arcade Games</h2>
+      {/* ── Arcade games ───────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg px-3 py-1.5 border border-amber-500/20">
+            <Zap className="w-3.5 h-3.5" />
+            <span className="text-xs font-bold uppercase tracking-wider">Arcade Games</span>
+          </div>
+          <span className="text-xs text-muted-foreground">Unlimited replays</span>
         </div>
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-5">
           {ARCADE_SLUGS.map((slug, i) => (
             <GameCard
               key={slug}
@@ -192,13 +211,13 @@ function GameCard({
   animIdx: number
 }) {
   const router = useRouter()
-  const meta = GAME_META[slug]
-  const theme = THEME[slug]
+  const meta   = GAME_META[slug]
+  const theme  = THEME[slug]
   const alreadyPlayed = meta.isDaily && stat?.completed_today
-  const hasFee = feesEnabled && entryFeeKobo > 0
+  const hasFee   = feesEnabled && entryFeeKobo > 0
   const canAfford = balance >= entryFeeKobo
   const [entering, setEntering] = useState(false)
-  const hasStats = stat && stat.total_plays > 0
+  const hasStats  = stat && stat.total_plays > 0
 
   async function handlePlay() {
     if (!hasFee) { router.push(`/dashboard/games/${slug}`); return }
@@ -229,52 +248,71 @@ function GameCard({
 
   return (
     <div
-      className={`relative rounded-xl border bg-gradient-to-br ${theme.bg} ${theme.border}
-        overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${theme.glow}
-        animate-slide-up`}
-      style={{ animationDelay: `${animIdx * 55}ms`, animationFillMode: "both" }}
+      className={`group relative rounded-2xl overflow-hidden border ${theme.border} bg-card transition-all duration-300
+        hover:-translate-y-1 hover:shadow-xl ${theme.glowColor} animate-slide-up cursor-pointer`}
+      style={{ animationDelay: `${animIdx * 60}ms`, animationFillMode: "both" }}
     >
-      {/* Played-today overlay */}
-      {alreadyPlayed && (
-        <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center gap-1.5">
-          <CheckCircle2 className="w-9 h-9 text-emerald-500" />
-          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Played today</p>
-          <p className="text-[10px] text-muted-foreground">Come back tomorrow</p>
-        </div>
-      )}
+      {/* ── Cover image area ─────────────────────────────────── */}
+      <div className="relative h-44 overflow-hidden">
+        <Image
+          src={`/games/${slug}.jpg`}
+          alt={meta.name}
+          fill
+          className="object-cover transition-transform duration-500 group-hover:scale-105"
+          sizes="(max-width: 640px) 100vw, 50vw"
+          priority={animIdx < 2}
+        />
+        {/* gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
 
-      <div className="p-5 flex flex-col gap-4">
-        {/* Top: icon + name + badges */}
-        <div className="flex items-start gap-3">
-          <div className={`w-12 h-12 rounded-2xl ${theme.iconBg} flex items-center justify-center text-2xl shrink-0`}>
-            {meta.emoji}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-bold text-sm leading-tight">{meta.name}</h3>
-              {meta.isDaily && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0 font-normal">Daily</Badge>
-              )}
-              {hasFee && (
-                <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 border-amber-400 text-amber-600 dark:text-amber-400 gap-0.5 font-normal">
-                  <Coins className="w-2.5 h-2.5" />
-                  ₦{(entryFeeKobo / 100).toFixed(2)}
-                </Badge>
-              )}
+        {/* Top badges */}
+        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+          {meta.isDaily && (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${theme.badgeClass}`}>
+              <Calendar className="w-2.5 h-2.5" />
+              Daily
+            </span>
+          )}
+          {hasFee && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <Coins className="w-2.5 h-2.5" />
+              ₦{(entryFeeKobo / 100).toFixed(2)}
+            </span>
+          )}
+        </div>
+
+        {/* Already-played overlay */}
+        {alreadyPlayed && (
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 z-10">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/20 border-2 border-emerald-500/60 flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{meta.description}</p>
+            <p className="text-xs font-bold text-emerald-300">Played today</p>
+            <p className="text-[10px] text-white/60">Come back tomorrow</p>
           </div>
-        </div>
+        )}
 
-        {/* Stats */}
-        <div className="flex items-center gap-3 min-h-[18px]">
+        {/* Game name floating over image */}
+        {!alreadyPlayed && (
+          <div className="absolute bottom-3 left-4 right-4">
+            <h3 className="font-black text-white text-lg leading-tight drop-shadow-md">{meta.name}</h3>
+          </div>
+        )}
+      </div>
+
+      {/* ── Content area ─────────────────────────────────────── */}
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-muted-foreground leading-snug">{meta.description}</p>
+
+        {/* Stats row */}
+        <div className="flex items-center gap-3 min-h-[16px]">
           {loading ? (
             <Skeleton className="h-3.5 w-28" />
           ) : hasStats ? (
             <>
               <div className="flex items-center gap-1 text-xs">
-                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                <span className="font-semibold tabular-nums">{stat!.best_score.toLocaleString()}</span>
+                <Star className={`w-3 h-3 fill-current ${theme.accent}`} />
+                <span className="font-bold tabular-nums">{stat!.best_score.toLocaleString()}</span>
                 <span className="text-muted-foreground">best</span>
               </div>
               <span className="text-border">·</span>
@@ -283,23 +321,23 @@ function GameCard({
               </span>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground/70 italic">No plays yet — be first!</span>
+            <span className="text-xs text-muted-foreground/60 italic">No plays yet</span>
           )}
         </div>
 
         {/* CTA */}
         {alreadyPlayed ? (
-          <div className="flex items-center justify-center gap-2 rounded-lg bg-muted/60 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center gap-2 rounded-xl bg-muted/60 py-2.5 text-xs text-muted-foreground font-medium">
             <Lock className="w-3.5 h-3.5" />
             Come back tomorrow
           </div>
         ) : hasFee && !canAfford ? (
-          <div className="flex items-center justify-center rounded-lg bg-destructive/10 py-2.5 text-xs text-destructive font-medium">
+          <div className="flex items-center justify-center rounded-xl bg-destructive/10 py-2.5 text-xs text-destructive font-bold border border-destructive/20">
             Insufficient balance
           </div>
         ) : (
           <Button
-            className="bounty-gradient text-white border-0 w-full font-semibold"
+            className="w-full bounty-gradient text-white border-0 font-bold shadow-md shadow-primary/20 transition-all group-hover:shadow-lg group-hover:shadow-primary/30"
             size="sm"
             disabled={entering}
             onClick={handlePlay}
@@ -308,7 +346,7 @@ function GameCard({
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : hasFee
                 ? `Play · ₦${(entryFeeKobo / 100).toFixed(2)}`
-                : "Play Now"
+                : "Play Now →"
             }
           </Button>
         )}

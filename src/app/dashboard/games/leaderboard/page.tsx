@@ -1,8 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Trophy, ArrowLeft, Crown, Coins, Gift } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Trophy, ArrowLeft, Crown, Gift, Sparkles } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { GAME_META, GAME_SLUGS } from "@/lib/games"
@@ -25,45 +24,40 @@ function Avatar({
   row: Pick<LeaderboardEntry, "avatar_url" | "display_name" | "is_me">
   size?: "sm" | "md" | "lg"
 }) {
-  const sz = size === "lg" ? "w-14 h-14 text-lg" : size === "md" ? "w-10 h-10 text-sm" : "w-8 h-8 text-xs"
+  const sz = size === "lg" ? "w-16 h-16 text-xl" : size === "md" ? "w-11 h-11 text-sm" : "w-8 h-8 text-xs"
   return (
-    <div className={`${sz} rounded-full bg-muted font-bold flex items-center justify-center overflow-hidden shrink-0 ring-2 ${row.is_me ? "ring-primary" : "ring-transparent"}`}>
+    <div className={`${sz} rounded-full font-black flex items-center justify-center overflow-hidden shrink-0 ring-2 transition-all ${
+      row.is_me ? "ring-primary shadow-lg shadow-primary/30" : "ring-transparent bg-muted"
+    }`}>
       {row.avatar_url
         ? <img src={row.avatar_url} alt="" className="w-full h-full object-cover" />
-        : row.display_name[0]?.toUpperCase()}
+        : <span className={`${row.is_me ? "bg-primary text-primary-foreground w-full h-full flex items-center justify-center" : ""}`}>
+            {row.display_name[0]?.toUpperCase()}
+          </span>
+      }
     </div>
   )
 }
 
-const PODIUM_RANK_ORDER = [2, 1, 3]
-const PODIUM_HEIGHT     = ["h-24", "h-36", "h-20"]
-const PODIUM_BG = [
-  "bg-slate-100 dark:bg-slate-800 border-slate-300/50 dark:border-slate-600/50",
-  "bg-amber-50 dark:bg-amber-900/20 border-amber-300/60 dark:border-amber-600/40",
-  "bg-orange-50/60 dark:bg-orange-900/10 border-orange-200/50 dark:border-orange-800/30",
+const PODIUM_ORDER  = [2, 1, 3] // display order: silver, gold, bronze
+const PODIUM_HEIGHT = ["h-20", "h-32", "h-16"]
+const PODIUM_CONFIG = [
+  { medal: "🥈", glow: "shadow-slate-400/30",  border: "border-slate-400/50 dark:border-slate-500/50", bg: "bg-slate-100 dark:bg-slate-800/60",  ring: "ring-slate-400" },
+  { medal: "🥇", glow: "shadow-amber-400/40",  border: "border-amber-400/60 dark:border-amber-500/50", bg: "bg-amber-50 dark:bg-amber-900/30",   ring: "ring-amber-400" },
+  { medal: "🥉", glow: "shadow-orange-400/25", border: "border-orange-300/50 dark:border-orange-700/40", bg: "bg-orange-50/80 dark:bg-orange-900/15", ring: "ring-orange-400" },
 ]
-const PODIUM_MEDAL = ["🥈", "🥇", "🥉"]
 
-const RANK_ICON = ["🥇", "🥈", "🥉"]
-const GAME_EMOJI: Record<string, string> = {
-  "wordle":          "🟩",
-  "higher-or-lower": "🔢",
-  "tap-target":      "🎯",
-  "2048":            "🧩",
-  "color-rush":      "🎨",
-  "word-scramble":   "🔤",
+const GAME_COLORS: Record<GameSlug, string> = {
+  'wordle':          'text-emerald-500',
+  'higher-or-lower': 'text-blue-500',
+  'tap-target':      'text-red-500',
+  '2048':            'text-amber-500',
+  'color-rush':      'text-violet-500',
+  'word-scramble':   'text-pink-500',
 }
 
 function fmt(kobo: number) {
   return `₦${(kobo / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`
-}
-
-function weekLabel(start: string) {
-  const d   = new Date(`${start}T00:00:00Z`)
-  const end = new Date(d)
-  end.setUTCDate(d.getUTCDate() + 6)
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", timeZone: "UTC" }
-  return `${d.toLocaleDateString("en-NG", opts)} – ${end.toLocaleDateString("en-NG", { ...opts, year: "numeric" })}`
 }
 
 export default function LeaderboardPage() {
@@ -73,7 +67,6 @@ export default function LeaderboardPage() {
   const [weekStart, setWeekStart] = useState("")
   const [loading, setLoading]   = useState(true)
 
-  // My Winnings
   const [payouts, setPayouts]         = useState<Payout[]>([])
   const [totalEarned, setTotalEarned] = useState(0)
   const [payoutsLoading, setPayoutsLoading] = useState(true)
@@ -102,7 +95,7 @@ export default function LeaderboardPage() {
       .catch(() => setPayoutsLoading(false))
   }, [])
 
-  const currentWeekLabel = weekStart
+  const weekLabel = weekStart
     ? `Week of ${new Date(weekStart).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}`
     : "This week"
 
@@ -116,67 +109,71 @@ export default function LeaderboardPage() {
         <Link href="/dashboard/games" className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+        <div className="flex-1">
+          <h1 className="text-2xl font-black flex items-center gap-2">
             <Trophy className="w-6 h-6 text-amber-500" />
-            Leaderboard
+            <span className="bounty-text-gradient">Leaderboard</span>
           </h1>
-          <p className="text-muted-foreground text-sm">{currentWeekLabel} · Resets every Monday</p>
+          <p className="text-muted-foreground text-sm">{weekLabel} · Resets every Monday</p>
         </div>
       </div>
 
       <Tabs defaultValue="rankings">
-        <TabsList className="w-full">
-          <TabsTrigger value="rankings" className="flex-1 gap-1.5">
+        <TabsList className="w-full h-11">
+          <TabsTrigger value="rankings" className="flex-1 gap-1.5 font-semibold">
             <Trophy className="w-3.5 h-3.5" />
             Weekly Rankings
           </TabsTrigger>
-          <TabsTrigger value="winnings" className="flex-1 gap-1.5">
+          <TabsTrigger value="winnings" className="flex-1 gap-1.5 font-semibold">
             <Gift className="w-3.5 h-3.5" />
             My Winnings
             {totalEarned > 0 && (
-              <span className="ml-1 text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 rounded px-1 py-0.5 tabular-nums">
+              <span className="ml-1 text-[10px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-1.5 py-0.5 tabular-nums">
                 {fmt(totalEarned)}
               </span>
             )}
           </TabsTrigger>
         </TabsList>
 
-        {/* ── Rankings tab ───────────────────────────────────────────── */}
+        {/* ── Rankings tab ──────────────────────────────────────────── */}
         <TabsContent value="rankings" className="space-y-5 mt-5">
-          {/* Game picker */}
-          <Select value={game} onValueChange={v => setGame(v as GameSlug)}>
-            <SelectTrigger className="w-60">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GAME_SLUGS.map(slug => (
-                <SelectItem key={slug} value={slug}>
-                  {GAME_META[slug].emoji} {GAME_META[slug].name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Game picker — horizontal scroll tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {GAME_SLUGS.map(slug => (
+              <button
+                key={slug}
+                onClick={() => setGame(slug)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all shrink-0 ${
+                  game === slug
+                    ? `bounty-gradient text-white border-transparent shadow-md shadow-primary/30`
+                    : "bg-muted border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                }`}
+              >
+                <span>{GAME_META[slug].emoji}</span>
+                {GAME_META[slug].name}
+              </button>
+            ))}
+          </div>
 
           {/* Loading skeleton */}
           {loading && (
             <div className="space-y-4">
-              <div className="flex items-end justify-center gap-3 pb-2">
+              <div className="flex items-end justify-center gap-4">
                 {[56, 80, 44].map((h, i) => (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    <Skeleton className="w-10 h-10 rounded-full" />
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="w-full rounded-t-xl" style={{ height: h }} />
+                    <Skeleton className="w-12 h-12 rounded-full" />
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="w-full rounded-t-2xl" style={{ height: h }} />
                   </div>
                 ))}
               </div>
-              <div className="rounded-xl border bg-card divide-y overflow-hidden">
+              <div className="rounded-2xl border bg-card divide-y overflow-hidden">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-4 px-5 py-3.5">
                     <Skeleton className="w-7 h-5" />
-                    <Skeleton className="w-8 h-8 rounded-full" />
+                    <Skeleton className="w-9 h-9 rounded-full" />
                     <Skeleton className="h-4 flex-1" />
-                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-20" />
                   </div>
                 ))}
               </div>
@@ -185,36 +182,43 @@ export default function LeaderboardPage() {
 
           {/* Empty state */}
           {!loading && rows.length === 0 && (
-            <div className="py-20 text-center rounded-xl border bg-card">
-              <Trophy className="w-12 h-12 mx-auto mb-4 text-muted-foreground/20" />
-              <p className="font-semibold">No scores yet this week</p>
+            <div className="py-20 text-center rounded-2xl border bg-card">
+              <Trophy className="w-14 h-14 mx-auto mb-4 text-muted-foreground/20" />
+              <p className="font-black text-lg">No scores yet this week</p>
               <p className="text-sm text-muted-foreground mt-1">Be the first to claim the top spot!</p>
               <Link
                 href={`/dashboard/games/${game}`}
-                className="mt-4 inline-flex text-primary text-sm font-medium hover:underline underline-offset-2"
+                className="mt-4 inline-flex items-center gap-1 text-primary text-sm font-bold hover:underline underline-offset-2"
               >
                 Play {GAME_META[game].name} →
               </Link>
             </div>
           )}
 
-          {/* Podium (top 3) */}
+          {/* Podium */}
           {!loading && top3.length > 0 && (
-            <div className="flex items-end justify-center gap-3">
-              {PODIUM_RANK_ORDER.map((rank, pi) => {
+            <div className="flex items-end justify-center gap-3 pt-4 pb-2">
+              {PODIUM_ORDER.map((rank, pi) => {
                 const row = top3.find(r => r.rank === rank)
+                const cfg = PODIUM_CONFIG[pi]
                 if (!row) return <div key={rank} className="flex-1" />
                 return (
-                  <div key={row.user_id} className="flex-1 flex flex-col items-center gap-1.5">
-                    {rank === 1 && <Crown className="w-5 h-5 text-amber-500 mb-0.5" />}
-                    <Avatar row={row} size={rank === 1 ? "lg" : "md"} />
-                    <p className={`text-xs font-semibold text-center truncate max-w-full px-1 leading-snug ${row.is_me ? "text-primary" : ""}`}>
+                  <div key={row.user_id} className="flex-1 flex flex-col items-center gap-2">
+                    {rank === 1 && (
+                      <Crown className="w-6 h-6 text-amber-500 drop-shadow-md mb-0.5" />
+                    )}
+                    <div className={`ring-2 ${cfg.ring} rounded-full shadow-lg ${cfg.glow}`}>
+                      <Avatar row={row} size={rank === 1 ? "lg" : "md"} />
+                    </div>
+                    <p className={`text-xs font-bold text-center truncate max-w-full px-1 leading-tight ${row.is_me ? "text-primary" : ""}`}>
                       {row.display_name}
                       {row.is_me && <span className="font-normal text-muted-foreground"> (you)</span>}
                     </p>
-                    <p className="text-xs font-bold tabular-nums">{row.score.toLocaleString()}</p>
-                    <div className={`w-full rounded-t-xl border-t border-x flex items-end justify-center pb-3 ${PODIUM_HEIGHT[pi]} ${PODIUM_BG[pi]}`}>
-                      <span className="text-2xl">{PODIUM_MEDAL[pi]}</span>
+                    <p className={`text-xs font-black tabular-nums ${GAME_COLORS[game]}`}>
+                      {row.score.toLocaleString()}
+                    </p>
+                    <div className={`w-full rounded-t-2xl border-t border-x flex items-end justify-center pb-3 shadow-inner ${PODIUM_HEIGHT[pi]} ${cfg.bg} ${cfg.border}`}>
+                      <span className="text-2xl drop-shadow">{cfg.medal}</span>
                     </div>
                   </div>
                 )
@@ -224,24 +228,28 @@ export default function LeaderboardPage() {
 
           {/* Rank 4+ list */}
           {!loading && rest.length > 0 && (
-            <div className="rounded-xl border bg-card divide-y overflow-hidden">
+            <div className="rounded-2xl border bg-card overflow-hidden divide-y">
               {rest.map(row => (
                 <div
                   key={row.user_id}
-                  className={`flex items-center gap-4 px-5 py-3.5 transition-colors ${row.is_me ? "bg-primary/5" : "hover:bg-muted/40"}`}
+                  className={`flex items-center gap-4 px-5 py-3.5 transition-colors ${
+                    row.is_me ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/40"
+                  }`}
                 >
-                  <div className="w-7 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                  <div className={`w-7 text-center text-sm font-black tabular-nums ${
+                    row.rank <= 10 ? "text-foreground" : "text-muted-foreground"
+                  }`}>
                     {row.rank}
                   </div>
                   <Avatar row={row} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium truncate ${row.is_me ? "text-primary" : ""}`}>
+                    <p className={`text-sm font-semibold truncate ${row.is_me ? "text-primary" : ""}`}>
                       {row.display_name}
                       {row.is_me && <span className="text-xs font-normal text-muted-foreground ml-1">(you)</span>}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold tabular-nums">{row.score.toLocaleString()}</p>
+                    <p className={`text-sm font-black tabular-nums ${GAME_COLORS[game]}`}>{row.score.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">{GAME_META[game].leaderboardLabel}</p>
                   </div>
                 </div>
@@ -251,41 +259,45 @@ export default function LeaderboardPage() {
 
           {/* My rank if outside top 20 */}
           {!loading && myRank && myRank > 20 && (
-            <div className="rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex items-center gap-4">
-              <div className="w-7 text-center font-bold text-primary tabular-nums">#{myRank}</div>
-              <div className="flex-1 text-sm font-medium text-primary">Your current rank</div>
-              <p className="text-sm font-medium text-primary/80">Keep climbing! 🚀</p>
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4 flex items-center gap-4">
+              <div className="w-7 text-center font-black text-primary tabular-nums text-sm">#{myRank}</div>
+              <div className="flex-1 text-sm font-semibold text-primary">Your current rank</div>
+              <p className="text-sm font-bold text-primary/80 flex items-center gap-1">
+                Keep climbing! 🚀
+              </p>
             </div>
           )}
         </TabsContent>
 
-        {/* ── My Winnings tab ────────────────────────────────────────── */}
+        {/* ── My Winnings tab ─────────────────────────────────────── */}
         <TabsContent value="winnings" className="space-y-5 mt-5">
           {payoutsLoading && (
-            <div className="rounded-xl border bg-card divide-y overflow-hidden">
+            <div className="rounded-2xl border bg-card divide-y overflow-hidden">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 px-5 py-4">
-                  <Skeleton className="w-8 h-8 rounded-lg" />
+                  <Skeleton className="w-10 h-10 rounded-xl" />
                   <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-3.5 w-28" />
+                    <Skeleton className="h-4 w-28" />
                     <Skeleton className="h-3 w-20" />
                   </div>
-                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
                 </div>
               ))}
             </div>
           )}
 
           {!payoutsLoading && payouts.length === 0 && (
-            <div className="py-20 text-center rounded-xl border bg-card">
-              <Gift className="w-12 h-12 mx-auto mb-4 text-muted-foreground/20" />
-              <p className="font-semibold">No winnings yet</p>
+            <div className="py-20 text-center rounded-2xl border bg-card">
+              <div className="w-16 h-16 rounded-2xl bounty-gradient mx-auto mb-4 flex items-center justify-center shadow-lg shadow-primary/30">
+                <Gift className="w-8 h-8 text-white" />
+              </div>
+              <p className="font-black text-lg">No winnings yet</p>
               <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
                 Finish in the top 3 on any weekly leaderboard to earn prize money.
               </p>
               <Link
                 href="/dashboard/games"
-                className="mt-4 inline-flex text-primary text-sm font-medium hover:underline underline-offset-2"
+                className="mt-4 inline-flex items-center gap-1 text-primary text-sm font-bold hover:underline underline-offset-2"
               >
                 Play games →
               </Link>
@@ -295,42 +307,44 @@ export default function LeaderboardPage() {
           {!payoutsLoading && payouts.length > 0 && (
             <>
               {/* Total earned banner */}
-              <div className="bounty-gradient p-px rounded-xl">
-                <div className="rounded-[calc(0.75rem-1px)] bg-card/90 backdrop-blur-sm px-5 py-4 flex items-center justify-between gap-3">
+              <div className="bounty-gradient p-px rounded-2xl">
+                <div className="rounded-[calc(1rem-1px)] bg-card/95 backdrop-blur-sm px-5 py-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🏅</span>
+                    <div className="w-12 h-12 rounded-xl bounty-gradient flex items-center justify-center shadow-lg shadow-primary/30">
+                      <Sparkles className="w-6 h-6 text-white" />
+                    </div>
                     <div>
-                      <p className="font-semibold text-sm">Total prize earnings</p>
-                      <p className="text-xs text-muted-foreground">{payouts.length} prize{payouts.length !== 1 ? "s" : ""} won across all games</p>
+                      <p className="font-bold text-base">Total prize earnings</p>
+                      <p className="text-xs text-muted-foreground">{payouts.length} prize{payouts.length !== 1 ? "s" : ""} across all games</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-lg font-black text-amber-500 tabular-nums">{fmt(totalEarned)}</p>
+                    <p className="text-2xl font-black text-amber-500 tabular-nums">{fmt(totalEarned)}</p>
                   </div>
                 </div>
               </div>
 
               {/* Payout history */}
-              <div className="rounded-xl border bg-card overflow-hidden divide-y">
-                {payouts.map(p => (
-                  <div key={p.id} className="flex items-center gap-4 px-5 py-4">
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-xl shrink-0">
-                      {GAME_EMOJI[p.game_slug] ?? "🎮"}
+              <div className="rounded-2xl border bg-card overflow-hidden divide-y">
+                {payouts.map((p: Payout) => (
+                  <div key={p.id} className="flex items-center gap-4 px-5 py-4 hover:bg-muted/30 transition-colors">
+                    <div className="w-11 h-11 rounded-2xl bounty-gradient flex items-center justify-center text-xl shrink-0 shadow-md shadow-primary/20">
+                      {GAME_META[p.game_slug as GameSlug]?.emoji ?? "🎮"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">
-                        {RANK_ICON[p.rank - 1] ?? `#${p.rank}`}{" "}
+                      <p className="text-sm font-bold truncate">
+                        {["🥇","🥈","🥉"][p.rank - 1] ?? `#${p.rank}`}{" "}
                         {GAME_META[p.game_slug as GameSlug]?.name ?? p.game_slug}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {weekLabel(p.week_start)} · score {p.score.toLocaleString()}
+                        {new Date(p.week_start + "T00:00:00Z").toLocaleDateString("en-NG", {
+                          month: "short", day: "numeric", year: "numeric", timeZone: "UTC"
+                        })}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums flex items-center gap-1">
-                        <Coins className="w-3.5 h-3.5" />
-                        {fmt(p.payout_kobo)}
-                      </p>
+                      <p className="text-sm font-black text-amber-500 tabular-nums">{fmt(p.payout_kobo)}</p>
+                      <p className="text-xs font-semibold text-emerald-500">✓ Credited</p>
                     </div>
                   </div>
                 ))}

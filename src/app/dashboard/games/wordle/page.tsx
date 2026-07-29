@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import Image from "next/image"
+import { ArrowLeft, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
@@ -23,21 +24,21 @@ function scoreFromGuesses(guesses: number): number {
 }
 
 export default function WordlePage() {
-  const [word, setWord] = useState("")
-  const [date, setDate] = useState("")
-  const [board, setBoard] = useState<Tile[][]>(
+  const [word, setWord]     = useState("")
+  const [date, setDate]     = useState("")
+  const [board, setBoard]   = useState<Tile[][]>(
     Array.from({ length: MAX_GUESSES }, () =>
       Array.from({ length: WORD_LENGTH }, () => ({ letter: "", state: "empty" as TileState }))
     )
   )
-  const [currentRow, setCurrentRow] = useState(0)
-  const [currentCol, setCurrentCol] = useState(0)
-  const [gameOver, setGameOver] = useState(false)
-  const [won, setWon] = useState(false)
-  const [keyStates, setKeyStates] = useState<Record<string, TileState>>({})
-  const [loading, setLoading] = useState(true)
+  const [currentRow, setCurrentRow]     = useState(0)
+  const [currentCol, setCurrentCol]     = useState(0)
+  const [gameOver, setGameOver]         = useState(false)
+  const [won, setWon]                   = useState(false)
+  const [keyStates, setKeyStates]       = useState<Record<string, TileState>>({})
+  const [loading, setLoading]           = useState(true)
   const [alreadyPlayed, setAlreadyPlayed] = useState(false)
-  const [shakingRow, setShakingRow] = useState<number | null>(null)
+  const [shakingRow, setShakingRow]     = useState<number | null>(null)
   const [revealedRows, setRevealedRows] = useState<Set<number>>(new Set())
   const sessionSaved = useRef(false)
 
@@ -70,9 +71,9 @@ export default function WordlePage() {
       return
     }
 
-    const newBoard = board.map(r => r.map(t => ({ ...t })))
-    const wordArr  = word.split("")
-    const guessArr = guess.split("")
+    const newBoard  = board.map(r => r.map(t => ({ ...t })))
+    const wordArr   = word.split("")
+    const guessArr  = guess.split("")
     const result: TileState[] = Array(WORD_LENGTH).fill("absent")
     const remaining: (string | null)[] = [...wordArr]
 
@@ -86,7 +87,6 @@ export default function WordlePage() {
     }
     for (let i = 0; i < WORD_LENGTH; i++) newBoard[currentRow][i].state = result[i]
     setBoard(newBoard)
-
     setRevealedRows(prev => new Set([...prev, currentRow]))
 
     setKeyStates(prev => {
@@ -139,46 +139,52 @@ export default function WordlePage() {
     return () => window.removeEventListener("keydown", handler)
   }, [handleKey])
 
-  // Tile styles
   const tileStyle = (state: TileState, isRevealed: boolean) => {
     if (!isRevealed && state !== "empty" && state !== "filled") return "border-foreground/30 bg-transparent"
     return {
       empty:   "border-border/60 bg-transparent",
-      filled:  "border-foreground/50 bg-transparent",
-      correct: "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/20",
-      present: "border-amber-500 bg-amber-500 text-white shadow-md shadow-amber-500/20",
+      filled:  "border-emerald-500/60 bg-emerald-500/5",
+      correct: "border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-500/30",
+      present: "border-amber-500 bg-amber-500 text-white shadow-lg shadow-amber-500/30",
       absent:  "border-muted bg-muted/60 text-muted-foreground",
     }[state]
   }
 
   const keyColor: Record<TileState, string> = {
-    empty:   "bg-muted hover:bg-muted/70",
-    filled:  "bg-muted hover:bg-muted/70",
-    correct: "bg-emerald-500 text-white hover:bg-emerald-600",
-    present: "bg-amber-500 text-white hover:bg-amber-600",
-    absent:  "bg-muted/40 text-muted-foreground/50 hover:bg-muted/50",
+    empty:   "bg-muted hover:bg-muted/70 text-foreground",
+    filled:  "bg-muted hover:bg-muted/70 text-foreground",
+    correct: "bg-emerald-500 text-white hover:bg-emerald-600 shadow shadow-emerald-500/30",
+    present: "bg-amber-500 text-white hover:bg-amber-600 shadow shadow-amber-500/30",
+    absent:  "bg-muted/40 text-muted-foreground/50",
   }
 
   if (loading) return (
     <div className="flex items-center justify-center h-96">
-      <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
     </div>
   )
 
   return (
-    <div className="flex flex-col items-center gap-6 max-w-sm mx-auto">
+    <div className="flex flex-col items-center gap-5 max-w-sm mx-auto">
       {/* Header */}
       <div className="w-full flex items-center gap-3">
-        <Link href="/dashboard/games" className="text-muted-foreground hover:text-foreground">
+        <Link href="/dashboard/games" className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-xl font-bold flex-1">🟩 Daily Wordle</h1>
-        <span className="text-xs text-muted-foreground">{date}</span>
+        <div className="flex-1">
+          <h1 className="font-black text-xl text-emerald-600 dark:text-emerald-400">Daily Wordle</h1>
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Calendar className="w-3 h-3" /> {date}
+          </p>
+        </div>
+        <div className="text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg px-2.5 py-1">
+          {MAX_GUESSES - currentRow} left
+        </div>
       </div>
 
       {alreadyPlayed && (
-        <div className="w-full rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-center text-muted-foreground">
-          You've already played today — come back tomorrow for a new word!
+        <div className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-3 text-sm text-center text-emerald-700 dark:text-emerald-400 font-medium">
+          ✅ You've already played today — come back tomorrow!
         </div>
       )}
 
@@ -192,7 +198,7 @@ export default function WordlePage() {
             {row.map((tile, ci) => (
               <div
                 key={ci}
-                className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center text-lg font-bold uppercase transition-colors duration-300
+                className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center text-lg font-black uppercase transition-all duration-300
                   ${tileStyle(tile.state, revealedRows.has(ri))}`}
                 style={
                   revealedRows.has(ri) && tile.state !== "empty" && tile.state !== "filled"
@@ -209,21 +215,25 @@ export default function WordlePage() {
 
       {/* Result banner */}
       {gameOver && (
-        <div className={`w-full rounded-xl px-4 py-4 text-center border animate-bounce-in ${
+        <div className={`w-full rounded-2xl px-5 py-4 text-center border animate-bounce-in ${
           won
-            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+            ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
             : "bg-destructive/10 border-destructive/30 text-destructive"
         }`}>
-          {won
-            ? <>
-                <p className="font-bold">🎉 You got it in {currentRow} {currentRow === 1 ? "try" : "tries"}!</p>
-                <p className="text-sm mt-0.5 opacity-80">+{scoreFromGuesses(currentRow)} points earned</p>
-              </>
-            : <>
-                <p className="font-bold">😔 Better luck tomorrow!</p>
-                <p className="text-sm mt-0.5 opacity-80">The word was <strong>{word}</strong></p>
-              </>
-          }
+          {won ? (
+            <>
+              <p className="font-black text-lg">🎉 You got it in {currentRow} {currentRow === 1 ? "try" : "tries"}!</p>
+              <p className="text-sm mt-1 opacity-80 font-semibold">+{scoreFromGuesses(currentRow)} points earned</p>
+            </>
+          ) : (
+            <>
+              <p className="font-black text-lg">😔 Better luck tomorrow!</p>
+              <p className="text-sm mt-1 opacity-80">The word was <strong className="uppercase">{word}</strong></p>
+            </>
+          )}
+          <Link href="/dashboard/games" className="inline-block mt-3">
+            <Button variant="outline" size="sm">← All Games</Button>
+          </Link>
         </div>
       )}
 
@@ -236,7 +246,7 @@ export default function WordlePage() {
                 key={key}
                 onClick={() => handleKey(key)}
                 disabled={alreadyPlayed}
-                className={`${key.length > 1 ? "px-2 text-xs min-w-[3.2rem]" : "w-9"} h-11 rounded-lg font-semibold text-sm transition-colors
+                className={`${key.length > 1 ? "px-2 text-xs min-w-[3.2rem]" : "w-9"} h-11 rounded-lg font-bold text-sm transition-all
                   ${keyColor[keyStates[key] ?? "empty"]}
                   disabled:opacity-40 active:scale-95`}
               >
