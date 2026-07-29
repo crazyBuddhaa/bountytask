@@ -782,3 +782,43 @@ Six skill-based mini-games added under `/dashboard/games`. Phase 1 is completely
 - Play Tap the Target twice → second play allowed (arcade game); leaderboard shows best score.
 - `/dashboard/games/leaderboard` — switch game dropdown → leaderboard reloads.
 - `npx tsc --noEmit` passes clean.
+
+---
+
+## ✅ Feature — Monetag Ad Network Integration
+**Pushed:** 2026-07-29
+
+### Built
+Two Monetag ad surfaces, both passive (CPM/aggregate revenue — no per-user rewards credited):
+
+**Sitewide Multitag (shared with Adsterra display):**
+- `src/lib/monetag.ts` — `getMonetagSettings()` with 60-second `unstable_cache` (tag: `"monetag-settings"`); reads four `platform_settings` keys
+- `src/app/layout.tsx` — root layout made `async`; fetches Monetag settings server-side; conditionally injects `<Script id="monetag-multitag" strategy="afterInteractive">` with the Multitag zone script when enabled. Strips `<script>` wrapper tags automatically if admin pastes full HTML. Runs alongside the existing AdSense script on every page.
+
+**Games interstitial (games section only):**
+- `src/app/dashboard/games/layout.tsx` — new games section layout; fetches `getMonetagSettings()` server-side; conditionally injects `<Script id="monetag-games-interstitial" strategy="afterInteractive">` with the interstitial zone script. Fires between game navigations — exactly one interstitial opportunity per game page load. Same `stripScriptTags()` helper handles pasted HTML wrappers.
+
+**Admin Settings (`/admin/settings`):**
+- `src/app/admin/settings/page.tsx` — new Monetag card with:
+  - Sitewide Multitag: enable toggle + script textarea (placeholder shows standard Monetag JS format)
+  - Games Interstitial: separate enable toggle + script textarea
+  - ads.txt + service worker reminder banner when either is enabled
+- `src/app/api/admin/settings/route.ts` — four new Zod fields (`monetag_enabled`, `monetag_multitag_script`, `monetag_games_interstitial_enabled`, `monetag_games_interstitial_script`); calls `revalidateTag("monetag-settings")` when any Monetag key is saved
+
+**DB:**
+- `supabase/migrations/20260729_monetag_settings.sql` — seeds four `platform_settings` rows with safe defaults (all false / empty string)
+
+### Architecture notes
+- Monetag Multitag uses `strategy="afterInteractive"` (not `"beforeInteractive"`) to avoid blocking LCP — passive ad networks don't need to load before content.
+- Two separate admin toggle + script fields (sitewide vs. games interstitial) allow independent zone IDs in Monetag, which gives proper per-surface analytics in the Monetag publisher dashboard.
+- The existing `public/sw_*.js` service worker and Monetag site-verification metadata in `<head>` (already present) handle Multitag verification — no additional setup needed there.
+- Monetag does **not** credit users — it is a publisher revenue stream only, separate from the `ad_task_logs` and ledger system used by IMA, CPX, and Adsterra.
+
+### Verify
+1. Run `supabase/migrations/20260729_monetag_settings.sql` in Supabase SQL editor.
+2. In Admin Settings → Monetag card: enable Multitag, paste your zone script, save.
+3. Reload any page → script appears in browser DevTools → Sources as `monetag-multitag`.
+4. Enable Games interstitial with a separate interstitial zone script, save.
+5. Navigate to `/dashboard/games` → interstitial script loaded; navigate to a game and back → ad fires between sessions.
+6. Disable both → no Monetag scripts appear anywhere.
+7. `npx tsc --noEmit` passes clean.

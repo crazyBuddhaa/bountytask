@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  ClipboardList, Key, Gift, ScanEye,
+  ClipboardList, Key, Gift, ScanEye, Tv2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +50,11 @@ type Settings = {
   asterra_daily_cap: number
   asterra_reward_kobo: number
   asterra_smartlink_url: string
+  // Monetag
+  monetag_enabled: boolean
+  monetag_multitag_script: string
+  monetag_games_interstitial_enabled: boolean
+  monetag_games_interstitial_script: string
   // Global AI verification
   ai_verify_all_tasks: boolean
   // Games entry fees
@@ -93,6 +98,10 @@ const DEFAULTS: Settings = {
   asterra_daily_cap: 3,
   asterra_reward_kobo: 250,
   asterra_smartlink_url: "",
+  monetag_enabled: false,
+  monetag_multitag_script: "",
+  monetag_games_interstitial_enabled: false,
+  monetag_games_interstitial_script: "",
   ai_verify_all_tasks: false,
   game_entry_fees_enabled: false,
   game_entry_fee_wordle: 1000,
@@ -149,6 +158,10 @@ export default function AdminSettingsPage() {
             asterra_daily_cap:     data.asterra_daily_cap     ?? 3,
             asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
             asterra_smartlink_url: data.asterra_smartlink_url ?? "",
+            monetag_enabled:                    data.monetag_enabled                    ?? false,
+            monetag_multitag_script:            data.monetag_multitag_script            ?? "",
+            monetag_games_interstitial_enabled: data.monetag_games_interstitial_enabled ?? false,
+            monetag_games_interstitial_script:  data.monetag_games_interstitial_script  ?? "",
             ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
             game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
             game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
@@ -702,6 +715,112 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Monetag ─────────────────────────────────────────────────────── */}
+      <Card className={settings.monetag_enabled ? "border-orange-500 ring-1 ring-orange-500/40" : ""}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Tv2 className="w-4 h-4 text-orange-500" /> Monetag — Display &amp; Interstitial Ads
+          </CardTitle>
+          <CardDescription>
+            Passive ad formats served via Monetag (formerly PropellerAds). Earns on traffic volume
+            (CPM). No per-user rewards — revenue goes directly to your Monetag publisher account.
+            Get your script from <strong>publishers.monetag.com → Ad Channels</strong>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+
+          {/* ── Sitewide Multitag ── */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Enable sitewide Multitag</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Passive formats (OnClick/Popunder, In-Page Push, Vignette Banner) across all pages.
+                  Runs alongside AdSense and Adsterra display placements.
+                </p>
+              </div>
+              <Switch
+                checked={settings.monetag_enabled}
+                onCheckedChange={(v) => setSettings((s) => ({ ...s, monetag_enabled: v }))}
+              />
+            </div>
+            {settings.monetag_enabled && (
+              <div className="space-y-2">
+                <Label htmlFor="monetag_multitag_script" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Multitag Script
+                </Label>
+                <Textarea
+                  id="monetag_multitag_script"
+                  rows={4}
+                  placeholder={`(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})(\'glizauvo.net\',YOUR_ZONE_ID,document.createElement(\'script\'))`}
+                  value={settings.monetag_multitag_script}
+                  onChange={(e) => setSettings((s) => ({ ...s, monetag_multitag_script: e.target.value }))}
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Paste the full script from Monetag → Ad Channels → your Multitag zone → <strong>Get Code</strong>.
+                  You can paste either the raw JS or the full <code className="bg-muted px-1 rounded">&lt;script&gt;…&lt;/script&gt;</code> tag — both are handled.
+                  Injected into <code className="bg-muted px-1 rounded">&lt;head&gt;</code> on every page.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-4">
+            {/* ── Games Interstitial ── */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Enable games interstitial</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Full-screen interstitial ad between game sessions (games section only).
+                  Use a separate Monetag zone from your Multitag for independent reporting.
+                </p>
+              </div>
+              <Switch
+                checked={settings.monetag_games_interstitial_enabled}
+                onCheckedChange={(v) =>
+                  setSettings((s) => ({ ...s, monetag_games_interstitial_enabled: v }))
+                }
+              />
+            </div>
+            {settings.monetag_games_interstitial_enabled && (
+              <div className="space-y-2">
+                <Label htmlFor="monetag_interstitial_script" className="flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Interstitial Zone Script
+                </Label>
+                <Textarea
+                  id="monetag_interstitial_script"
+                  rows={4}
+                  placeholder={`(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})(\'glizauvo.net\',YOUR_INTERSTITIAL_ZONE_ID,document.createElement(\'script\'))`}
+                  value={settings.monetag_games_interstitial_script}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, monetag_games_interstitial_script: e.target.value }))
+                  }
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Create a separate <strong>Interstitial</strong> zone in Monetag and paste its script here.
+                  Loaded on all <code className="bg-muted px-1 rounded">/dashboard/games/*</code> pages — fires between game navigations.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {(settings.monetag_enabled || settings.monetag_games_interstitial_enabled) && (
+            <div className="rounded-md border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30 p-3 text-xs text-orange-800 dark:text-orange-300 space-y-1">
+              <p className="font-medium">ads.txt &amp; service worker</p>
+              <p>
+                Monetag requires an entry in{" "}
+                <code className="bg-orange-100 dark:bg-orange-900/50 px-1 rounded">public/ads.txt</code>{" "}
+                and the service worker file already in{" "}
+                <code className="bg-orange-100 dark:bg-orange-900/50 px-1 rounded">public/</code>.
+                Verify both are present in your Monetag publisher dashboard (green "Installed correctly").
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

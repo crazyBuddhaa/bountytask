@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
+import { getMonetagSettings } from "@/lib/monetag";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -48,20 +49,42 @@ export const viewport: Viewport = {
   themeColor: "#a21caf",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const monetag = await getMonetagSettings();
+
+  // Strip <script> wrapper tags if the admin pasted the full HTML snippet.
+  const multitag_js =
+    monetag.enabled && monetag.multitag_script.trim()
+      ? monetag.multitag_script
+          .trim()
+          .replace(/^<script[^>]*>/i, "")
+          .replace(/<\/script>$/i, "")
+          .trim()
+      : "";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
+        {/* Google AdSense */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3580627557521419"
           crossOrigin="anonymous"
           strategy="beforeInteractive"
         />
+        {/* Monetag Multitag — sitewide passive ads (OnClick, In-Page Push, Vignette).
+            Only injected when admin has enabled Monetag and pasted their zone script. */}
+        {multitag_js && (
+          <Script
+            id="monetag-multitag"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{ __html: multitag_js }}
+          />
+        )}
         <PageViewTracker />
         {children}
         <Toaster

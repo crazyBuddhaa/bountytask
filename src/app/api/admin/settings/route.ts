@@ -35,6 +35,14 @@ const CPX_SETTINGS_KEYS = new Set([
   "cpx_secure_hash_key",
 ])
 
+// Keys that getMonetagSettings() reads and caches under "monetag-settings".
+const MONETAG_SETTINGS_KEYS = new Set([
+  "monetag_enabled",
+  "monetag_multitag_script",
+  "monetag_games_interstitial_enabled",
+  "monetag_games_interstitial_script",
+])
+
 export const dynamic = "force-dynamic"
 
 const settingsSchema = z.object({
@@ -80,6 +88,12 @@ const settingsSchema = z.object({
   asterra_daily_cap:     z.number().int().min(1).max(10).optional(),
   asterra_reward_kobo:   z.number().int().min(1).optional(),
   asterra_smartlink_url: z.string().max(500).optional(),
+
+  // ── Monetag ad network ─────────────────────────────────────────────────────
+  monetag_enabled:                    z.boolean().optional(),
+  monetag_multitag_script:            z.string().max(2000).optional(),
+  monetag_games_interstitial_enabled: z.boolean().optional(),
+  monetag_games_interstitial_script:  z.string().max(2000).optional(),
 
   // ── Global AI verification ─────────────────────────────────────────────────
   ai_verify_all_tasks: z.boolean().optional(),
@@ -140,6 +154,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (entries.some(([key]) => CPX_SETTINGS_KEYS.has(key))) {
     revalidateTag("cpx-settings")
+  }
+  if (entries.some(([key]) => MONETAG_SETTINGS_KEYS.has(key))) {
+    revalidateTag("monetag-settings")
   }
   if (entries.some(([key]) => TASK_SETTINGS_KEYS.has(key))) {
     revalidateTag("task-settings")
