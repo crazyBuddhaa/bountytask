@@ -1,7 +1,9 @@
+import { useState } from "react"
 import { Clock, Zap, Users, ArrowRight, Youtube, Share2, PlayCircle } from "lucide-react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { formatCurrency } from "@/lib/utils"
 import type { Task } from "@/types"
 
@@ -57,6 +59,188 @@ export function WatchEarnBundleCard({ tasks, onWatch }: WatchEarnBundleCardProps
         </Button>
       </CardFooter>
     </Card>
+  )
+}
+
+// ─── Social bundle card ───────────────────────────────────────────────────────
+
+interface SocialBundleCardProps {
+  tasks: Task[]
+  onSelect: (task: Task) => void
+}
+
+const PLATFORM_EMOJI: Record<string, string> = {
+  twitter_x: "𝕏",
+  instagram:  "📸",
+  tiktok:     "🎵",
+  youtube:    "▶",
+  facebook:   "f",
+  threads:    "@",
+}
+
+const PLATFORM_LABELS_BUNDLE: Record<string, string> = {
+  twitter_x: "Twitter/X",
+  instagram:  "Instagram",
+  tiktok:     "TikTok",
+  youtube:    "YouTube",
+  facebook:   "Facebook",
+  threads:    "Threads",
+}
+
+const ACTION_LABELS_BUNDLE: Record<string, string> = {
+  follow: "Follow", like: "Like", comment: "Comment",
+  repost: "Repost", subscribe: "Subscribe",
+}
+
+const PLATFORM_BORDER_BUNDLE: Record<string, string> = {
+  twitter_x: "border-l-gray-900",
+  instagram:  "border-l-pink-500",
+  tiktok:     "border-l-cyan-400",
+  youtube:    "border-l-red-600",
+  facebook:   "border-l-blue-600",
+  threads:    "border-l-gray-700",
+}
+
+export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
+  const [open, setOpen] = useState(false)
+  const count = tasks.length
+  const maxReward = Math.max(...tasks.map(t => t.reward_amount))
+  const minReward = Math.min(...tasks.map(t => t.reward_amount))
+  const allSameReward = minReward === maxReward
+
+  // Unique platforms for preview chips
+  const uniquePlatforms = [...new Set(tasks.map(t => t.social_platform).filter(Boolean))] as string[]
+
+  return (
+    <>
+      <Card className="flex flex-col hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group border-l-4 border-l-indigo-500">
+        <CardContent className="p-5 flex-1">
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <Badge variant="outline" className="text-[10px] border-indigo-200 text-indigo-600 bg-indigo-50 gap-1">
+              <Share2 className="w-2.5 h-2.5" /> Social Tasks
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1">
+              {count} task{count !== 1 ? "s" : ""}
+            </Badge>
+          </div>
+
+          <h3 className="font-semibold text-sm leading-snug mb-2 group-hover:text-primary transition-colors">
+            Social Media Tasks
+          </h3>
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            Follow, like, comment, repost and more across{" "}
+            {uniquePlatforms.slice(0, 3).map(p => PLATFORM_LABELS_BUNDLE[p] ?? p).join(", ")}
+            {uniquePlatforms.length > 3 ? " and more" : ""}.
+          </p>
+
+          {uniquePlatforms.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {uniquePlatforms.slice(0, 4).map(p => (
+                <span key={p} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                  {PLATFORM_EMOJI[p] ?? ""} {PLATFORM_LABELS_BUNDLE[p] ?? p}
+                </span>
+              ))}
+              {uniquePlatforms.length > 4 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  +{uniquePlatforms.length - 4} more
+                </span>
+              )}
+            </div>
+          )}
+
+          <p className="text-[10px] text-indigo-600 mt-2 font-medium flex items-center gap-1">
+            <Share2 className="w-3 h-3" /> Screenshot required for all tasks
+          </p>
+        </CardContent>
+
+        <CardFooter className="p-5 pt-0 flex items-center justify-between border-t mt-2">
+          <div>
+            <p className="text-lg font-bold text-primary">
+              {allSameReward
+                ? formatCurrency(maxReward)
+                : `${formatCurrency(minReward)} – ${formatCurrency(maxReward)}`}
+            </p>
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Users className="w-2.5 h-2.5" /> {count} task{count !== 1 ? "s" : ""} available
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setOpen(true)}
+            className="gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+          >
+            <Share2 className="w-3 h-3" /> Browse
+          </Button>
+        </CardFooter>
+      </Card>
+
+      {/* ── Social task picker sheet ─────────────────────────────────────────── */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="bottom" className="max-h-[82vh] overflow-y-auto rounded-t-2xl pb-8">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Share2 className="w-4 h-4 text-indigo-500" /> Social Tasks
+            </SheetTitle>
+            <p className="text-xs text-muted-foreground">
+              {count} task{count !== 1 ? "s" : ""} available — pick one to start
+            </p>
+          </SheetHeader>
+
+          <div className="space-y-3">
+            {tasks.map(task => {
+              const spotsLeft = task.max_completions !== null
+                ? task.max_completions - task.current_completions
+                : null
+              const borderClass = PLATFORM_BORDER_BUNDLE[task.social_platform ?? ""] ?? "border-l-indigo-500"
+              return (
+                <div
+                  key={task.id}
+                  className={`rounded-lg border border-l-4 ${borderClass} bg-card p-4 cursor-pointer hover:shadow-sm active:scale-[0.99] transition-all`}
+                  onClick={() => { setOpen(false); onSelect(task) }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 font-medium">
+                          {ACTION_LABELS_BUNDLE[task.social_action!] ?? task.social_action}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                          {PLATFORM_EMOJI[task.social_platform ?? ""] ?? ""} {PLATFORM_LABELS_BUNDLE[task.social_platform!] ?? task.social_platform}
+                        </span>
+                        {task.ai_verify_screenshot && (
+                          <span className="text-[10px] text-indigo-500 font-medium">AI verified</span>
+                        )}
+                      </div>
+                      <p className="font-semibold text-sm leading-snug line-clamp-2">{task.title}</p>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
+                      )}
+                      {spotsLeft !== null && (
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <Users className="w-2.5 h-2.5" /> {spotsLeft.toLocaleString()} spots left
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-bold text-primary text-base">{formatCurrency(task.reward_amount)}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-1.5 h-7 text-xs gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                        onClick={e => { e.stopPropagation(); setOpen(false); onSelect(task) }}
+                      >
+                        <Share2 className="w-3 h-3" /> Start
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }
 

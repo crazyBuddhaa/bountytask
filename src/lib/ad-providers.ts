@@ -6,7 +6,7 @@
  *  - Session/transaction deduplication (idempotent postbacks)
  *  - Unified completion recorder (ad_task_logs + ledger + notification)
  *  - IMA SDK one-time HMAC token (generate + validate)
- *  - Postback signature validators for CPX (MD5) and Lootably (HMAC-SHA256)
+ *  - Postback signature validator for CPX (MD5)
  */
 
 import { createHmac, createHash, timingSafeEqual } from "crypto"
@@ -15,11 +15,9 @@ import { appendLedger } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { recalcUserTier } from "@/lib/tiers"
 import { getCpxSettings } from "@/lib/cpx"
-import { getLootablySettings } from "@/lib/lootably"
-import { getAdGateSettings } from "@/lib/adgate"
 import { getAsterraSettings } from "@/lib/asterra"
 
-export type AdProvider = "ima" | "lootably" | "cpx" | "adgate" | "asterra"
+export type AdProvider = "ima" | "cpx" | "asterra"
 export type AdType = "video" | "survey" | "offer" | "mixed"
 
 // ─── Daily Cap ────────────────────────────────────────────────────────────────
@@ -124,9 +122,7 @@ export async function recordAdCompletion({
   const naira = (rewardKobo / 100).toFixed(2)
   const providerLabel: Record<AdProvider, string> = {
     ima: "video ad",
-    lootably: "offer",
     cpx: "survey",
-    adgate: "offer",
     asterra: "smartlink offer",
   }
 
@@ -191,36 +187,8 @@ export function validateImaToken(token: string): string | null {
 
 // ─── Postback Signature Validators ───────────────────────────────────────────
 
-/**
- * Lootably: HMAC-SHA256(secret, userId + transactionId)
- * Lootably sends `sig` as a query parameter on the postback.
- */
-export function validateLootablySignature(
-  userId: string,
-  transactionId: string,
-  secret: string,
-  receivedSig: string
-): boolean {
-  const expected = createHmac("sha256", secret)
-    .update(`${userId}${transactionId}`)
-    .digest("hex")
-  try {
-    return timingSafeEqual(Buffer.from(receivedSig), Buffer.from(expected))
-  } catch {
-    return false
-  }
-}
-
-/**
- * AdGate Media verifies postbacks by source IP rather than a signed hash
- * (their panel shows the sending IP under the wall's Postback section).
- * Constant-time-ish string compare is unnecessary here — IPs aren't secret,
- * this just guards against stray/forged callers.
- */
-export function validateAdGatePostbackIp(requestIp: string | undefined, configuredIp: string): boolean {
-  if (!requestIp || !configuredIp) return false
-  return requestIp === configuredIp
-}
+// createHash is imported above; re-export for CPX postback route convenience.
+export { createHash }
 
 // ─── Settings Getters ─────────────────────────────────────────────────────────
 
@@ -229,9 +197,7 @@ export async function getAdProviderSettings() {
   const admin = createAdminClient()
   const keys = [
     "ima_enabled", "ima_daily_cap", "ima_reward_kobo", "ima_ad_tag_url",
-    "lootably_enabled", "lootably_daily_cap", "lootably_api_key", "lootably_secret",
     "cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key",
-    "adgate_enabled", "adgate_daily_cap", "adgate_wall_id", "adgate_postback_ip",
     "asterra_enabled", "asterra_daily_cap", "asterra_reward_kobo", "asterra_smartlink_url",
   ] as const
 
@@ -249,23 +215,11 @@ export async function getAdProviderSettings() {
       rewardKobo: Number(s.ima_reward_kobo ?? 50),
       adTagUrl:   String(s.ima_ad_tag_url  ?? ""),
     },
-    lootably: {
-      enabled:    Boolean(s.lootably_enabled   ?? false),
-      dailyCap:   Number(s.lootably_daily_cap  ?? 10),
-      apiKey:     String(s.lootably_api_key    ?? ""),
-      secret:     String(s.lootably_secret     ?? ""),
-    },
     cpx: {
       enabled:       Boolean(s.cpx_enabled          ?? false),
       dailyCap:      Number(s.cpx_daily_cap          ?? 10),
       appId:         String(s.cpx_app_id             ?? ""),
       secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
-    },
-    adgate: {
-      enabled:    Boolean(s.adgate_enabled    ?? false),
-      dailyCap:   Number(s.adgate_daily_cap   ?? 10),
-      wallId:     String(s.adgate_wall_id     ?? ""),
-      postbackIp: String(s.adgate_postback_ip ?? ""),
     },
     asterra: {
       enabled:      Boolean(s.asterra_enabled      ?? false),
@@ -295,11 +249,9 @@ export interface AdTaskStatus {
  * omitted entirely rather than shown as "coming soon" in the main grid.
  */
 export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStatus[]> {
-  const [ima, lootably, cpx, adgate, asterra] = await Promise.all([
+  const [ima, cpx, asterra] = await Promise.all([
     getAdProviderSettings().then((s) => s.ima),
-    getLootablySettings(),
     getCpxSettings(),
-    getAdGateSettings(),
     getAsterraSettings(),
   ])
 
@@ -315,16 +267,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       dailyCap: ima.dailyCap,
     })
   }
-  if (lootably.enabled && lootably.apiKey && lootably.secret) {
-    candidates.push({
-      provider: "lootably",
-      title: "Offers & Rewards",
-      description: "Complete offers, games, and surveys from the mixed rewards wall.",
-      href: "/dashboard/tasks/mixed-offers",
-      rewardKobo: null,
-      dailyCap: lootably.dailyCap,
-    })
-  }
   if (cpx.enabled && cpx.appId && cpx.secureHashKey) {
     candidates.push({
       provider: "cpx",
@@ -333,16 +275,6 @@ export async function getAdTaskStatusForUser(userId: string): Promise<AdTaskStat
       href: "/dashboard/tasks/surveys",
       rewardKobo: null,
       dailyCap: cpx.dailyCap,
-    })
-  }
-  if (adgate.enabled && adgate.wallId && adgate.postbackIp) {
-    candidates.push({
-      provider: "adgate",
-      title: "AdGate Rewards Wall",
-      description: "Complete offers, app installs, and sign-ups from the AdGate rewards wall.",
-      href: "/dashboard/tasks/adgate-offers",
-      rewardKobo: null,
-      dailyCap: adgate.dailyCap,
     })
   }
   if (asterra.enabled && asterra.smartlinkUrl) {

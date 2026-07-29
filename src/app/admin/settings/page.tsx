@@ -40,21 +40,11 @@ type Settings = {
   ima_daily_cap: number
   ima_reward_kobo: number
   ima_ad_tag_url: string
-  // Lootably
-  lootably_enabled: boolean
-  lootably_daily_cap: number
-  lootably_api_key: string
-  lootably_secret: string
   // CPX Research
   cpx_enabled: boolean
   cpx_daily_cap: number
   cpx_app_id: string
   cpx_secure_hash_key: string
-  // AdGate Media
-  adgate_enabled: boolean
-  adgate_daily_cap: number
-  adgate_wall_id: string
-  adgate_postback_ip: string
   // Adsterra Smartlink
   asterra_enabled: boolean
   asterra_daily_cap: number
@@ -95,18 +85,10 @@ const DEFAULTS: Settings = {
   ima_daily_cap: 2,
   ima_reward_kobo: 50,
   ima_ad_tag_url: "",
-  lootably_enabled: false,
-  lootably_daily_cap: 10,
-  lootably_api_key: "",
-  lootably_secret: "",
   cpx_enabled: false,
   cpx_daily_cap: 10,
   cpx_app_id: "",
   cpx_secure_hash_key: "",
-  adgate_enabled: false,
-  adgate_daily_cap: 10,
-  adgate_wall_id: "",
-  adgate_postback_ip: "",
   asterra_enabled: false,
   asterra_daily_cap: 3,
   asterra_reward_kobo: 250,
@@ -159,18 +141,10 @@ export default function AdminSettingsPage() {
             ima_daily_cap:   data.ima_daily_cap   ?? 2,
             ima_reward_kobo: data.ima_reward_kobo ?? 50,
             ima_ad_tag_url:  data.ima_ad_tag_url  ?? "",
-            lootably_enabled:   data.lootably_enabled   ?? false,
-            lootably_daily_cap: data.lootably_daily_cap ?? 10,
-            lootably_api_key:   data.lootably_api_key   ?? "",
-            lootably_secret:    data.lootably_secret    ?? "",
             cpx_enabled:         data.cpx_enabled          ?? false,
             cpx_daily_cap:       data.cpx_daily_cap         ?? 10,
             cpx_app_id:          data.cpx_app_id            ?? "",
             cpx_secure_hash_key: data.cpx_secure_hash_key   ?? "",
-            adgate_enabled:      data.adgate_enabled       ?? false,
-            adgate_daily_cap:    data.adgate_daily_cap     ?? 10,
-            adgate_wall_id:      data.adgate_wall_id       ?? "",
-            adgate_postback_ip:  data.adgate_postback_ip   ?? "",
             asterra_enabled:       data.asterra_enabled       ?? false,
             asterra_daily_cap:     data.asterra_daily_cap     ?? 3,
             asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
@@ -577,53 +551,6 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Lootably ────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <LayoutGrid className="w-4 h-4" /> Lootably — Mixed Offers
-          </CardTitle>
-          <CardDescription>
-            Aggregated offer wall: surveys, video offers, sign-ups, and app installs.
-            Broadest offer variety — best used as a fallback when specialist walls have low fill.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Enable Lootably</p></div>
-            <Switch
-              checked={settings.lootably_enabled}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, lootably_enabled: v }))}
-            />
-          </div>
-          {settings.lootably_enabled && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="lootably_cap">Daily cap per user</Label>
-                <Input id="lootably_cap" type="number" min={1} max={20}
-                  value={settings.lootably_daily_cap}
-                  onChange={(e) => setSettings((s) => ({ ...s, lootably_daily_cap: parseInt(e.target.value) || 10 }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lootably_key" className="flex items-center gap-1"><Key className="w-3 h-3" /> API Key</Label>
-                <Input id="lootably_key" placeholder="lootably-api-key"
-                  value={settings.lootably_api_key}
-                  onChange={(e) => setSettings((s) => ({ ...s, lootably_api_key: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lootably_secret" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Secret</Label>
-                <Input id="lootably_secret" type="password" placeholder="HMAC-SHA256 signing secret"
-                  value={settings.lootably_secret}
-                  onChange={(e) => setSettings((s) => ({ ...s, lootably_secret: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">{APP_URL}/api/postback/lootably</code>
-                </p>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ── CPX Research ────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
@@ -698,57 +625,6 @@ export default function AdminSettingsPage() {
                   <li><code className="bg-muted px-1 rounded">{"{amount_usd}"}</code> — payout in USD</li>
                   <li><code className="bg-muted px-1 rounded">{"{amount_local}"}</code> — payout in your local currency (required by CPX)</li>
                 </ul>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── AdGate Media ────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Gift className="w-4 h-4" /> AdGate Media — Rewards Wall
-          </CardTitle>
-          <CardDescription>
-            App installs, sign-ups, and offer wall. Postbacks are verified by source IP
-            (shown on your AdGate affiliate panel under the wall&apos;s Postback section) rather
-            than a signed hash — enter that IP below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div><p className="text-sm font-medium">Enable AdGate Media</p></div>
-            <Switch
-              checked={settings.adgate_enabled}
-              onCheckedChange={(v) => setSettings((s) => ({ ...s, adgate_enabled: v }))}
-            />
-          </div>
-          {settings.adgate_enabled && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="adgate_cap">Daily cap per user</Label>
-                <Input id="adgate_cap" type="number" min={1} max={20}
-                  value={settings.adgate_daily_cap}
-                  onChange={(e) => setSettings((s) => ({ ...s, adgate_daily_cap: parseInt(e.target.value) || 10 }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="adgate_wall_id" className="flex items-center gap-1"><Key className="w-3 h-3" /> Wall ID</Label>
-                <Input id="adgate_wall_id" placeholder="e.g. nQ"
-                  value={settings.adgate_wall_id}
-                  onChange={(e) => setSettings((s) => ({ ...s, adgate_wall_id: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  Found at panel.adgatemedia.com under Monetization Tools → AdGate Rewards → your VC wall.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="adgate_postback_ip" className="flex items-center gap-1"><Key className="w-3 h-3" /> Postback Source IP</Label>
-                <Input id="adgate_postback_ip" placeholder="e.g. 123.123.123.123"
-                  value={settings.adgate_postback_ip}
-                  onChange={(e) => setSettings((s) => ({ ...s, adgate_postback_ip: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  Postback URL: <code className="text-xs bg-muted px-1 rounded">{`${APP_URL}/api/postback/adgate?conversion_id={conversion_id}&user_id={s1}&payout={payout}&state={state}`}</code>
-                </p>
               </div>
             </>
           )}

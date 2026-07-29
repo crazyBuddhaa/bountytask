@@ -69,23 +69,11 @@ const settingsSchema = z.object({
   ima_ad_tag_url:   z.string().max(500).optional(),
 
 
-  // ── Lootably ───────────────────────────────────────────────────────────────
-  lootably_enabled:   z.boolean().optional(),
-  lootably_daily_cap: z.number().int().min(1).max(20).optional(),
-  lootably_api_key:   z.string().max(200).optional(),
-  lootably_secret:    z.string().max(200).optional(),
-
   // ── CPX Research ───────────────────────────────────────────────────────────
   cpx_enabled:          z.boolean().optional(),
   cpx_daily_cap:        z.number().int().min(1).max(20).optional(),
   cpx_app_id:           z.string().max(200).optional(),
   cpx_secure_hash_key:  z.string().max(200).optional(),
-
-  // ── AdGate Media ───────────────────────────────────────────────────────────
-  adgate_enabled:      z.boolean().optional(),
-  adgate_daily_cap:    z.number().int().min(1).max(20).optional(),
-  adgate_wall_id:      z.string().max(200).optional(),
-  adgate_postback_ip:  z.string().max(45).optional(), // IPv4 or IPv6
 
   // ── Adsterra Smartlink ─────────────────────────────────────────────────────
   asterra_enabled:       z.boolean().optional(),

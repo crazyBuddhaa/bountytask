@@ -72,6 +72,55 @@ const ACTION_LABELS: Record<string, string> = {
   repost: "Repost", subscribe: "Subscribe",
 }
 
+const PLATFORM_LABELS_ADMIN: Record<string, string> = {
+  twitter_x: "Twitter/X", instagram: "Instagram", tiktok: "TikTok",
+  youtube: "YouTube", facebook: "Facebook", threads: "Threads",
+}
+
+// ─── Default pre-task info generators ────────────────────────────────────────
+
+function buildDefaultInstructions(platform: SocialPlatform, action: SocialAction): string {
+  const plat = PLATFORM_LABELS_ADMIN[platform] ?? platform
+  const steps: Record<SocialAction, string[]> = {
+    follow: [
+      `Open ${plat} and navigate to the specified account's profile.`,
+      `Tap / click the Follow button and wait for it to change to "Following".`,
+      `Take a clear screenshot showing the "Following" status and the account name clearly visible.`,
+    ],
+    like: [
+      `Open the post using the link provided below.`,
+      `Tap / click the Like or Heart icon on the post.`,
+      `Take a screenshot showing the post with the like icon in its active (filled / coloured) state.`,
+    ],
+    comment: [
+      `Open the post using the link provided below.`,
+      `Write and submit your comment. Use the exact required text if one is specified.`,
+      `Take a screenshot showing your posted comment visible in the thread.`,
+    ],
+    repost: [
+      `Open the post using the link provided below.`,
+      `Tap / click Repost or Retweet and confirm the action.`,
+      `Take a screenshot showing the active repost indicator (highlighted icon or updated counter).`,
+    ],
+    subscribe: [
+      `Open ${plat} and navigate to the specified channel.`,
+      `Click Subscribe and wait for the button to read "Subscribed".`,
+      `Take a screenshot showing the "Subscribed" button and the channel name clearly visible.`,
+    ],
+  }
+  const lines = steps[action] ?? [
+    `Complete the required action on ${plat}.`,
+    `Take a clear screenshot as proof of completion.`,
+  ]
+  return lines.map((l, i) => `${i + 1}. ${l}`).join("\n")
+}
+
+function buildDefaultDescription(platform: SocialPlatform, action: SocialAction): string {
+  const plat = PLATFORM_LABELS_ADMIN[platform] ?? platform
+  const act  = ACTION_LABELS[action] ?? action
+  return `${act} on ${plat} to earn this reward. A screenshot is required as proof.`
+}
+
 const EDITABLE_TASK_FIELDS = [
   "title", "description", "instructions", "category_id", "type", "status",
   "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
@@ -210,26 +259,45 @@ export default function AdminTasksPage() {
         social_target_post_url: null, social_required_comment_text: null, ai_verify_screenshot: false,
       }))
     } else { // social
+      const defPlatform: SocialPlatform = "twitter_x"
+      const defAction: SocialAction     = "follow"
       setEditing(prev => ({
         ...prev,
         youtube_url: null, min_watch_seconds: null,
-        social_platform: "twitter_x", social_action: "follow",
+        social_platform: defPlatform, social_action: defAction,
         social_target_handle: "", social_target_post_url: null,
         social_required_comment_text: null, ai_verify_screenshot: false,
         type: "verified", requires_proof: true,
+        description:  buildDefaultDescription(defPlatform, defAction),
+        instructions: buildDefaultInstructions(defPlatform, defAction),
       }))
     }
   }
 
-  /** When platform changes, reset action to the first valid option for that platform */
+  /** When platform changes, reset action and refresh default pre-task text */
   function handlePlatformChange(platform: SocialPlatform) {
     const firstAction = PLATFORM_ACTIONS[platform]?.[0]?.value ?? "follow"
     setEditing(prev => ({
       ...prev,
       social_platform: platform,
       social_action: firstAction,
-      // Clear post URL — it may not apply to the new action
       social_target_post_url: null,
+      description:  buildDefaultDescription(platform, firstAction),
+      instructions: buildDefaultInstructions(platform, firstAction),
+    }))
+  }
+
+  /** When action changes, refresh default pre-task text */
+  function handleActionChange(action: SocialAction) {
+    const platform = (editing?.social_platform ?? "twitter_x") as SocialPlatform
+    setEditing(prev => ({
+      ...prev,
+      social_action: action,
+      social_target_post_url: ACTION_NEEDS_POST_URL.has(action)
+        ? prev?.social_target_post_url ?? null
+        : null,
+      description:  buildDefaultDescription(platform, action),
+      instructions: buildDefaultInstructions(platform, action),
     }))
   }
 
@@ -464,14 +532,7 @@ export default function AdminTasksPage() {
                       <Label>Action <span className="text-destructive">*</span></Label>
                       <Select
                         value={editing.social_action ?? "follow"}
-                        onValueChange={v => setEditing(prev => ({
-                          ...prev,
-                          social_action: v as SocialAction,
-                          // Clear post URL when switching to follow/subscribe
-                          social_target_post_url: ACTION_NEEDS_POST_URL.has(v as SocialAction)
-                            ? prev?.social_target_post_url ?? null
-                            : null,
-                        }))}
+                        onValueChange={v => handleActionChange(v as SocialAction)}
                       >
                         <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                         <SelectContent>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TaskCard, WatchEarnBundleCard } from "@/components/tasks/TaskCard"
+import { TaskCard, WatchEarnBundleCard, SocialBundleCard } from "@/components/tasks/TaskCard"
 import { AdTaskCard } from "@/components/tasks/AdTaskCard"
 import { TaskCompletionModal } from "@/components/tasks/TaskCompletionModal"
 import { AdSlot } from "@/components/ads/AdSlot"
@@ -185,14 +185,21 @@ export default function TasksPage() {
             <AdTaskCard key={adTask.provider} task={adTask} />
           ))}
           {type !== "ads" && (() => {
-            const videoTasks = tasks.filter(t => !!t.youtube_url)
-            const otherTasks = tasks.filter(t => !t.youtube_url)
+            const videoTasks  = tasks.filter(t => !!t.youtube_url)
+            const socialTasks = tasks.filter(t => !t.youtube_url && !!t.social_platform)
+            const otherTasks  = tasks.filter(t => !t.youtube_url && !t.social_platform)
             return (
               <>
                 {videoTasks.length > 0 && (
                   <WatchEarnBundleCard
                     tasks={videoTasks}
                     onWatch={() => router.push("/dashboard/tasks/watch-videos")}
+                  />
+                )}
+                {socialTasks.length > 0 && (
+                  <SocialBundleCard
+                    tasks={socialTasks}
+                    onSelect={task => setSelectedTask(task)}
                   />
                 )}
                 {otherTasks.map(task => (
