@@ -43,6 +43,14 @@ const MONETAG_SETTINGS_KEYS = new Set([
   "monetag_games_interstitial_script",
 ])
 
+// Keys that getNewsSettings() reads and caches under "news-settings".
+const NEWS_SETTINGS_KEYS = new Set([
+  "news_enabled",
+  "news_earn_enabled",
+  "news_earn_kobo_per_read",
+  "news_earn_daily_cap",
+])
+
 export const dynamic = "force-dynamic"
 
 const settingsSchema = z.object({
@@ -97,6 +105,12 @@ const settingsSchema = z.object({
 
   // ── Global AI verification ─────────────────────────────────────────────────
   ai_verify_all_tasks: z.boolean().optional(),
+
+  // ── News feed ──────────────────────────────────────────────────────────────
+  news_enabled:            z.boolean().optional(),
+  news_earn_enabled:       z.boolean().optional(),
+  news_earn_kobo_per_read: z.number().int().min(0).optional(),
+  news_earn_daily_cap:     z.number().int().min(1).max(200).optional(),
 
   // ── Games entry fees ───────────────────────────────────────────────────────
   game_entry_fees_enabled:       z.boolean().optional(),
@@ -157,6 +171,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (entries.some(([key]) => MONETAG_SETTINGS_KEYS.has(key))) {
     revalidateTag("monetag-settings")
+  }
+  if (entries.some(([key]) => NEWS_SETTINGS_KEYS.has(key))) {
+    revalidateTag("news-settings")
   }
   if (entries.some(([key]) => TASK_SETTINGS_KEYS.has(key))) {
     revalidateTag("task-settings")

@@ -18,7 +18,8 @@ export type LedgerRef =
   | "admin_adjustment"
   | "penalty"
   | "game_entry_fee"
-  | "game_prize";
+  | "game_prize"
+  | "news_read_reward";
 export type FraudSeverity = "low" | "medium" | "high" | "critical";
 export type NotificationType =
   | "task_approved"

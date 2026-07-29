@@ -77,7 +77,7 @@ export default function LandingPage() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="text-base" asChild>
-              <Link href="#how-it-works">How it works</Link>
+              <Link href="/learn#how-it-works">How it works</Link>
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-4">

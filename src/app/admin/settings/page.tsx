@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  ClipboardList, Key, Gift, ScanEye, Tv2,
+  ClipboardList, Key, Gift, ScanEye, Tv2, Newspaper,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,6 +58,10 @@ type Settings = {
   // Global AI verification
   ai_verify_all_tasks: boolean
   // Games entry fees
+  news_enabled: boolean
+  news_earn_enabled: boolean
+  news_earn_kobo_per_read: number
+  news_earn_daily_cap: number
   game_entry_fees_enabled: boolean
   game_entry_fee_wordle: number
   game_entry_fee_higher_or_lower: number
@@ -103,6 +107,10 @@ const DEFAULTS: Settings = {
   monetag_games_interstitial_enabled: false,
   monetag_games_interstitial_script: "",
   ai_verify_all_tasks: false,
+  news_enabled: false,
+  news_earn_enabled: false,
+  news_earn_kobo_per_read: 5,
+  news_earn_daily_cap: 20,
   game_entry_fees_enabled: false,
   game_entry_fee_wordle: 1000,
   game_entry_fee_higher_or_lower: 1000,
@@ -163,6 +171,10 @@ export default function AdminSettingsPage() {
             monetag_games_interstitial_enabled: data.monetag_games_interstitial_enabled ?? false,
             monetag_games_interstitial_script:  data.monetag_games_interstitial_script  ?? "",
             ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
+            news_enabled:            data.news_enabled            ?? false,
+            news_earn_enabled:       data.news_earn_enabled       ?? false,
+            news_earn_kobo_per_read: Number(data.news_earn_kobo_per_read) || 5,
+            news_earn_daily_cap:     Number(data.news_earn_daily_cap)     || 20,
             game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
             game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
             game_entry_fee_higher_or_lower: data.game_entry_fee_higher_or_lower ?? 1000,
@@ -820,6 +832,103 @@ export default function AdminSettingsPage() {
                 <code className="bg-orange-100 dark:bg-orange-900/50 px-1 rounded">public/</code>.
                 Verify both are present in your Monetag publisher dashboard (green "Installed correctly").
               </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── News Feed ────────────────────────────────────────────────────── */}
+      <Card className={settings.news_enabled ? "border-sky-500 ring-1 ring-sky-500/40" : ""}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Newspaper className="w-4 h-4 text-sky-500" /> News Feed
+          </CardTitle>
+          <CardDescription>
+            Pull headlines from Nigerian RSS feeds (Punch, Vanguard, BusinessDay, Guardian NG, Pulse NG)
+            every 30 minutes via the GitHub Actions cron. Users read articles in their dashboard.
+            Optionally credit a small reward per article opened to drive engagement.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>Enable news feed</Label>
+            <Switch
+              checked={settings.news_enabled}
+              onCheckedChange={v => setSettings(s => ({ ...s, news_enabled: v }))}
+            />
+          </div>
+
+          {settings.news_enabled && (
+            <div className="space-y-4 pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Earn on read</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Credit users a small amount each time they open an article.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.news_earn_enabled}
+                  onCheckedChange={v => setSettings(s => ({ ...s, news_earn_enabled: v }))}
+                />
+              </div>
+
+              {settings.news_earn_enabled && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="news_earn_kobo">Reward per article (₦)</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">₦</span>
+                      <Input
+                        id="news_earn_kobo"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={(settings.news_earn_kobo_per_read / 100).toFixed(2)}
+                        onChange={e =>
+                          setSettings(s => ({
+                            ...s,
+                            news_earn_kobo_per_read: Math.round(Number(e.target.value) * 100),
+                          }))
+                        }
+                        className="w-28"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        ({settings.news_earn_kobo_per_read} kobo)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="news_daily_cap">Daily article cap</Label>
+                    <Input
+                      id="news_daily_cap"
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={settings.news_earn_daily_cap}
+                      onChange={e =>
+                        setSettings(s => ({ ...s, news_earn_daily_cap: Number(e.target.value) }))
+                      }
+                      className="w-28"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Max articles credited per user per day.
+                      Max daily earn: ₦{((settings.news_earn_daily_cap * settings.news_earn_kobo_per_read) / 100).toFixed(2)}.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-md border border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-300 space-y-1">
+                <p className="font-medium">Setup reminder</p>
+                <p>
+                  The GitHub Actions workflow <code className="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">.github/workflows/news-feed.yml</code>{" "}
+                  must be enabled and the <code className="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">APP_URL</code> +{" "}
+                  <code className="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">CRON_SECRET</code> repo secrets must be set
+                  before articles will start appearing. Trigger it manually once to populate the feed immediately.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>

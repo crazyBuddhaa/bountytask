@@ -1,0 +1,23 @@
+name: Fetch News Feed
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"  # every 30 minutes
+  workflow_dispatch:         # allow manual trigger from GitHub UI
+
+jobs:
+  fetch-news:
+    name: Pull RSS feeds
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Call fetch-news cron endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.APP_URL }}/api/cron/fetch-news" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "Response status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "News cron endpoint returned unexpected status: $STATUS"
+            exit 1
+          fi

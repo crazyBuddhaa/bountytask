@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, ListTodo, CheckSquare, TrendingUp,
-  Banknote, Users, Bell, User, Shield, Gamepad2,
+  Banknote, Users, Bell, User, Shield, Gamepad2, Newspaper,
 } from "lucide-react"
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/dashboard/tasks", label: "Available Tasks", icon: ListTodo },
   { href: "/dashboard/my-tasks", label: "My Tasks", icon: CheckSquare },
   { href: "/dashboard/games", label: "Games & Earn", icon: Gamepad2 },
+  { href: "/dashboard/news", label: "News", icon: Newspaper },
   { href: "/dashboard/earnings", label: "Earnings", icon: TrendingUp },
   { href: "/dashboard/withdrawal", label: "Withdrawal", icon: Banknote },
   { href: "/dashboard/referral", label: "Referral", icon: Users },
