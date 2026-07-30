@@ -37,6 +37,13 @@ export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
         "w-64 flex-col border-r bg-card min-h-screen",
         mobile ? "flex" : "hidden lg:flex"
       )}
+      // Stop clicks inside the sidebar from bubbling to the document.
+      // Monetag OnClick popunder attaches a document-level bubble-phase
+      // listener; intercepting here means navigating between dashboard pages
+      // via the sidebar never triggers a pop-under or interstitial ad.
+      // Next.js <Link> handles navigation at the component level before
+      // bubbling, so routing is completely unaffected.
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="p-6 border-b">
         <Link href="/dashboard" className="flex items-center gap-2">
