@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDistanceToNow } from "date-fns"
+import { AdSlot } from "@/components/ads/AdSlot"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -326,6 +327,11 @@ export default function ArticleReaderPage() {
             />
           </div>
         )}
+
+        {/* Inline ad — between thumbnail and body */}
+        <div className="px-6 pt-4">
+          <AdSlot placement="news" />
+        </div>
 
         {/* Body */}
         <div className="p-6">

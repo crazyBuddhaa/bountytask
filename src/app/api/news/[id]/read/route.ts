@@ -46,9 +46,14 @@ export async function POST(
     .maybeSingle()
 
   if (existing) {
+    const settings = await getNewsSettings()
     return NextResponse.json({
-      alreadyRead:    true,
-      minutesCredited: existing.minutes_credited ?? 0,
+      alreadyRead:          true,
+      minutesCredited:      existing.minutes_credited ?? 0,
+      earnEnabled:          settings.earnEnabled,
+      koboPerMinute:        settings.earnKoboPerMinute,
+      maxMinutesPerArticle: settings.earnMaxMinutesPerArticle,
+      dailyCapMinutes:      settings.earnDailyCapMinutes,
     })
   }
 

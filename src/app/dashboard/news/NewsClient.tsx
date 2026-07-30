@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { NewsSettings } from "@/lib/news"
 import { formatDistanceToNow } from "date-fns"
+import { AdSlot } from "@/components/ads/AdSlot"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,13 +172,21 @@ export function NewsClient({ initialArticles, initialHasMore, settings, readsTod
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {articles.map(article => (
-            <ArticleCard
-              key={article.id}
-              article={article}
-              earnEnabled={settings.earnEnabled}
-              onClick={() => router.push(`/dashboard/news/${article.id}`)}
-            />
+          {articles.map((article, i) => (
+            <>
+              <ArticleCard
+                key={article.id}
+                article={article}
+                earnEnabled={settings.earnEnabled}
+                onClick={() => router.push(`/dashboard/news/${article.id}`)}
+              />
+              {/* Insert a full-width ad slot after every 4th article */}
+              {(i + 1) % 4 === 0 && (
+                <div key={`ad-${i}`} className="sm:col-span-2">
+                  <AdSlot placement="news" />
+                </div>
+              )}
+            </>
           ))}
         </div>
       )}
