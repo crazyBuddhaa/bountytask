@@ -5,6 +5,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { getMonetagSettings, parseMonetagSnippet } from "@/lib/monetag";
+import { MonetagScript } from "@/components/ads/MonetagScript";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -57,7 +58,7 @@ export default async function RootLayout({
   const monetag = await getMonetagSettings();
 
   // Parse the admin-pasted snippet into a typed structure.
-  // Handles both external src-based scripts and inline JS blocks.
+  // MonetagScript (client component) will suppress it on /admin and /dashboard.
   const multitag = monetag.enabled
     ? parseMonetagSnippet(monetag.multitag_script)
     : { kind: "empty" as const };
@@ -65,7 +66,8 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {/* Google AdSense */}
+        {/* Google AdSense — public pages only; AdSense's own placement rules
+            handle suppression, but Monetag is gated client-side below. */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3580627557521419"
@@ -73,25 +75,12 @@ export default async function RootLayout({
           strategy="beforeInteractive"
         />
 
-        {/* Monetag Multitag — sitewide passive ads (OnClick, In-Page Push, Vignette).
-            Only injected when admin has enabled Monetag and pasted their zone script.
-            Supports both external src-based tags and inline JS snippets. */}
-        {multitag.kind === "src" && (
-          <Script
-            id="monetag-multitag"
-            src={multitag.src}
-            strategy="afterInteractive"
-            data-zone={multitag.dataZone}
-            data-cfasync={multitag.dataCfasync}
-          />
-        )}
-        {multitag.kind === "inline" && (
-          <Script
-            id="monetag-multitag"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{ __html: multitag.js }}
-          />
-        )}
+        {/* Monetag Multitag — public pages only.
+            MonetagScript is a client component that reads usePathname() and
+            returns null on /admin/* and /dashboard/*, so pop-unders, in-page
+            push, and vignette ads never fire while a user is inside the app
+            or navigating the dashboard sidebar. */}
+        <MonetagScript multitag={multitag} />
 
         <PageViewTracker />
         {children}
