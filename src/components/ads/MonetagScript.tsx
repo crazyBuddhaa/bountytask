@@ -21,11 +21,19 @@ import type { ParsedMonetagSnippet } from "@/lib/monetag"
  * Any pathname that starts with one of these receives no ad scripts.
  *
  * /admin  — admins should never see pop-unders or push ads while working.
- * /dashboard is intentionally NOT listed: ads run on dashboard pages, but
- * sidebar link clicks are shielded via stopPropagation in DashboardSidebar.
  */
 const AD_EXEMPT_PREFIXES = [
   "/admin",
+]
+
+/**
+ * Exact paths that are exempt from Monetag ads.
+ *
+ * /dashboard — the home page of the dashboard is exempt, but sub-routes
+ *              (/dashboard/tasks, /dashboard/games, etc.) are not.
+ */
+const AD_EXEMPT_EXACT = [
+  "/dashboard",
 ]
 
 interface MonetagScriptProps {
@@ -35,8 +43,11 @@ interface MonetagScriptProps {
 export function MonetagScript({ multitag }: MonetagScriptProps) {
   const pathname = usePathname()
 
-  // Suppress all Monetag ads on admin and dashboard routes.
-  if (AD_EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+  // Suppress all Monetag ads on exempt prefix routes and exact paths.
+  if (
+    AD_EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
+    AD_EXEMPT_EXACT.includes(pathname)
+  ) {
     return null
   }
 
