@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { uploadBuffer } from "@/lib/cloudinary"
+import { detectMimeFromMagicBytes } from "@/lib/security"
 
 export const dynamic = 'force-dynamic'
 
 const MAX_BYTES = 2 * 1024 * 1024
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+const ALLOWED_FORMATS = ["jpg", "jpeg", "png", "webp", "gif"]
 
 /**
  * Uploads a profile photo to Cloudinary. Replaces the old direct
@@ -32,6 +34,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
+    const detectedMime = detectMimeFromMagicBytes(buffer)
+    if (!detectedMime || !ALLOWED_TYPES.includes(detectedMime) || detectedMime !== file.type) {
+      return NextResponse.json(
+        { data: null, error: "File content does not match an allowed image type." },
+        { status: 400 }
+      )
+    }
+
     const result = await uploadBuffer(buffer, {
       folder: `bountytask/avatars/${user.id}`,
       public_id: "avatar",
@@ -39,6 +49,7 @@ export async function POST(request: NextRequest) {
       invalidate: true,
       resource_type: "image",
       type: "upload",
+      allowed_formats: ALLOWED_FORMATS,
     })
     return NextResponse.json({ data: { url: result.secure_url }, error: null })
   } catch (e) {

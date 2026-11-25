@@ -71,13 +71,24 @@ export function slugify(str: string): string {
     .replace(/^-|-$/g, "");
 }
 
-/** Get IP from Next.js request headers */
+/** Get client IP from Next.js request headers, preferring trusted proxy headers */
 export function getClientIp(headers: Headers): string | undefined {
-  return (
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    headers.get("x-real-ip") ??
-    undefined
-  );
+  const vercelIp = headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+  if (vercelIp) return vercelIp;
+
+  const cfIp = headers.get("cf-connecting-ip")?.trim();
+  if (cfIp) return cfIp;
+
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const xff = headers.get("x-forwarded-for");
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
+
+  return undefined;
 }
 
 /** Validate cron secret to prevent unauthorized cron calls */

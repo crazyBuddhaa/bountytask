@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 const verifySchema = z.object({
   submission_id: z.string().uuid(),
-  reference: z.string().min(4),
+  reference: z.string().trim().min(4).max(200),
 })
 
 /**

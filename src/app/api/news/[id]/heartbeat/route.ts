@@ -14,7 +14,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { appendLedger } from "@/lib/ledger"
 import { getNewsSettings } from "@/lib/news"
 
 export const dynamic = "force-dynamic"
@@ -39,90 +38,66 @@ export async function POST(
     return NextResponse.json({ credited: false, reason: "earn_disabled" })
   }
 
-  // ── Find the read record ────────────────────────────────────────────────────
-  const { data: readRow } = await admin
-    .from("news_reads")
-    .select("id, minutes_credited, last_heartbeat_at")
-    .eq("user_id", user.id)
-    .eq("article_id", articleId)
+  // Fetch article title for ledger note
+  const { data: article } = await admin
+    .from("news_articles")
+    .select("title")
+    .eq("id", articleId)
     .maybeSingle()
 
-  if (!readRow) {
-    // Article hasn't been opened yet — client should call /read first
+  // ── Atomic heartbeat check + credit + update (advisory-locked per user) ─────
+  const { data: rpcData, error: rpcErr } = await admin.rpc("claim_news_heartbeat", {
+    p_user_id:                 user.id,
+    p_article_id:              articleId,
+    p_earn_kobo_per_minute:    settings.earnKoboPerMinute,
+    p_max_minutes_per_article: settings.earnMaxMinutesPerArticle,
+    p_daily_cap_minutes:       settings.earnDailyCapMinutes,
+    p_min_interval_seconds:    MIN_SECONDS_BETWEEN_HEARTBEATS,
+    p_article_title:           article?.title ?? "",
+  })
+
+  if (rpcErr) {
+    console.error("[news/heartbeat] claim_news_heartbeat error:", rpcErr)
+    return NextResponse.json({ error: "Failed to record heartbeat" }, { status: 500 })
+  }
+
+  const row = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as {
+    credited: boolean
+    kobo: number
+    reason: string
+    minutes_on_article: number
+    max_minutes: number
+    daily_minutes_used: number
+    daily_cap_minutes: number
+  } | null
+
+  if (!row) {
+    return NextResponse.json({ error: "Failed to record heartbeat" }, { status: 500 })
+  }
+
+  if (row.reason === "not_started") {
     return NextResponse.json({ error: "Article not opened" }, { status: 409 })
   }
 
-  // ── Rate limit ──────────────────────────────────────────────────────────────
-  if (readRow.last_heartbeat_at) {
-    const secondsSinceLast =
-      (Date.now() - new Date(readRow.last_heartbeat_at).getTime()) / 1000
-    if (secondsSinceLast < MIN_SECONDS_BETWEEN_HEARTBEATS) {
-      return NextResponse.json({ credited: false, reason: "too_soon" })
+  if (!row.credited) {
+    const reasonMap: Record<string, string> = {
+      article_cap: "article_cap_reached",
+      daily_cap:   "daily_cap_reached",
     }
-  }
-
-  // ── Per-article cap ─────────────────────────────────────────────────────────
-  if (readRow.minutes_credited >= settings.earnMaxMinutesPerArticle) {
-    // Update last_heartbeat_at so we don't get bombarded, but no credit
-    await admin
-      .from("news_reads")
-      .update({ last_heartbeat_at: new Date().toISOString() })
-      .eq("id", readRow.id)
     return NextResponse.json({
-      credited: false,
-      reason: "article_cap_reached",
-      minutes_credited: readRow.minutes_credited,
+      credited:           false,
+      reason:             reasonMap[row.reason] ?? row.reason,
+      minutes_credited:   row.minutes_on_article,
+      daily_minutes_used: row.daily_minutes_used,
+      daily_cap_minutes:  row.daily_cap_minutes,
     })
   }
-
-  // ── Daily cap ───────────────────────────────────────────────────────────────
-  const startOfDay = new Date()
-  startOfDay.setUTCHours(0, 0, 0, 0)
-
-  const { data: todayRows } = await admin
-    .from("news_reads")
-    .select("minutes_credited")
-    .eq("user_id", user.id)
-    .gte("read_at", startOfDay.toISOString())
-
-  const dailyMinutesUsed = (todayRows ?? []).reduce(
-    (sum, r) => sum + (r.minutes_credited ?? 0),
-    0
-  )
-
-  if (dailyMinutesUsed >= settings.earnDailyCapMinutes) {
-    return NextResponse.json({
-      credited: false,
-      reason: "daily_cap_reached",
-      daily_minutes_used: dailyMinutesUsed,
-    })
-  }
-
-  // ── Credit ──────────────────────────────────────────────────────────────────
-  const now = new Date().toISOString()
-
-  await appendLedger({
-    userId:  user.id,
-    type:    "credit",
-    delta:   settings.earnKoboPerMinute,
-    refType: "news_read_reward",
-    refId:   articleId,
-  })
-
-  await admin
-    .from("news_reads")
-    .update({
-      minutes_credited:  readRow.minutes_credited + 1,
-      last_heartbeat_at: now,
-      credited:          true,
-    })
-    .eq("id", readRow.id)
 
   return NextResponse.json({
     credited:           true,
-    kobo:               settings.earnKoboPerMinute,
-    minutes_credited:   readRow.minutes_credited + 1,
-    daily_minutes_used: dailyMinutesUsed + 1,
-    daily_cap_minutes:  settings.earnDailyCapMinutes,
+    kobo:               row.kobo,
+    minutes_credited:   row.minutes_on_article,
+    daily_minutes_used: row.daily_minutes_used,
+    daily_cap_minutes:  row.daily_cap_minutes,
   })
 }

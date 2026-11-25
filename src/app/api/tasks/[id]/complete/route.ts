@@ -3,13 +3,16 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { creditReferralBonus } from "@/lib/referrals"
-import { flagUser, checkTaskCompletionRate, recordDevice } from "@/lib/fraud"
+import { flagUser, checkTaskCompletionRate, recordDevice, checkDeviceConflict } from "@/lib/fraud"
 import { checkDailyTaskLimit, recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved } from "@/lib/notifications"
+import { isTrustedUploadUrl, parseBoolSetting } from "@/lib/security"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
+
+const MAX_AI_REJECTIONS_BEFORE_ESCALATION = 3
 
 const bodySchema = z.object({
   proof_url: z.string().url().optional().nullable(),
@@ -23,10 +26,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
 
-  const body = await request.json()
+  const body = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
+  }
+
+  // Validate proof_url points to a trusted storage origin
+  if (parsed.data.proof_url && !isTrustedUploadUrl(parsed.data.proof_url)) {
+    return NextResponse.json(
+      { data: null, error: "Proof URL must point to a trusted upload storage host." },
+      { status: 400 }
+    )
   }
 
   const admin = createAdminClient()
@@ -119,13 +130,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }, { status: 429 })
   }
 
-  // Record device
+  // Record device & flag multi-account fingerprint conflicts
   if (parsed.data.device_fingerprint) {
-    await recordDevice({
-      userId: user.id, fingerprint: parsed.data.device_fingerprint,
-      ipAddress: getClientIp(request.headers),
-      userAgent: request.headers.get("user-agent") ?? undefined,
-    })
+    const [, hasConflict] = await Promise.all([
+      recordDevice({
+        userId: user.id,
+        fingerprint: parsed.data.device_fingerprint,
+        ipAddress: getClientIp(request.headers),
+        userAgent: request.headers.get("user-agent") ?? undefined,
+      }),
+      checkDeviceConflict(parsed.data.device_fingerprint, user.id),
+    ])
+    if (hasConflict) {
+      await flagUser({
+        userId: user.id,
+        reason: "Device fingerprint shared across multiple accounts",
+        severity: "medium",
+        details: { taskId },
+      })
+    }
   }
 
   const now = new Date().toISOString()
@@ -136,7 +159,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .select("value")
     .eq("key", "ai_verify_all_tasks")
     .single()
-  const globalAiEnabled = aiSetting?.value === true
+  const globalAiEnabled = parseBoolSetting(aiSetting?.value, false)
 
   // A task is considered "screenshot-eligible" when it already has some form
   // of proof requirement. The global AI switch upgrades verification for these
@@ -157,7 +180,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (task.type === "unverified" || task.youtube_url) ? "approved" : "pending"
 
   // ── AI screenshot verification (per-task flag OR global switch for eligible tasks) ──
-  let aiVerdict: { verdict: string; confidence: number; reason: string } | null = null
+  let aiVerdict: { verdict: string; confidence: number; reason: string; imageHash?: string } | null = null
 
   if ((task.ai_verify_screenshot || (globalAiEnabled && taskRequiresScreenshot)) && parsed.data.proof_url) {
     const { verifyScreenshot } = await import("@/lib/ai-vision")
@@ -165,21 +188,99 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     aiVerdict = verdict
 
     if (verdict.verdict === "rejected") {
-      // Return without inserting a completion row so the user can retry with a
-      // better screenshot. Rejected completions don't count toward the per-user cap.
-      return NextResponse.json(
-        { data: null, error: verdict.reason, code: "AI_REJECTED" },
-        { status: 422 }
-      )
-    }
+      // Track failed AI attempts to prevent unlimited prompt-injection retries
+      await admin.from("ai_verification_attempts").insert({
+        user_id: user.id,
+        task_id: taskId,
+        verdict: verdict.verdict,
+        confidence: verdict.confidence,
+      })
 
-    // AI approved → instant credit (no admin review needed)
-    if (verdict.verdict === "approved") {
+      const { count: failCount } = await admin
+        .from("ai_verification_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("task_id", taskId)
+        .eq("verdict", "rejected")
+
+      if ((failCount ?? 0) >= MAX_AI_REJECTIONS_BEFORE_ESCALATION) {
+        // Escalate to manual review instead of permitting endless retries
+        completionStatus = "pending"
+      } else {
+        // Return without inserting a completion row so the user can retry with a
+        // better screenshot. Rejected completions don't count toward the per-user cap.
+        return NextResponse.json(
+          { data: null, error: verdict.reason, code: "AI_REJECTED" },
+          { status: 422 }
+        )
+      }
+    } else if (verdict.verdict === "approved") {
+      // AI approved → instant credit (unless held for duplicate proof hash below)
       completionStatus = "approved"
     }
     // AI uncertain → stays "pending" for manual review
+
+    // Deduplicate screenshot proof hashes across users
+    if (verdict.imageHash) {
+      const { data: existingHash } = await admin
+        .from("proof_image_hashes")
+        .select("user_id, task_id")
+        .eq("sha256", verdict.imageHash)
+        .maybeSingle()
+
+      if (existingHash && existingHash.user_id !== user.id) {
+        // Duplicate screenshot submitted by a different user — hold for manual review & flag
+        completionStatus = "pending"
+        await flagUser({
+          userId: user.id,
+          reason: "Duplicate proof screenshot submitted across multiple accounts",
+          severity: "high",
+          details: { taskId, sha256: verdict.imageHash, originalUserId: existingHash.user_id },
+        })
+      } else if (!existingHash) {
+        const { error: hashErr } = await admin.from("proof_image_hashes").insert({
+          sha256: verdict.imageHash,
+          user_id: user.id,
+          task_id: taskId,
+        })
+        if (hashErr && hashErr.code === "23505") {
+          // Concurrent duplicate hash insert — check owner and hold if another user won
+          const { data: winner } = await admin
+            .from("proof_image_hashes")
+            .select("user_id")
+            .eq("sha256", verdict.imageHash)
+            .maybeSingle()
+          if (winner && winner.user_id !== user.id) {
+            completionStatus = "pending"
+            await flagUser({
+              userId: user.id,
+              reason: "Duplicate proof screenshot submitted across multiple accounts",
+              severity: "high",
+              details: { taskId, sha256: verdict.imageHash, originalUserId: winner.user_id },
+            })
+          }
+        }
+      }
+    }
   }
   // ───────────────────────────────────────────────────────────────────────────
+
+  // Fresh max_completions guard right before insert to narrow race window
+  if (task.max_completions !== null) {
+    const { data: freshTask } = await admin
+      .from("tasks")
+      .select("status, current_completions, max_completions")
+      .eq("id", taskId)
+      .single()
+
+    if (
+      !freshTask ||
+      freshTask.status !== "active" ||
+      (freshTask.max_completions !== null && freshTask.current_completions >= freshTask.max_completions)
+    ) {
+      return NextResponse.json({ data: null, error: "Task is fully claimed" }, { status: 400 })
+    }
+  }
 
   // Insert completion
   const { data: completion, error: compErr } = await admin

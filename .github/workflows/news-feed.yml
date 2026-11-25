@@ -5,6 +5,8 @@ on:
     - cron: "*/30 * * * *"  # every 30 minutes
   workflow_dispatch:         # allow manual trigger from GitHub UI
 
+permissions: {}
+
 jobs:
   fetch-news:
     name: Pull RSS feeds

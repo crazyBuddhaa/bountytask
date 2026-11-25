@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { auditLog } from "@/lib/audit"
+import { getActiveAdminRole } from "@/lib/security"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
@@ -13,6 +14,7 @@ const createSchema = z.object({
   instructions: z.string().min(10),
   category_id: z.string().uuid(),
   type: z.enum(["verified", "unverified"]),
+  status: z.enum(["draft", "active", "paused", "completed", "archived"]).default("draft"),
   reward_amount: z.number().int().positive(),
   max_completions: z.number().int().positive().optional().nullable(),
   requires_proof: z.boolean().default(false),
@@ -20,7 +22,7 @@ const createSchema = z.object({
   time_limit_hours: z.number().int().positive().optional().nullable(),
   verification_url: z.string().url().optional().nullable(),
   expires_at: z.string().datetime().optional().nullable(),
-})
+}).strict()
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -56,21 +58,21 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
 
-  const admin = createAdminClient()
-  const { data: profile } = await admin.from("users").select("role").eq("id", user.id).single()
-  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) {
     return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
   }
 
-  const body = await request.json()
+  const body = await request.json().catch(() => null)
   const parsed = createSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
   }
 
+  const admin = createAdminClient()
   const { data, error } = await admin
     .from("tasks")
-    .insert({ ...parsed.data, created_by: user.id, status: body.status ?? "draft" })
+    .insert({ ...parsed.data, created_by: user.id })
     .select()
     .single()
 

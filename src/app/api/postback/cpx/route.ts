@@ -25,6 +25,8 @@ import {
   checkAdDailyCap,
   recordAdCompletion,
 } from "@/lib/ad-providers"
+import { appendLedger } from "@/lib/ledger"
+import { flagUser } from "@/lib/fraud"
 import { checkDailyTaskLimit } from "@/lib/tiers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getClientIp } from "@/lib/utils"
@@ -62,12 +64,6 @@ export async function GET(request: NextRequest) {
     return fail(401)
   }
 
-  // ── status=2 → canceled/fraud chargeback. Acknowledge without crediting. ────
-  if (status === "2") return ok()
-
-  // ── Only credit on status=1 (completed) ─────────────────────────────────────
-  if (status !== "1") return ok()
-
   // ── Load settings ───────────────────────────────────────────────────────────
   const settings = await getCpxSettings()
   if (!settings.enabled || !settings.appId || !settings.secureHashKey) {
@@ -76,16 +72,69 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Validate hash: MD5(trans_id + '-' + secureHashKey) ─────────────────────
-  // NOTE: this is the postback hash, NOT the widget hash (which uses userId).
+  // Verified for BOTH status=1 (credit) and status=2 (chargeback/reversal).
   if (!validateCpxPostbackHash(transId, settings.secureHashKey, hash)) {
     console.error("[cpx-postback] hash mismatch", { transId })
     return fail(401)
   }
 
+  const admin = createAdminClient()
+
+  // ── status=2 → canceled/fraud chargeback reversal ──────────────────────────
+  if (status === "2") {
+    const { data: originalLog } = await admin
+      .from("ad_task_logs")
+      .select("id, user_id, reward_kobo")
+      .eq("provider", "cpx")
+      .eq("session_id", transId)
+      .maybeSingle()
+
+    if (originalLog && originalLog.reward_kobo > 0) {
+      // Idempotency: ensure we only debit once per original transaction
+      const { data: existingReversal } = await admin
+        .from("ledger")
+        .select("id")
+        .eq("ref_type", "penalty")
+        .eq("ref_id", originalLog.id)
+        .limit(1)
+        .maybeSingle()
+
+      if (!existingReversal) {
+        try {
+          await appendLedger({
+            userId: originalLog.user_id,
+            type: "debit",
+            delta: originalLog.reward_kobo,
+            refType: "penalty",
+            refId: originalLog.id,
+            note: `CPX survey chargeback reversal (trans_id: ${transId})`,
+          })
+          await flagUser({
+            userId: originalLog.user_id,
+            reason: "CPX survey chargeback / reversal",
+            severity: "medium",
+            details: { transId, rewardKobo: originalLog.reward_kobo },
+          })
+          console.warn("[cpx-postback] chargeback reversed", {
+            userId: originalLog.user_id,
+            transId,
+            rewardKobo: originalLog.reward_kobo,
+          })
+        } catch (err) {
+          console.error("[cpx-postback] chargeback reversal failed", { transId, err })
+          return fail(500)
+        }
+      }
+    }
+    return ok()
+  }
+
+  // ── Only credit on status=1 (completed) ─────────────────────────────────────
+  if (status !== "1") return ok()
+
   // ── Verify the user_id maps to a real user ──────────────────────────────────
   // The user_id is NOT part of the CPX hash, so a MITM could swap it.
   // Checking existence prevents credits landing on phantom or unknown accounts.
-  const admin = createAdminClient()
   const { data: userRow, error: userErr } = await admin
     .from("users")
     .select("id")
@@ -119,6 +168,10 @@ export async function GET(request: NextRequest) {
 
   // ── Credit the user ─────────────────────────────────────────────────────────
   const rewardKobo = cpxUsdToKobo(amountUsd)
+  if (rewardKobo <= 0) {
+    console.warn("[cpx-postback] non-positive reward amount — ignoring", { userId, transId, amountUsd })
+    return ok()
+  }
 
   try {
     const result = await recordAdCompletion({

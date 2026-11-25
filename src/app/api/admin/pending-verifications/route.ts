@@ -5,21 +5,17 @@ import { notifyVerificationApproved, notifyVerificationRejected } from "@/lib/no
 import { creditReferralBonus } from "@/lib/referrals"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { getActiveAdminRole } from "@/lib/security"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
-
-async function assertAdmin(userId: string) {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return data && ["admin", "super_admin"].includes(data.role)
-}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get("status") ?? "pending"
@@ -46,9 +42,10 @@ export async function PATCH(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const body = await request.json()
+  const body = await request.json().catch(() => null)
   const parsed = actionSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
@@ -69,12 +66,22 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (action === "reject") {
-    await admin.from("pending_verifications").update({
-      status: "rejected",
-      notes: notes ?? null,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: user.id,
-    }).eq("id", id)
+    const { data: updated } = await admin
+      .from("pending_verifications")
+      .update({
+        status: "rejected",
+        notes: notes ?? null,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user.id,
+      })
+      .eq("id", id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle()
+
+    if (!updated) {
+      return NextResponse.json({ data: null, error: "Already reviewed" }, { status: 409 })
+    }
 
     try {
       await notifyVerificationRejected(record.email, record.full_name, notes ?? null)
@@ -92,6 +99,23 @@ export async function PATCH(request: NextRequest) {
     )
   }
 
+  const { data: updated } = await admin
+    .from("pending_verifications")
+    .update({
+      status: "approved",
+      notes: notes ?? null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user.id,
+    })
+    .eq("id", id)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle()
+
+  if (!updated) {
+    return NextResponse.json({ data: null, error: "Already reviewed" }, { status: 409 })
+  }
+
   const { error: updateError } = await admin
     .from("users")
     .update({ kyc_verified: true })
@@ -100,13 +124,6 @@ export async function PATCH(request: NextRequest) {
   if (updateError) {
     return NextResponse.json({ data: null, error: updateError.message }, { status: 500 })
   }
-
-  await admin.from("pending_verifications").update({
-    status: "approved",
-    notes: notes ?? null,
-    reviewed_at: new Date().toISOString(),
-    reviewed_by: user.id,
-  }).eq("id", id)
 
   // Email user — non-blocking
   try {

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { GAME_META, GAME_SLUGS, todayUTC } from "@/lib/games"
 import type { GameSlug } from "@/lib/games"
-import { appendLedger, assertSufficientBalance } from "@/lib/ledger"
+import { parseBoolSetting } from "@/lib/security"
 import { z } from "zod"
 
 export const dynamic = "force-dynamic"
@@ -35,12 +35,13 @@ export function currentWeekStart(): string {
 
 /**
  * POST /api/games/enter
- * Deducts the entry fee for a game session and records it in the weekly prize pool.
- * Returns { entry_id, fee_kobo } where entry_id is the ledger row id (used to
- * link the game session back to the payment for audit purposes).
+ * Atomically deducts the entry fee for a game session, records it in the weekly
+ * prize pool, and issues a single-use server-side game_entry_tokens id.
+ * Returns { entry_id, entry_token, fee_kobo } where entry_id / entry_token is
+ * the single-use token consumed by POST /api/games/session.
  *
  * If fees are disabled or the fee for this game is 0, returns
- * { entry_id: null, fee_kobo: 0 } without touching the ledger.
+ * { entry_id: null, entry_token: null, fee_kobo: 0 } without touching the ledger.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -62,12 +63,12 @@ export async function POST(req: NextRequest) {
     .in("key", ["game_entry_fees_enabled", feeKey])
 
   const settingsMap = Object.fromEntries((rows ?? []).map(r => [r.key, r.value]))
-  const feesEnabled = settingsMap["game_entry_fees_enabled"] === true
+  const feesEnabled = parseBoolSetting(settingsMap["game_entry_fees_enabled"], false)
   const feeKobo: number = feesEnabled ? (Number(settingsMap[feeKey]) || 0) : 0
 
   // Free game — no deduction needed
   if (feeKobo === 0) {
-    return NextResponse.json({ data: { entry_id: null, fee_kobo: 0 } })
+    return NextResponse.json({ data: { entry_id: null, entry_token: null, fee_kobo: 0 } })
   }
 
   // ── Daily game: block double-entry for today ───────────────────────────────
@@ -92,31 +93,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Deduct entry fee ───────────────────────────────────────────────────────
-  try {
-    await assertSufficientBalance(user.id, feeKobo)
-  } catch {
+  // ── Atomic balance check + ledger debit + prize pool + entry token ─────────
+  const weekStart = currentWeekStart()
+  const { data: rpcData, error: rpcErr } = await admin.rpc("safe_game_entry_debit", {
+    p_user_id:    user.id,
+    p_game_slug:  game_slug,
+    p_fee_kobo:   feeKobo,
+    p_week_start: weekStart,
+    p_note:       `Entry fee: ${game_slug}`,
+  })
+
+  if (rpcErr) {
+    console.error("[games/enter] safe_game_entry_debit error:", rpcErr)
+    return NextResponse.json({ error: "Failed to process game entry" }, { status: 500 })
+  }
+
+  const rpcRow = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as {
+    ok: boolean
+    entry_token_id: string | null
+    ledger_id: string | null
+    pool_id: string | null
+    new_balance_kobo: number
+    err: string | null
+  } | null
+
+  if (!rpcRow || !rpcRow.ok || !rpcRow.entry_token_id) {
     return NextResponse.json({
-      error: `Insufficient balance. You need ₦${(feeKobo / 100).toFixed(2)} to play this game.`,
+      error: rpcRow?.err ?? `Insufficient balance. You need ₦${(feeKobo / 100).toFixed(2)} to play this game.`,
       code: "INSUFFICIENT_BALANCE",
     }, { status: 402 })
   }
 
-  const ledgerEntry = await appendLedger({
-    userId: user.id,
-    type: "debit",
-    delta: feeKobo,
-    refType: "game_entry_fee",
-    note: `Entry fee: ${game_slug}`,
+  return NextResponse.json({
+    data: {
+      entry_id:    rpcRow.entry_token_id,
+      entry_token: rpcRow.entry_token_id,
+      fee_kobo:    feeKobo,
+    },
   })
-
-  // ── Record in prize pool (atomic upsert via RPC) ───────────────────────────
-  const weekStart = currentWeekStart()
-  await admin.rpc("record_game_entry", {
-    p_game_slug:  game_slug,
-    p_fee_kobo:   feeKobo,
-    p_week_start: weekStart,
-  })
-
-  return NextResponse.json({ data: { entry_id: ledgerEntry.id, fee_kobo: feeKobo } })
 }

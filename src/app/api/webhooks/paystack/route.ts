@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import crypto from "node:crypto"
 import { confirmVerificationPayment, confirmAdvertiserPayment } from "@/lib/paystack-confirm"
+import { timingSafeStringEqual } from "@/lib/security"
 
 export const dynamic = 'force-dynamic'
 
@@ -27,20 +28,31 @@ export const dynamic = 'force-dynamic'
  * Paystack's docs: https://paystack.com/docs/payments/webhooks/
  */
 export async function POST(request: NextRequest) {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY
+  if (!secretKey) {
+    console.error("[paystack webhook] PAYSTACK_SECRET_KEY is not configured")
+    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 })
+  }
+
   const rawBody = await request.text()
 
   const signature = request.headers.get("x-paystack-signature")
   const expectedSignature = crypto
-    .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY ?? "")
+    .createHmac("sha512", secretKey)
     .update(rawBody)
     .digest("hex")
 
-  if (!signature || signature !== expectedSignature) {
+  if (!signature || !timingSafeStringEqual(signature, expectedSignature)) {
     // Do not process — this request did not genuinely come from Paystack.
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
   }
 
-  const event = JSON.parse(rawBody)
+  let event: { event?: string; data?: { reference?: string; metadata?: Record<string, unknown> } }
+  try {
+    event = JSON.parse(rawBody)
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 })
+  }
 
   // Always 200 for anything we don't act on, so Paystack doesn't retry
   // events we intentionally ignore (only charge.success needs handling here;

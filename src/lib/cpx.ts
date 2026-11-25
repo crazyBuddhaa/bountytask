@@ -1,6 +1,7 @@
-import { createHash, timingSafeEqual } from "crypto"
+import { createHash } from "crypto"
 import { unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { parseBoolSetting, timingSafeStringEqual } from "@/lib/security"
 
 export type CpxSettings = {
   enabled: boolean
@@ -41,10 +42,7 @@ export const getCpxSettings = unstable_cache(
 
     const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
     return {
-      // Supabase JSONB returns native booleans, but guard against the string
-      // "false" being stored — Boolean("false") === true which would silently
-      // enable CPX when the admin disabled it.
-      enabled:       s.cpx_enabled === true || s.cpx_enabled === "true",
+      enabled:       parseBoolSetting(s.cpx_enabled, false),
       dailyCap:      Number(s.cpx_daily_cap          ?? 10),
       appId:         String(s.cpx_app_id             ?? ""),
       secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
@@ -82,27 +80,25 @@ export function validateCpxPostbackHash(
   secureHashKey: string,
   receivedHash: string
 ): boolean {
-  const { timingSafeEqual } = require("crypto") as typeof import("crypto")
+  if (!receivedHash || !secureHashKey) return false
   const expected = createHash("md5").update(`${transId}-${secureHashKey}`).digest("hex")
-  try {
-    return timingSafeEqual(Buffer.from(receivedHash), Buffer.from(expected))
-  } catch {
-    // Different-length buffers throw — treat as invalid signature.
-    return false
-  }
+  return timingSafeStringEqual(receivedHash.toLowerCase(), expected.toLowerCase())
 }
+
+const MAX_CPX_KOBO = 5_000_000 // Hard cap: ₦50,000 (~$50)
 
 /**
  * Convert a CPX Research postback `amount_usd` string to kobo.
  *
  * CPX sends `amount_usd` as a full-dollar decimal string, e.g. "0.50" = $0.50.
- * Convert: USD → NGN (at fixed rate) → kobo (× 100).
+ * Convert: USD → NGN (at fixed rate) → kobo (× 100), capped at MAX_CPX_KOBO.
+ * Returns 0 for invalid, non-finite, or non-positive amounts.
  *
  * TODO: store `cpx_usd_to_ngn_rate` in platform_settings for admin control.
  */
 export function cpxUsdToKobo(usdString: string): number {
   const usd = parseFloat(usdString)
-  if (isNaN(usd) || usd <= 0) return 500 // fallback: ₦5
+  if (!Number.isFinite(usd) || usd <= 0) return 0
   const USD_TO_NGN = 1600
-  return Math.round(usd * USD_TO_NGN * 100) // usd → NGN → kobo
+  return Math.min(Math.round(usd * USD_TO_NGN * 100), MAX_CPX_KOBO)
 }

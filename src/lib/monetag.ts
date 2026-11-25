@@ -26,6 +26,7 @@
  */
 import { unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isSafePublicHttpsUrl, parseBoolSetting } from "@/lib/security"
 
 export type MonetagSettings = {
   /** Master toggle for sitewide Multitag script. */
@@ -73,6 +74,9 @@ export function parseMonetagSnippet(snippet: string): ParsedMonetagSnippet {
   const srcMatch = trimmed.match(/^<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/i)
   if (srcMatch) {
     const src = srcMatch[1]
+    if (!isSafePublicHttpsUrl(src)) {
+      return { kind: "empty" }
+    }
     const zoneMatch  = trimmed.match(/\bdata-zone=["']([^"']+)["']/i)
     const cfasyncMatch = trimmed.match(/\bdata-cfasync=["']([^"']+)["']/i)
     return {
@@ -110,9 +114,9 @@ async function _getMonetagSettings(): Promise<MonetagSettings> {
   const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
 
   return {
-    enabled:                    Boolean(s.monetag_enabled                    ?? false),
+    enabled:                    parseBoolSetting(s.monetag_enabled, false),
     multitag_script:            String( s.monetag_multitag_script            ?? ""),
-    games_interstitial_enabled: Boolean(s.monetag_games_interstitial_enabled ?? false),
+    games_interstitial_enabled: parseBoolSetting(s.monetag_games_interstitial_enabled, false),
     games_interstitial_script:  String( s.monetag_games_interstitial_script  ?? ""),
   }
 }

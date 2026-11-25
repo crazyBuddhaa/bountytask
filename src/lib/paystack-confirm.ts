@@ -25,9 +25,19 @@ import { auditLog } from "@/lib/audit"
 
 type ConfirmResult = { ok: true; alreadyConfirmed: boolean } | { ok: false; error: string }
 
-async function verifyWithPaystack(reference: string): Promise<
-  { ok: true; amount: number } | { ok: false; error: string }
-> {
+type PaystackVerifyResult =
+  | {
+      ok: true
+      amount: number
+      currency: string
+      metadata: Record<string, unknown> | null
+    }
+  | { ok: false; error: string }
+
+async function verifyWithPaystack(reference: string): Promise<PaystackVerifyResult> {
+  if (!process.env.PAYSTACK_SECRET_KEY) {
+    return { ok: false, error: "Payment service is not configured." }
+  }
   const res = await fetch(
     `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
     { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, cache: "no-store" }
@@ -40,7 +50,15 @@ async function verifyWithPaystack(reference: string): Promise<
   if (typeof amount !== "number") {
     return { ok: false, error: "Payment verification returned no amount." }
   }
-  return { ok: true, amount }
+  const currency = typeof json.data?.currency === "string" ? json.data.currency.toUpperCase() : ""
+  if (currency !== "NGN") {
+    return { ok: false, error: "Unsupported payment currency." }
+  }
+  const metadata =
+    json.data?.metadata && typeof json.data.metadata === "object"
+      ? (json.data.metadata as Record<string, unknown>)
+      : null
+  return { ok: true, amount, currency, metadata }
 }
 
 /** Confirms the withdrawal-verification fee and marks the user kyc_verified. */
@@ -55,33 +73,56 @@ export async function confirmVerificationPayment(
 
   const verified = await verifyWithPaystack(reference)
   if (!verified.ok) return { ok: false, error: verified.error }
+  if (verified.currency !== "NGN") {
+    return { ok: false, error: "Unsupported payment currency." }
+  }
+  if (
+    verified.metadata?.purpose !== "withdrawal_verification_fee" ||
+    verified.metadata?.user_id !== userId
+  ) {
+    return { ok: false, error: "Payment reference does not match this verification request." }
+  }
   if (verified.amount < settings.fee_amount) {
     return { ok: false, error: "Paid amount does not match the verification fee." }
   }
 
   const admin = createAdminClient()
 
+  // Global cross-flow deduplication prevents replaying a reference across flows or users
+  const { error: globalClaimError } = await admin
+    .from("paystack_consumed_references")
+    .insert({
+      reference,
+      purpose: "withdrawal_verification_fee",
+      entity_id: userId,
+      user_id: userId,
+      amount_kobo: verified.amount,
+    })
+
+  if (globalClaimError) {
+    if (globalClaimError.code === "23505") {
+      const { data: existing } = await admin
+        .from("paystack_consumed_references")
+        .select("purpose, entity_id")
+        .eq("reference", reference)
+        .maybeSingle()
+      if (
+        existing?.purpose === "withdrawal_verification_fee" &&
+        existing?.entity_id === userId
+      ) {
+        return { ok: true, alreadyConfirmed: true }
+      }
+      return { ok: false, error: "Payment reference already used." }
+    }
+    return { ok: false, error: globalClaimError.message }
+  }
+
+  // Also record in legacy verification reference table for backwards compatibility
   const { error: claimError } = await admin
     .from("paystack_verification_references")
     .insert({ reference, user_id: userId })
-
-  if (claimError) {
-    if (claimError.code === "23505") {
-      // Reference already claimed — by whichever of (webhook, browser
-      // redirect) got here first. Check who claimed it: same user means the
-      // other path already finished this exact payment, so this is a benign
-      // race, not a replay attempt.
-      const { data: existing } = await admin
-        .from("paystack_verification_references")
-        .select("user_id")
-        .eq("reference", reference)
-        .maybeSingle()
-      if (existing?.user_id === userId) {
-        return { ok: true, alreadyConfirmed: true }
-      }
-      return { ok: false, error: "This payment reference has already been used." }
-    }
-    return { ok: false, error: claimError.message }
+  if (claimError && claimError.code !== "23505") {
+    console.error("[paystack-confirm] legacy verification reference insert warning:", claimError.message)
   }
 
   const { error } = await admin.from("users").update({ kyc_verified: true }).eq("id", userId)
@@ -110,22 +151,20 @@ export async function confirmAdvertiserPayment(
 
   const verified = await verifyWithPaystack(reference)
   if (!verified.ok) return { ok: false, error: verified.error }
+  if (verified.currency !== "NGN") {
+    return { ok: false, error: "Unsupported payment currency." }
+  }
+  if (
+    verified.metadata?.purpose !== "advertiser_submission_fee" ||
+    verified.metadata?.submission_id !== submissionId
+  ) {
+    return { ok: false, error: "Payment reference does not match this submission." }
+  }
   if (verified.amount < settings.submission_fee_kobo) {
     return { ok: false, error: "Paid amount does not match the submission fee." }
   }
 
   const admin = createAdminClient()
-
-  const { data: existingByRef } = await admin
-    .from("task_submissions")
-    .select("id")
-    .eq("payment_reference", reference)
-    .maybeSingle()
-  if (existingByRef) {
-    return existingByRef.id === submissionId
-      ? { ok: true, alreadyConfirmed: true }
-      : { ok: false, error: "This payment reference has already been used." }
-  }
 
   const { data: submission } = await admin
     .from("task_submissions")
@@ -133,6 +172,36 @@ export async function confirmAdvertiserPayment(
     .eq("id", submissionId)
     .maybeSingle()
   if (!submission) return { ok: false, error: "Submission not found." }
+
+  // Global cross-flow deduplication prevents replaying a reference across flows or submissions
+  const { error: globalClaimError } = await admin
+    .from("paystack_consumed_references")
+    .insert({
+      reference,
+      purpose: "advertiser_submission_fee",
+      entity_id: submissionId,
+      user_id: null,
+      amount_kobo: verified.amount,
+    })
+
+  if (globalClaimError) {
+    if (globalClaimError.code === "23505") {
+      const { data: existing } = await admin
+        .from("paystack_consumed_references")
+        .select("purpose, entity_id")
+        .eq("reference", reference)
+        .maybeSingle()
+      if (
+        existing?.purpose === "advertiser_submission_fee" &&
+        existing?.entity_id === submissionId
+      ) {
+        return { ok: true, alreadyConfirmed: true }
+      }
+      return { ok: false, error: "Payment reference already used." }
+    }
+    return { ok: false, error: globalClaimError.message }
+  }
+
   if (submission.payment_status === "paid") return { ok: true, alreadyConfirmed: true }
 
   const { error } = await admin

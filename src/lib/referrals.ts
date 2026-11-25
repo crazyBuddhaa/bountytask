@@ -4,11 +4,19 @@ import { createNotification } from "@/lib/notifications";
 import { recalcUserTier } from "@/lib/tiers";
 import { getVerificationSettings } from "@/lib/verification";
 
+function isUniqueViolation(err: unknown): boolean {
+  if (!err) return false;
+  const code = (err as { code?: string }).code;
+  if (code === "23505") return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("23505") || msg.includes("duplicate key");
+}
+
 /**
  * Credit the signup bonus (and process a pending referral code) for a
  * brand-new user, but only once. Safe to call from multiple entry points
  * (post-signup, OAuth callback, admin approval) since it checks the ledger
- * first and is a no-op for any user who already has an entry.
+ * first and handles unique-constraint races on uq_ledger_signup_bonus_per_user.
  */
 export async function creditSignupBonusIfNew(
   userId: string,
@@ -23,7 +31,14 @@ export async function creditSignupBonusIfNew(
 
   if (count && count > 0) return { credited: false };
 
-  await creditSignupBonus(userId);
+  try {
+    await creditSignupBonus(userId);
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return { credited: false };
+    }
+    throw err;
+  }
 
   if (referralCode) {
     try {
@@ -42,14 +57,14 @@ export const REFERRAL_BONUS_KOBO = 50_000; // ₦500
 export async function creditReferralBonus(referredUserId: string) {
   const supabase = createAdminClient();
 
-  // Find referral record
-  const { data: referral } = await supabase
-    .from("referrals")
-    .select("id, referrer_id, bonus_credited")
-    .eq("referred_id", referredUserId)
-    .single();
+  // Require at least one approved task completion before paying referral bonus
+  const { count: approvedTaskCount } = await supabase
+    .from("task_completions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", referredUserId)
+    .eq("status", "approved");
 
-  if (!referral || referral.bonus_credited) return; // already credited or no referral
+  if (!approvedTaskCount || approvedTaskCount < 1) return;
 
   // If admin verification is enabled, the referred user must be kyc_verified
   // before the referral bonus is paid. This handles two paths:
@@ -65,25 +80,36 @@ export async function creditReferralBonus(referredUserId: string) {
     if (!profile?.kyc_verified) return;
   }
 
-  // Credit referrer
-  const ledgerEntry = await appendLedger({
-    userId: referral.referrer_id,
-    type: "credit",
-    delta: REFERRAL_BONUS_KOBO,
-    refType: "referral_bonus",
-    refId: referral.id,
-    note: `Referral bonus for user ${referredUserId}`,
-  });
-
-  // Mark referral as credited
-  await supabase
+  // Atomically claim the referral so concurrent triggers cannot double-credit
+  const { data: referral } = await supabase
     .from("referrals")
     .update({
       bonus_credited: true,
       bonus_amount: REFERRAL_BONUS_KOBO,
       credited_at: new Date().toISOString(),
     })
-    .eq("id", referral.id);
+    .eq("referred_id", referredUserId)
+    .eq("bonus_credited", false)
+    .select("id, referrer_id")
+    .maybeSingle();
+
+  if (!referral) return; // already credited or no referral
+
+  // Credit referrer
+  let ledgerEntry: { id: string } | null = null;
+  try {
+    ledgerEntry = await appendLedger({
+      userId: referral.referrer_id,
+      type: "credit",
+      delta: REFERRAL_BONUS_KOBO,
+      refType: "referral_bonus",
+      refId: referral.id,
+      note: `Referral bonus for user ${referredUserId}`,
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return;
+    throw err;
+  }
 
   // Notify referrer
   await createNotification({
@@ -91,7 +117,7 @@ export async function creditReferralBonus(referredUserId: string) {
     type: "referral_bonus",
     title: "Referral Bonus Earned! 🎁",
     message: `You earned ₦${(REFERRAL_BONUS_KOBO / 100).toFixed(2)} for a successful referral.`,
-    refId: ledgerEntry.id,
+    refId: ledgerEntry?.id,
   });
 }
 

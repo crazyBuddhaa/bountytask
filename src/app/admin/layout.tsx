@@ -10,8 +10,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user) redirect("/sign-in")
 
   const admin = createAdminClient()
-  const { data: profile } = await admin.from("users").select("role").eq("id", user.id).single()
-  if (!profile || !["admin", "super_admin"].includes(profile.role)) redirect("/dashboard")
+  const { data: profile } = await admin.from("users").select("role, is_active").eq("id", user.id).single()
+  if (!profile || !profile.is_active || !["admin", "super_admin"].includes(profile.role)) redirect("/dashboard")
 
   return (
     <div className="flex min-h-screen bg-background">

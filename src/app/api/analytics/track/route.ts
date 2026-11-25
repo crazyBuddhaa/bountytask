@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { checkInMemoryRateLimit } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest) {
   // (e.g. cookie blocked), skip tracking rather than recording a null visitor.
   const visitorId = request.cookies.get("bt_vid")?.value
   if (!visitorId) return NextResponse.json({ id: null })
+
+  const rateLimit = checkInMemoryRateLimit(`analytics-track:${visitorId}`, 60, 60 * 1000)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { id: null, error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSec) } }
+    )
+  }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

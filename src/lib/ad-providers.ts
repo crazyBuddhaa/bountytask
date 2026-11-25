@@ -9,13 +9,14 @@
  *  - Postback signature validator for CPX (MD5)
  */
 
-import { createHmac, createHash, timingSafeEqual } from "crypto"
+import { createHmac, createHash } from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { createNotification } from "@/lib/notifications"
 import { recalcUserTier } from "@/lib/tiers"
 import { getCpxSettings } from "@/lib/cpx"
 import { getAsterraSettings } from "@/lib/asterra"
+import { parseBoolSetting, timingSafeStringEqual } from "@/lib/security"
 
 export type AdProvider = "ima" | "cpx" | "asterra"
 export type AdType = "video" | "survey" | "offer" | "mixed"
@@ -142,22 +143,64 @@ export async function recordAdCompletion({
 
 // ─── IMA SDK One-Time Token ───────────────────────────────────────────────────
 
-// We reuse CRON_SECRET as the HMAC key so no extra env var is needed.
-// In production, consider a dedicated IMA_TOKEN_SECRET env var.
-const IMA_SECRET = process.env.CRON_SECRET ?? "ima-dev-fallback-secret"
+function getImaSecret(): string {
+  const secret = process.env.IMA_TOKEN_SECRET ?? process.env.CRON_SECRET
+  if (!secret) {
+    throw new Error("IMA_TOKEN_SECRET or CRON_SECRET environment variable must be set")
+  }
+  return secret
+}
+
+export interface VerifiedImaToken {
+  userId: string
+  issuedAt: number
+  expires: number
+}
 
 /**
  * Generate a short-lived (10 min) HMAC-signed token for an IMA ad session.
- * The token encodes the userId and expiry so the complete endpoint can
- * validate it without any DB lookup.
+ * The token encodes userId, issuedAt, and expiry so the complete endpoint can
+ * validate signature, TTL, and minimum elapsed playback duration.
  *
- * Format: `<userId>:<expiresMs>:<hmac>`
+ * Format: `<userId>:<issuedAtMs>:<expiresMs>:<hmac>`
  */
 export function generateImaToken(userId: string): string {
-  const expires = Date.now() + 10 * 60 * 1000
-  const payload = `${userId}:${expires}`
-  const sig = createHmac("sha256", IMA_SECRET).update(payload).digest("hex")
+  const issuedAt = Date.now()
+  const expires = issuedAt + 10 * 60 * 1000
+  const payload = `${userId}:${issuedAt}:${expires}`
+  const sig = createHmac("sha256", getImaSecret()).update(payload).digest("hex")
   return Buffer.from(`${payload}:${sig}`).toString("base64url")
+}
+
+/**
+ * Verify an IMA token. Returns { userId, issuedAt, expires } if valid and not expired.
+ * Returns null if the token is malformed, expired, or tampered.
+ */
+export function verifyImaToken(token: string): VerifiedImaToken | null {
+  try {
+    const secret = getImaSecret()
+    const decoded = Buffer.from(token, "base64url").toString("utf8")
+    const parts = decoded.split(":")
+    if (parts.length !== 4) return null
+    const [userId, issuedAtStr, expiresStr, sig] = parts
+    const issuedAt = Number.parseInt(issuedAtStr, 10)
+    const expires = Number.parseInt(expiresStr, 10)
+    if (
+      !userId ||
+      !Number.isFinite(issuedAt) ||
+      !Number.isFinite(expires) ||
+      issuedAt > expires ||
+      Date.now() > expires
+    ) {
+      return null
+    }
+    const payload = `${userId}:${issuedAt}:${expires}`
+    const expected = createHmac("sha256", secret).update(payload).digest("hex")
+    if (!timingSafeStringEqual(sig, expected)) return null
+    return { userId, issuedAt, expires }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -165,24 +208,7 @@ export function generateImaToken(userId: string): string {
  * Returns null if the token is malformed, expired, or tampered.
  */
 export function validateImaToken(token: string): string | null {
-  try {
-    const decoded = Buffer.from(token, "base64url").toString("utf8")
-    const parts = decoded.split(":")
-    if (parts.length !== 3) return null
-    const [userId, expiresStr, sig] = parts
-    const expires = parseInt(expiresStr, 10)
-    if (isNaN(expires) || Date.now() > expires) return null
-    const payload = `${userId}:${expires}`
-    const expected = createHmac("sha256", IMA_SECRET).update(payload).digest("hex")
-    // Timing-safe comparison to prevent timing attacks
-    const sigBuf = Buffer.from(sig, "hex")
-    const expBuf = Buffer.from(expected, "hex")
-    if (sigBuf.length !== expBuf.length) return null
-    if (!timingSafeEqual(sigBuf, expBuf)) return null
-    return userId
-  } catch {
-    return null
-  }
+  return verifyImaToken(token)?.userId ?? null
 }
 
 // ─── Postback Signature Validators ───────────────────────────────────────────
@@ -210,19 +236,19 @@ export async function getAdProviderSettings() {
 
   return {
     ima: {
-      enabled:    Boolean(s.ima_enabled    ?? false),
+      enabled:    parseBoolSetting(s.ima_enabled, false),
       dailyCap:   Number(s.ima_daily_cap   ?? 2),
       rewardKobo: Number(s.ima_reward_kobo ?? 50),
       adTagUrl:   String(s.ima_ad_tag_url  ?? ""),
     },
     cpx: {
-      enabled:       Boolean(s.cpx_enabled          ?? false),
+      enabled:       parseBoolSetting(s.cpx_enabled, false),
       dailyCap:      Number(s.cpx_daily_cap          ?? 10),
       appId:         String(s.cpx_app_id             ?? ""),
       secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
     },
     asterra: {
-      enabled:      Boolean(s.asterra_enabled      ?? false),
+      enabled:      parseBoolSetting(s.asterra_enabled, false),
       dailyCap:     Number(s.asterra_daily_cap      ?? 3),
       rewardKobo:   Number(s.asterra_reward_kobo    ?? 250),
       smartlinkUrl: String(s.asterra_smartlink_url  ?? ""),

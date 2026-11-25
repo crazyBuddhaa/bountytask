@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getVerificationSettings } from "@/lib/verification"
 import { sendSms } from "@/lib/textbee"
-import { createHash, randomInt } from "crypto"
+import { createHmac, randomInt } from "crypto"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -17,8 +17,12 @@ const schema = z.object({
     .regex(/^\+[1-9]\d{7,14}$/, "Enter a phone number in international format, e.g. +2348012345678"),
 })
 
-function hashCode(code: string, userId: string) {
-  return createHash("sha256").update(`${code}:${userId}`).digest("hex")
+function hashCode(code: string, userId: string): string {
+  const secret = process.env.OTP_HMAC_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!secret) {
+    throw new Error("Missing OTP signing secret")
+  }
+  return createHmac("sha256", secret).update(`${code}:${userId}`).digest("hex")
 }
 
 export async function POST(request: NextRequest) {
@@ -56,25 +60,30 @@ export async function POST(request: NextRequest) {
   }
 
   const { phone } = parsed.data
-  const code = randomInt(100000, 999999).toString()
+  const code = randomInt(100000, 1000000).toString()
+
+  // Persist the new code BEFORE calling sendSms() so concurrent requests hit the cooldown check
+  await admin.from("phone_verification_codes").delete().eq("user_id", user.id)
+  const { data: inserted, error: insertError } = await admin
+    .from("phone_verification_codes")
+    .insert({
+      user_id: user.id,
+      phone,
+      code_hash: hashCode(code, user.id),
+      expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
+    })
+    .select("id")
+    .single()
+
+  if (insertError || !inserted) {
+    return NextResponse.json({ data: null, error: "Failed to start verification. Try again." }, { status: 500 })
+  }
 
   try {
     await sendSms(phone, `Your BountyTask verification code is ${code}. It expires in 10 minutes.`)
   } catch (e) {
+    await admin.from("phone_verification_codes").delete().eq("id", inserted.id)
     return NextResponse.json({ data: null, error: (e as Error).message }, { status: 502 })
-  }
-
-  // Only one active code per user — replace any previous one.
-  await admin.from("phone_verification_codes").delete().eq("user_id", user.id)
-  const { error } = await admin.from("phone_verification_codes").insert({
-    user_id: user.id,
-    phone,
-    code_hash: hashCode(code, user.id),
-    expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
-  })
-
-  if (error) {
-    return NextResponse.json({ data: null, error: "Failed to start verification. Try again." }, { status: 500 })
   }
 
   return NextResponse.json({ data: { success: true }, error: null })

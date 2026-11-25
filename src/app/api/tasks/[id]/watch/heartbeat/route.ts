@@ -15,34 +15,34 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   const admin = createAdminClient()
 
-  // Fetch existing session
-  const { data: session } = await admin
-    .from("video_watch_sessions")
-    .select("id, heartbeat_count, last_heartbeat_at")
-    .eq("user_id", user.id)
-    .eq("task_id", taskId)
-    .single()
+  const { data: rpcData, error: rpcErr } = await admin.rpc("record_video_heartbeat", {
+    p_user_id:              user.id,
+    p_task_id:              taskId,
+    p_min_interval_seconds: MIN_INTERVAL_SECONDS,
+  })
 
-  if (!session) {
+  if (rpcErr) {
+    console.error("[watch/heartbeat] record_video_heartbeat error:", rpcErr)
+    return NextResponse.json({ error: "Failed to record heartbeat" }, { status: 500 })
+  }
+
+  const row = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as {
+    found: boolean
+    recorded: boolean
+    heartbeat_count: number
+  } | null
+
+  if (!row) {
+    return NextResponse.json({ error: "Failed to record heartbeat" }, { status: 500 })
+  }
+
+  if (!row.found) {
     return NextResponse.json({ error: "No watch session found. Call /watch/start first." }, { status: 400 })
   }
 
-  // Rate-limit: reject if last heartbeat was too recent
-  if (session.last_heartbeat_at) {
-    const secondsSinceLast = (Date.now() - new Date(session.last_heartbeat_at).getTime()) / 1000
-    if (secondsSinceLast < MIN_INTERVAL_SECONDS) {
-      return NextResponse.json({ error: "Heartbeat too frequent" }, { status: 429 })
-    }
+  if (!row.recorded) {
+    return NextResponse.json({ error: "Heartbeat too frequent" }, { status: 429 })
   }
 
-  const now = new Date().toISOString()
-  const { data, error } = await admin
-    .from("video_watch_sessions")
-    .update({ heartbeat_count: session.heartbeat_count + 1, last_heartbeat_at: now })
-    .eq("id", session.id)
-    .select("heartbeat_count")
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data })
+  return NextResponse.json({ data: { heartbeat_count: row.heartbeat_count } })
 }

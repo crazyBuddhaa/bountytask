@@ -18,10 +18,26 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
+function sanitizeRedirectPath(raw: string | null | undefined, fallback = "/dashboard"): string {
+  if (!raw) return fallback
+  const trimmed = raw.trim()
+  if (
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/\\") ||
+    trimmed.includes("@") ||
+    trimmed.includes("://") ||
+    /[\r\n]/.test(trimmed)
+  ) {
+    return fallback
+  }
+  return trimmed
+}
+
 function SignInForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const redirect     = searchParams.get("redirect") ?? "/dashboard"
+  const redirect     = sanitizeRedirectPath(searchParams.get("redirect"))
   const [loading, setLoading] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({

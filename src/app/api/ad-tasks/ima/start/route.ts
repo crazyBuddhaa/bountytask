@@ -48,7 +48,13 @@ export async function POST() {
     }, { status: 429 })
   }
 
-  const token = generateImaToken(user.id)
+  let token: string
+  try {
+    token = generateImaToken(user.id)
+  } catch (err) {
+    console.error("[ima/start] token generation failed:", err)
+    return NextResponse.json({ error: "IMA ads are not configured" }, { status: 503 })
+  }
 
   return NextResponse.json({
     token,

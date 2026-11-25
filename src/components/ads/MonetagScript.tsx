@@ -24,6 +24,10 @@ import type { ParsedMonetagSnippet } from "@/lib/monetag"
  */
 const AD_EXEMPT_PREFIXES = [
   "/admin",
+  "/sign-in",
+  "/register",
+  "/dashboard/security",
+  "/dashboard/withdrawal",
 ]
 
 /**

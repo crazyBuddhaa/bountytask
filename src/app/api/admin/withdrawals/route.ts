@@ -5,26 +5,28 @@ import { appendLedger } from "@/lib/ledger"
 import { notifyWithdrawalUpdate } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { getActiveAdminRole, parsePagination } from "@/lib/security"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
 
-async function assertAdmin(userId: string) {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return data && ["admin", "super_admin"].includes(data.role)
+function isUniqueViolation(err: unknown): boolean {
+  if (!err) return false
+  const code = (err as { code?: string }).code
+  if (code === "23505") return true
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes("23505") || msg.includes("duplicate key")
 }
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const { searchParams } = new URL(request.url)
-  const page = parseInt(searchParams.get("page") ?? "1")
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100)
-  const status = searchParams.get("status")
+  const { page, limit } = parsePagination(request.nextUrl.searchParams, 20, 100)
+  const status = request.nextUrl.searchParams.get("status")
   const from = (page - 1) * limit
 
   const admin = createAdminClient()
@@ -53,9 +55,10 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const body = await request.json()
+  const body = await request.json().catch(() => null)
   const parsed = updateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
 
@@ -66,7 +69,8 @@ export async function POST(request: NextRequest) {
   const { data: withdrawal } = await admin
     .from("withdrawals")
     .select("*, user:users!withdrawals_user_id_fkey(id,email,full_name), account:withdrawal_accounts(*)")
-    .eq("id", id).single()
+    .eq("id", id)
+    .single()
   if (!withdrawal) return NextResponse.json({ data: null, error: "Withdrawal not found" }, { status: 404 })
 
   const updates: Record<string, unknown> = {
@@ -76,19 +80,39 @@ export async function POST(request: NextRequest) {
     ...(reason ? { rejection_reason: reason } : {}),
   }
 
-  // Reverse debit if rejecting
+  // Conditionally update FIRST so already-rejected or already-paid withdrawals cannot be re-refunded
+  const { data, error } = await admin
+    .from("withdrawals")
+    .update(updates)
+    .eq("id", id)
+    .in("status", ["pending", "under_review", "approved"])
+    .select()
+    .maybeSingle()
+
+  if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+  if (!data) {
+    return NextResponse.json(
+      { data: null, error: "Withdrawal has already been finalized and cannot be updated" },
+      { status: 409 }
+    )
+  }
+
+  // Reverse debit only after the conditional update succeeded
   if (status === "rejected") {
-    await appendLedger({
-      userId: withdrawal.user_id, type: "credit", delta: withdrawal.amount,
-      refType: "withdrawal_reversal", refId: id, note: `Reversal: ${reason ?? "Rejected by admin"}`, createdBy: user.id,
-    })
+    try {
+      await appendLedger({
+        userId: withdrawal.user_id, type: "credit", delta: withdrawal.amount,
+        refType: "withdrawal_reversal", refId: id, note: `Reversal: ${reason ?? "Rejected by admin"}`, createdBy: user.id,
+      })
+    } catch (err) {
+      if (!isUniqueViolation(err)) {
+        throw err
+      }
+    }
     await notifyWithdrawalUpdate(withdrawal.user_id, withdrawal.user.email, withdrawal.amount, "rejected", reason, id)
   } else if (status === "approved" || status === "paid") {
     await notifyWithdrawalUpdate(withdrawal.user_id, withdrawal.user.email, withdrawal.amount, "approved", undefined, id)
   }
-
-  const { data, error } = await admin.from("withdrawals").update(updates).eq("id", id).select().single()
-  if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
 
   await auditLog({ actorId: user.id, action: `withdrawal.${status}`, targetType: "withdrawal", targetId: id,
     details: { amount: withdrawal.amount, reason }, ipAddress: getClientIp(request.headers) })

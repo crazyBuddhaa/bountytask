@@ -79,6 +79,12 @@ export async function POST(request: NextRequest) {
   if (!settings.fee_enabled) {
     return NextResponse.json({ data: null, error: "Verification is not currently required." }, { status: 400 })
   }
+  if (settings.payment_method !== "bank_transfer") {
+    return NextResponse.json(
+      { data: null, error: "Bank transfer verification is not enabled." },
+      { status: 400 }
+    )
+  }
 
   const admin = createAdminClient()
 

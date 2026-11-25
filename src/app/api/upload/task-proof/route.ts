@@ -1,11 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { cloudinary, uploadBuffer } from "@/lib/cloudinary"
+import { detectMimeFromMagicBytes } from "@/lib/security"
+import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf", "video/mp4"]
+const uuidSchema = z.string().uuid()
+
+const ALLOWED_FORMATS_BY_MIME: Record<string, string[]> = {
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/png": ["png"],
+  "image/webp": ["webp"],
+  "application/pdf": ["pdf"],
+  "video/mp4": ["mp4"],
+}
 
 function resourceTypeFor(mime: string): "image" | "video" | "raw" {
   if (mime === "application/pdf") return "raw"
@@ -35,8 +46,8 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File)) {
     return NextResponse.json({ data: null, error: "No file provided" }, { status: 400 })
   }
-  if (typeof taskId !== "string" || !taskId) {
-    return NextResponse.json({ data: null, error: "Missing task_id" }, { status: 400 })
+  if (typeof taskId !== "string" || !uuidSchema.safeParse(taskId).success) {
+    return NextResponse.json({ data: null, error: "Invalid task_id" }, { status: 400 })
   }
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ data: null, error: "Unsupported file type." }, { status: 400 })
@@ -45,15 +56,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: null, error: "File must be under 10 MB" }, { status: 400 })
   }
 
-  const resourceType = resourceTypeFor(file.type)
-
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
+    const detectedMime = detectMimeFromMagicBytes(buffer)
+    if (!detectedMime || !ALLOWED_TYPES.includes(detectedMime) || detectedMime !== file.type) {
+      return NextResponse.json(
+        { data: null, error: "File content does not match an allowed file type." },
+        { status: 400 }
+      )
+    }
+
+    const resourceType = resourceTypeFor(detectedMime)
     const result = await uploadBuffer(buffer, {
       folder: `bountytask/task-proofs/${user.id}`,
       public_id: `${taskId}-${Date.now()}`,
       resource_type: resourceType,
       type: "upload",
+      allowed_formats: ALLOWED_FORMATS_BY_MIME[detectedMime],
     })
 
     const url = cloudinary.url(result.public_id, {

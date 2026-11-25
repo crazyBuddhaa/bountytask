@@ -16,18 +16,12 @@
  */
 import { NextResponse }                               from "next/server"
 import { createClient }                               from "@/lib/supabase/server"
-import { createAdminClient }                          from "@/lib/supabase/admin"
+import { getActiveAdminRole }                         from "@/lib/security"
 import { getCpxSettings, buildCpxSecureHash, validateCpxPostbackHash, CPX_POSTBACK_IPS } from "@/lib/cpx"
 import { createHash }                                 from "crypto"
 
 // Use the env var so this keeps working if the domain changes.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://bountytask.dpdns.org"
-
-async function assertAdmin(userId: string): Promise<boolean> {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return !!data && ["admin", "super_admin"].includes(data.role)
-}
 
 /** Mask a string: show first 4 and last 4 chars, replace middle with ****. */
 function mask(s: string): string {
@@ -39,11 +33,15 @@ function mask(s: string): string {
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   // ── Auth ─────────────────────────────────────────────────────────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user)                       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ error: "Forbidden"    }, { status: 403 })
+  if (!user)                                        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!(await getActiveAdminRole(user.id)).isAdmin) return NextResponse.json({ error: "Forbidden"    }, { status: 403 })
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const settings = await getCpxSettings()

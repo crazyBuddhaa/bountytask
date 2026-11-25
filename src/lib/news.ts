@@ -8,6 +8,7 @@
 
 import { unstable_cache } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isSafePublicHttpsUrl, parseBoolSetting } from "@/lib/security"
 
 // ─── RSS feed definitions ─────────────────────────────────────────────────────
 
@@ -54,10 +55,9 @@ export const getNewsSettings = unstable_cache(
 
     const map = Object.fromEntries((rows ?? []).map(r => [r.key, r.value]))
 
-    const parseBool = (v: unknown) => v === "true" || v === true
     return {
-      enabled:                  parseBool(map.news_enabled),
-      earnEnabled:              parseBool(map.news_earn_enabled),
+      enabled:                  parseBoolSetting(map.news_enabled, false),
+      earnEnabled:              parseBoolSetting(map.news_earn_enabled, false),
       earnKoboPerRead:          Number(map.news_earn_kobo_per_read)          || 5,
       earnKoboPerMinute:        Number(map.news_earn_kobo_per_minute)        || 200,
       earnMaxMinutesPerArticle: Number(map.news_earn_max_minutes_per_article) || 5,
@@ -136,7 +136,7 @@ function parseRssItems(xml: string): RssItem[] {
 
     const title   = getTagContent(block, "title")
     const link    = getTagContent(block, "link") ?? getTagContent(block, "guid")
-    if (!title || !link) continue
+    if (!title || !link || !isSafePublicHttpsUrl(link)) continue
 
     const descRaw = getTagContent(block, "description") ?? getTagContent(block, "summary") ?? ""
     const snippet = descRaw ? stripHtml(descRaw) : null
@@ -147,8 +147,11 @@ function parseRssItems(xml: string): RssItem[] {
       getAttr(block, "media:thumbnail", "url") ??
       getAttr(block, "enclosure", "url")
 
-    // Filter out non-image enclosures (audio/video)
-    if (thumbnail && !/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(thumbnail)) {
+    // Filter out non-image enclosures (audio/video) or unsafe URLs
+    if (
+      thumbnail &&
+      (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(thumbnail) || !isSafePublicHttpsUrl(thumbnail))
+    ) {
       thumbnail = null
     }
 
@@ -204,7 +207,7 @@ export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
         continue
       }
 
-      const currentUrls = items.map(i => i.link)
+      const currentUrlSet = new Set(items.map(i => i.link))
 
       const rows = items.map(item => ({
         title:         item.title,
@@ -225,18 +228,32 @@ export async function fetchAndStoreFeeds(): Promise<FeedResult[]> {
         .from("news_articles")
         .upsert(rows, { onConflict: "article_url", ignoreDuplicates: true, count: "exact" })
 
-      // Delete stale articles for this source — anything not in the live feed right now
-      const { count: deleted } = await admin
+      // Delete stale articles for this source safely by ID batches (no raw filter interpolation)
+      const { data: existingRows } = await admin
         .from("news_articles")
-        .delete({ count: "exact" })
+        .select("id, article_url")
         .eq("source_name", feed.name)
-        .not("article_url", "in", `(${currentUrls.map(u => `"${u}"`).join(",")})`)
+
+      const staleIds = (existingRows ?? [])
+        .filter((r) => !currentUrlSet.has(r.article_url))
+        .map((r) => r.id)
+
+      let deletedTotal = 0
+      const CHUNK_SIZE = 100
+      for (let i = 0; i < staleIds.length; i += CHUNK_SIZE) {
+        const chunk = staleIds.slice(i, i + CHUNK_SIZE)
+        const { count: chunkDeleted } = await admin
+          .from("news_articles")
+          .delete({ count: "exact" })
+          .in("id", chunk)
+        deletedTotal += chunkDeleted ?? 0
+      }
 
       results.push({
         source:   feed.name,
         fetched:  items.length,
-        inserted: count   ?? 0,
-        deleted:  deleted ?? 0,
+        inserted: count ?? 0,
+        deleted:  deletedTotal,
         error:    error?.message,
       })
     } catch (err) {

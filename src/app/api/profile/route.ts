@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getLiveBalance } from "@/lib/ledger"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { isTrustedUploadUrl } from "@/lib/security"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -48,6 +49,10 @@ export async function PATCH(request: NextRequest) {
 
   const updates: Record<string, unknown> = { ...parsed.data }
 
+  if (typeof updates.avatar_url === "string" && updates.avatar_url.length > 0 && !isTrustedUploadUrl(updates.avatar_url)) {
+    return NextResponse.json({ data: null, error: "Invalid avatar URL" }, { status: 400 })
+  }
+
   // Check username uniqueness
   if (updates.username) {
     const admin = createAdminClient()
@@ -62,25 +67,33 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Full name may only be changed once after sign-up, then it locks.
-  if (typeof updates.full_name === "string") {
+  // Fetch current profile when checking full_name lock or phone verification reset.
+  if (typeof updates.full_name === "string" || updates.phone !== undefined) {
     const { data: current } = await supabase
       .from("users")
-      .select("full_name, full_name_locked")
+      .select("full_name, full_name_locked, phone")
       .eq("id", user.id)
       .single()
 
-    if (current && updates.full_name !== current.full_name) {
-      if (current.full_name_locked) {
-        return NextResponse.json(
-          { data: null, error: "Your name can only be changed once. Contact support if you need to update it again." },
-          { status: 403 }
-        )
+    // Full name may only be changed once after sign-up, then it locks.
+    if (typeof updates.full_name === "string") {
+      if (current && updates.full_name !== current.full_name) {
+        if (current.full_name_locked) {
+          return NextResponse.json(
+            { data: null, error: "Your name can only be changed once. Contact support if you need to update it again." },
+            { status: 403 }
+          )
+        }
+        updates.full_name_locked = true
+      } else {
+        // No actual change — don't touch the lock.
+        delete updates.full_name
       }
-      updates.full_name_locked = true
-    } else {
-      // No actual change — don't touch the lock.
-      delete updates.full_name
+    }
+
+    // Reset phone verification whenever the phone number changes.
+    if (updates.phone !== undefined && current && updates.phone !== current.phone) {
+      updates.phone_verified = false
     }
   }
 

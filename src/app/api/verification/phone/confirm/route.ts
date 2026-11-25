@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createNotification } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
-import { createHash } from "crypto"
+import { timingSafeStringEqual } from "@/lib/security"
+import { createHmac } from "crypto"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
@@ -15,8 +16,12 @@ const schema = z.object({
   code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
 })
 
-function hashCode(code: string, userId: string) {
-  return createHash("sha256").update(`${code}:${userId}`).digest("hex")
+function hashCode(code: string, userId: string): string {
+  const secret = process.env.OTP_HMAC_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!secret) {
+    throw new Error("Missing OTP signing secret")
+  }
+  return createHmac("sha256", secret).update(`${code}:${userId}`).digest("hex")
 }
 
 export async function POST(request: NextRequest) {
@@ -49,13 +54,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: null, error: "That code expired. Request a new one." }, { status: 410 })
   }
 
-  if (record.attempts >= MAX_ATTEMPTS) {
+  // Atomically increment attempt count BEFORE comparing the hash to prevent concurrent brute-force races
+  const { data: attemptRows, error: attemptErr } = await admin.rpc("increment_phone_otp_attempt", {
+    p_record_id: record.id,
+    p_max_attempts: MAX_ATTEMPTS,
+  })
+  if (attemptErr) {
+    return NextResponse.json({ data: null, error: "Failed to verify code. Try again." }, { status: 500 })
+  }
+  const attemptResult = attemptRows?.[0] as { allowed: boolean; attempts: number } | undefined
+  if (!attemptResult?.allowed) {
     await admin.from("phone_verification_codes").delete().eq("id", record.id)
     return NextResponse.json({ data: null, error: "Too many incorrect attempts. Request a new code." }, { status: 429 })
   }
 
-  if (hashCode(parsed.data.code, user.id) !== record.code_hash) {
-    await admin.from("phone_verification_codes").update({ attempts: record.attempts + 1 }).eq("id", record.id)
+  const expectedHash = hashCode(parsed.data.code, user.id)
+  if (!timingSafeStringEqual(expectedHash, record.code_hash)) {
+    if (attemptResult.attempts >= MAX_ATTEMPTS) {
+      await admin.from("phone_verification_codes").delete().eq("id", record.id)
+    }
     return NextResponse.json({ data: null, error: "Incorrect code." }, { status: 400 })
   }
 
@@ -65,6 +82,12 @@ export async function POST(request: NextRequest) {
     .eq("id", user.id)
 
   if (updateError) {
+    if (updateError.code === "23505") {
+      return NextResponse.json(
+        { data: null, error: "This phone number is already verified on another account." },
+        { status: 409 }
+      )
+    }
     return NextResponse.json({ data: null, error: "Failed to confirm verification. Try again." }, { status: 500 })
   }
 

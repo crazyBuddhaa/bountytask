@@ -9,8 +9,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isSafePublicHttpsUrl } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
+
+const MAX_HTML_BYTES = 2 * 1024 * 1024 // 2 MB
 
 // ---------------------------------------------------------------------------
 // Lightweight article-body extractor
@@ -57,6 +60,36 @@ function extractBody(html: string): string {
   return stripHtml(html).slice(0, 12000)
 }
 
+/** Read a Response body as UTF-8 text up to maxBytes, aborting if exceeded. */
+async function readBoundedText(res: Response, maxBytes: number): Promise<string | null> {
+  const contentLength = res.headers.get("content-length")
+  if (contentLength && Number.parseInt(contentLength, 10) > maxBytes) {
+    return null
+  }
+  if (!res.body) return null
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        total += value.byteLength
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {})
+          return null
+        }
+        chunks.push(value)
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const merged = Buffer.concat(chunks.map((c) => Buffer.from(c.buffer, c.byteOffset, c.byteLength)))
+  return merged.toString("utf8")
+}
+
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
@@ -87,6 +120,11 @@ export async function GET(
     return NextResponse.json({ article })
   }
 
+  // Validate URL against SSRF before fetching
+  if (!isSafePublicHttpsUrl(article.article_url)) {
+    return NextResponse.json({ article: { ...article, content: null } })
+  }
+
   // Fetch the article page and extract body
   let content = ""
   try {
@@ -96,15 +134,18 @@ export async function GET(
         "Accept":          "text/html,application/xhtml+xml",
         "Accept-Language": "en-US,en;q=0.9",
       },
+      redirect: "error",
       signal: AbortSignal.timeout(12_000),
     })
 
     if (res.ok) {
-      const html = await res.text()
-      content = extractBody(html)
+      const html = await readBoundedText(res, MAX_HTML_BYTES)
+      if (html) {
+        content = extractBody(html)
+      }
     }
   } catch {
-    // Network failure — return the article without content so client degrades gracefully
+    // Network / redirect / size failure — return the article without content so client degrades gracefully
   }
 
   // Cache in DB (fire-and-forget, don't block the response)

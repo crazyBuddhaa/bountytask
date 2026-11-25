@@ -22,14 +22,14 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import {
   getAsterraSettings,
   buildAsterraSmartlinkUrl,
-  getAsterraLastClickAt,
   ASTERRA_COOLDOWN_MINUTES,
 } from "@/lib/asterra"
-import { checkAdDailyCap, recordAdCompletion } from "@/lib/ad-providers"
-import { checkDailyTaskLimit } from "@/lib/tiers"
+import { createNotification } from "@/lib/notifications"
+import { recalcUserTier } from "@/lib/tiers"
 
 export const dynamic = "force-dynamic"
 
@@ -47,43 +47,84 @@ export async function POST(_request: NextRequest) {
     return NextResponse.json({ error: "Provider not configured" }, { status: 503 })
   }
 
-  // ── Cooldown check ────────────────────────────────────────────────────────
-  const lastClickAt = await getAsterraLastClickAt(user.id)
-  if (lastClickAt) {
-    const cooldownMs   = ASTERRA_COOLDOWN_MINUTES * 60 * 1000
-    const nextAvailableAt = new Date(lastClickAt.getTime() + cooldownMs)
-    if (nextAvailableAt > new Date()) {
+  // ── Look up user's tier daily limit ───────────────────────────────────────
+  const admin = createAdminClient()
+  const { data: profile } = await admin
+    .from("users")
+    .select("tier")
+    .eq("id", user.id)
+    .single()
+
+  const { data: tier } = await admin
+    .from("tiers")
+    .select("daily_task_limit")
+    .eq("id", profile?.tier ?? 1)
+    .single()
+
+  const tierDailyLimit = tier?.daily_task_limit ?? 10
+
+  // ── Atomic cooldown + daily cap + tier limit + log + ledger credit ────────
+  const sessionId = crypto.randomUUID()
+  const { data: rpcData, error: rpcErr } = await admin.rpc("claim_ad_reward", {
+    p_user_id:          user.id,
+    p_provider:         "asterra",
+    p_ad_type:          "mixed",
+    p_reward_kobo:      settings.rewardKobo,
+    p_session_id:       sessionId,
+    p_note:             "Ad task reward — asterra (mixed)",
+    p_daily_cap:        settings.dailyCap,
+    p_cooldown_seconds: ASTERRA_COOLDOWN_MINUTES * 60,
+    p_tier_daily_limit: tierDailyLimit,
+  })
+
+  if (rpcErr) {
+    console.error("[asterra/click] claim_ad_reward error:", rpcErr)
+    return NextResponse.json({ error: "Failed to process reward" }, { status: 500 })
+  }
+
+  const rpcRow = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as {
+    ok: boolean
+    reason: string
+    retry_after: number
+    daily_used: number
+    tier_used: number
+  } | null
+
+  if (!rpcRow) {
+    return NextResponse.json({ error: "Failed to process reward" }, { status: 500 })
+  }
+
+  if (!rpcRow.ok) {
+    if (rpcRow.reason === "cooldown") {
+      const nextAvailableAt = new Date(Date.now() + (rpcRow.retry_after ?? 0) * 1000).toISOString()
       return NextResponse.json(
-        { error: "cooldown", nextAvailableAt: nextAvailableAt.toISOString() },
+        { error: "cooldown", nextAvailableAt },
         { status: 429 }
       )
     }
+    if (rpcRow.reason === "daily_cap") {
+      return NextResponse.json({ error: "Daily cap reached" }, { status: 429 })
+    }
+    if (rpcRow.reason === "tier_limit") {
+      return NextResponse.json({ error: "Daily platform limit reached" }, { status: 429 })
+    }
+    if (rpcRow.reason === "duplicate") {
+      return NextResponse.json({ error: "Already credited" }, { status: 409 })
+    }
+    return NextResponse.json({ error: "Unable to claim reward" }, { status: 400 })
   }
 
-  // ── Daily cap ─────────────────────────────────────────────────────────────
-  const cap = await checkAdDailyCap(user.id, "asterra", settings.dailyCap)
-  if (cap.limited) {
-    return NextResponse.json({ error: "Daily cap reached" }, { status: 429 })
-  }
-
-  // ── Platform tier limit ───────────────────────────────────────────────────
-  const tierLimit = await checkDailyTaskLimit(user.id)
-  if (tierLimit.limited) {
-    return NextResponse.json({ error: "Daily platform limit reached" }, { status: 429 })
-  }
-
-  // ── Optimistic credit ─────────────────────────────────────────────────────
-  // session_id is a server-generated UUID — there is no external transaction ID
-  // because Adsterra has no per-user postback for publishers.
-  const sessionId = crypto.randomUUID()
-
-  await recordAdCompletion({
-    userId:    user.id,
-    provider:  "asterra",
-    adType:    "mixed",
-    rewardKobo: settings.rewardKobo,
-    sessionId,
-  })
+  // ── Non-blocking notification + tier recalculation ────────────────────────
+  const naira = (settings.rewardKobo / 100).toFixed(2)
+  await Promise.allSettled([
+    createNotification({
+      userId:  user.id,
+      type:    "task_approved",
+      title:   "Ad Task Completed! 🎯",
+      message: `₦${naira} credited for completing a smartlink offer.`,
+    }),
+    recalcUserTier(user.id),
+  ])
 
   // ── Return resolved URL ───────────────────────────────────────────────────
   const url = buildAsterraSmartlinkUrl(settings.smartlinkUrl, user.id)

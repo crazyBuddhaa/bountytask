@@ -7,26 +7,28 @@ import { recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved, notifyTaskRejected } from "@/lib/notifications"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { getActiveAdminRole, parsePagination } from "@/lib/security"
 import { z } from "zod"
 
 export const dynamic = 'force-dynamic'
 
-async function assertAdmin(userId: string) {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return data && ["admin", "super_admin"].includes(data.role)
+function isUniqueViolation(err: unknown): boolean {
+  if (!err) return false
+  const code = (err as { code?: string }).code
+  if (code === "23505") return true
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes("23505") || msg.includes("duplicate key")
 }
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const { searchParams } = new URL(request.url)
-  const page = parseInt(searchParams.get("page") ?? "1")
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100)
-  const taskId = searchParams.get("task_id")
+  const { page, limit } = parsePagination(request.nextUrl.searchParams, 20, 100)
+  const taskId = request.nextUrl.searchParams.get("task_id")
   const from = (page - 1) * limit
 
   const admin = createAdminClient()
@@ -56,9 +58,10 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
-  const body = await request.json()
+  const body = await request.json().catch(() => null)
   const parsed = actionSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
 
@@ -68,32 +71,62 @@ export async function POST(request: NextRequest) {
   const results: string[] = []
 
   for (const completionId of ids) {
-    const { data: completion } = await admin
+    const updatePayload =
+      action === "approve"
+        ? { status: "approved", reviewed_at: now, reviewed_by: user.id }
+        : { status: "rejected", reviewed_at: now, reviewed_by: user.id, rejection_reason: reason ?? "Does not meet requirements" }
+
+    // Conditional update FIRST so concurrent approvals cannot double-credit the ledger
+    const { data: completion, error: updateErr } = await admin
       .from("task_completions")
-      .select("*, task:tasks(title,reward_amount), user:users!task_completions_user_id_fkey(id,email,full_name)")
+      .update(updatePayload)
       .eq("id", completionId)
       .eq("status", "pending")
-      .single()
+      .select("*, task:tasks(title,reward_amount), user:users!task_completions_user_id_fkey(id,email,full_name)")
+      .maybeSingle()
 
-    if (!completion) continue
+    if (updateErr) {
+      return NextResponse.json({ data: null, error: updateErr.message }, { status: 500 })
+    }
+
+    if (!completion) {
+      if (ids.length === 1) {
+        return NextResponse.json(
+          { data: null, error: "Completion is no longer pending or was already processed" },
+          { status: 409 }
+        )
+      }
+      continue
+    }
 
     if (action === "approve") {
-      await admin.from("task_completions").update({ status: "approved", reviewed_at: now, reviewed_by: user.id }).eq("id", completionId)
-      await appendLedger({
-        userId: completion.user_id, type: "credit", delta: completion.task.reward_amount,
-        refType: "task_reward", refId: completionId, note: `Task: ${completion.task.title}`, createdBy: user.id,
-      })
+      try {
+        await appendLedger({
+          userId: completion.user_id, type: "credit", delta: completion.task.reward_amount,
+          refType: "task_reward", refId: completionId, note: `Task: ${completion.task.title}`, createdBy: user.id,
+        })
+      } catch (err) {
+        if (!isUniqueViolation(err)) {
+          throw err
+        }
+      }
       await notifyTaskApproved(completion.user_id, completion.user.email, completion.task.title, completion.task.reward_amount, completionId)
       await creditReferralBonus(completion.user_id)
       await recalcUserTier(completion.user_id)
     } else {
-      await admin.from("task_completions").update({ status: "rejected", reviewed_at: now, reviewed_by: user.id, rejection_reason: reason ?? "Does not meet requirements" }).eq("id", completionId)
       await notifyTaskRejected(completion.user_id, completion.user.email, completion.task.title, reason ?? "Does not meet requirements", completionId)
     }
 
     await auditLog({ actorId: user.id, action: `completion.${action}`, targetType: "task_completions", targetId: completionId,
       details: { reason }, ipAddress: getClientIp(request.headers) })
     results.push(completionId)
+  }
+
+  if (results.length === 0) {
+    return NextResponse.json(
+      { data: null, error: "No pending completions were updated" },
+      { status: 409 }
+    )
   }
 
   return NextResponse.json({ data: { processed: results.length, ids: results }, error: null })

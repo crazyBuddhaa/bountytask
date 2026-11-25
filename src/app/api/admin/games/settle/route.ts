@@ -3,18 +3,13 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { appendLedger } from "@/lib/ledger"
 import { auditLog } from "@/lib/audit"
+import { getActiveAdminRole } from "@/lib/security"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
 export const dynamic = "force-dynamic"
 
 const schema = z.object({ pool_id: z.string().uuid() })
-
-async function assertAdmin(userId: string) {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return data && ["admin", "super_admin"].includes(data.role)
-}
 
 /** Split prize_pool_kobo among up to 3 winners (50 / 30 / 20 %). */
 function calcSplits(pool: number, count: number): number[] {
@@ -32,14 +27,16 @@ function calcSplits(pool: number, count: number): number[] {
 /**
  * POST /api/admin/games/settle
  * Body: { pool_id }
- * Reads the top 3 completed scores for the pool's game + week, credits winners,
- * records leaderboard_payouts rows, and marks the pool as settled.
+ * Atomically claims the prize pool, reads the top 3 completed scores for the
+ * pool's game + week, credits winners, and records leaderboard_payouts rows.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+  const { isAdmin } = await getActiveAdminRole(user.id)
+  if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const body = await req.json().catch(() => null)
   const parsed = schema.safeParse(body)
@@ -78,6 +75,23 @@ export async function POST(req: NextRequest) {
   if (sessErr) {
     console.error("[settle]", sessErr)
     return NextResponse.json({ error: "Failed to fetch leaderboard" }, { status: 500 })
+  }
+
+  // ── Atomically claim pool FIRST (prevents double-settlement race) ──────────
+  const { data: claimedPool, error: claimErr } = await admin
+    .from("game_prize_pools")
+    .update({ settled: true, settled_at: new Date().toISOString(), settled_by: user.id })
+    .eq("id", pool.id)
+    .eq("settled", false)
+    .select("id")
+    .maybeSingle()
+
+  if (claimErr) {
+    console.error("[settle] claim error:", claimErr)
+    return NextResponse.json({ error: "Failed to claim prize pool" }, { status: 500 })
+  }
+  if (!claimedPool) {
+    return NextResponse.json({ error: "Pool already settled" }, { status: 409 })
   }
 
   // Deduplicate: best score per user
@@ -132,12 +146,6 @@ export async function POST(req: NextRequest) {
       payoutRows.map(({ display_name: _, ...r }) => r)
     )
   }
-
-  // ── Mark pool as settled ───────────────────────────────────────────────────
-  await admin
-    .from("game_prize_pools")
-    .update({ settled: true, settled_at: new Date().toISOString(), settled_by: user.id })
-    .eq("id", pool.id)
 
   await auditLog({
     actorId:    user.id,

@@ -51,6 +51,7 @@ export async function middleware(request: NextRequest) {
     response.cookies.set("bt_vid", crypto.randomUUID(), {
       httpOnly: true,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 400, // ~13 months
     });

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { auditLog } from "@/lib/audit"
 import { getClientIp } from "@/lib/utils"
+import { getActiveAdminRole } from "@/lib/security"
+import { parseMonetagSnippet } from "@/lib/monetag"
 import { z } from "zod"
 
 // Keys that getVerificationSettings() reads and caches under this tag with a
@@ -128,17 +130,11 @@ const settingsSchema = z.object({
   game_entry_fee_word_scramble:  z.number().int().min(0).optional(),
 })
 
-async function assertAdmin(userId: string) {
-  const admin = createAdminClient()
-  const { data } = await admin.from("users").select("role").eq("id", userId).single()
-  return data && ["admin", "super_admin"].includes(data.role)
-}
-
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  if (!(await getActiveAdminRole(user.id)).isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
   const admin = createAdminClient()
   const { data: rows } = await admin.from("platform_settings").select("key, value")
@@ -151,12 +147,29 @@ export async function PATCH(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 })
-  if (!await assertAdmin(user.id)) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
+  if (!(await getActiveAdminRole(user.id)).isAdmin) return NextResponse.json({ data: null, error: "Forbidden" }, { status: 403 })
 
   const body = await request.json()
   const parsed = settingsSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
+  }
+
+  // Reject raw inline scripts or non-HTTPS URLs for Monetag script snippets
+  for (const key of ["monetag_multitag_script", "monetag_games_interstitial_script"] as const) {
+    const val = parsed.data[key]
+    if (typeof val === "string" && val.trim().length > 0) {
+      const snippet = parseMonetagSnippet(val)
+      if (snippet.kind !== "src") {
+        return NextResponse.json(
+          {
+            data: null,
+            error: `${key} must be an external <script src="https://..."> tag; inline scripts and non-HTTPS URLs are not allowed.`,
+          },
+          { status: 400 }
+        )
+      }
+    }
   }
 
   const admin = createAdminClient()

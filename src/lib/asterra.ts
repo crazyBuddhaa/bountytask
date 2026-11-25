@@ -22,6 +22,7 @@
  *     - Both enforced server-side before the credit fires
  */
 import { createAdminClient } from "@/lib/supabase/admin"
+import { parseBoolSetting } from "@/lib/security"
 
 export const ASTERRA_COOLDOWN_MINUTES = 30
 
@@ -48,7 +49,7 @@ export async function getAsterraSettings(): Promise<AsterraSettings> {
 
   const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
   return {
-    enabled:      Boolean(s.asterra_enabled      ?? false),
+    enabled:      parseBoolSetting(s.asterra_enabled, false),
     dailyCap:     Number(s.asterra_daily_cap      ?? 3),
     rewardKobo:   Number(s.asterra_reward_kobo    ?? 250),
     smartlinkUrl: String(s.asterra_smartlink_url  ?? ""),

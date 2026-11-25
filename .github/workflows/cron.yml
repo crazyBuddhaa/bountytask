@@ -5,6 +5,8 @@ on:
     - cron: "0 * * * *"   # every hour at :00
   workflow_dispatch:       # allow manual trigger from GitHub UI
 
+permissions: {}
+
 jobs:
   process-tasks:
     name: Close expired tasks
