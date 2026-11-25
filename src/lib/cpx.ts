@@ -8,6 +8,8 @@ export type CpxSettings = {
   dailyCap: number
   appId: string
   secureHashKey: string
+  /** Percentage (10–100) of CPX payout credited to the user; remainder is platform margin. */
+  userSharePercent: number
 }
 
 /**
@@ -38,14 +40,26 @@ export const getCpxSettings = unstable_cache(
     const { data: rows } = await admin
       .from("platform_settings")
       .select("key, value")
-      .in("key", ["cpx_enabled", "cpx_daily_cap", "cpx_app_id", "cpx_secure_hash_key"])
+      .in("key", [
+        "cpx_enabled",
+        "cpx_daily_cap",
+        "cpx_app_id",
+        "cpx_secure_hash_key",
+        "cpx_user_share_percent",
+      ])
 
     const s = Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]))
+    const rawShare = Number(s.cpx_user_share_percent ?? 65)
+    const userSharePercent = Number.isFinite(rawShare)
+      ? Math.min(100, Math.max(10, Math.round(rawShare)))
+      : 65
+
     return {
-      enabled:       parseBoolSetting(s.cpx_enabled, false),
-      dailyCap:      Number(s.cpx_daily_cap          ?? 10),
-      appId:         String(s.cpx_app_id             ?? ""),
-      secureHashKey: String(s.cpx_secure_hash_key    ?? ""),
+      enabled:          parseBoolSetting(s.cpx_enabled, false),
+      dailyCap:         Number(s.cpx_daily_cap          ?? 10),
+      appId:            String(s.cpx_app_id             ?? ""),
+      secureHashKey:    String(s.cpx_secure_hash_key    ?? ""),
+      userSharePercent,
     }
   },
   ["cpx-settings"],
@@ -88,17 +102,21 @@ export function validateCpxPostbackHash(
 const MAX_CPX_KOBO = 5_000_000 // Hard cap: ₦50,000 (~$50)
 
 /**
- * Convert a CPX Research postback `amount_usd` string to kobo.
+ * Convert a CPX Research postback `amount_usd` string to kobo after applying
+ * the platform revenue share (`userSharePercent`, default 65%, clamped 10–100).
  *
  * CPX sends `amount_usd` as a full-dollar decimal string, e.g. "0.50" = $0.50.
- * Convert: USD → NGN (at fixed rate) → kobo (× 100), capped at MAX_CPX_KOBO.
+ * Convert: USD → NGN (at fixed rate) → kobo (× 100) × (share / 100), capped at MAX_CPX_KOBO.
  * Returns 0 for invalid, non-finite, or non-positive amounts.
  *
  * TODO: store `cpx_usd_to_ngn_rate` in platform_settings for admin control.
  */
-export function cpxUsdToKobo(usdString: string): number {
+export function cpxUsdToKobo(usdString: string, userSharePercent = 65): number {
   const usd = parseFloat(usdString)
   if (!Number.isFinite(usd) || usd <= 0) return 0
+  const share = Number.isFinite(userSharePercent)
+    ? Math.min(100, Math.max(10, userSharePercent))
+    : 65
   const USD_TO_NGN = 1600
-  return Math.min(Math.round(usd * USD_TO_NGN * 100), MAX_CPX_KOBO)
+  return Math.min(Math.round(usd * USD_TO_NGN * 100 * (share / 100)), MAX_CPX_KOBO)
 }

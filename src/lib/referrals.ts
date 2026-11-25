@@ -52,24 +52,44 @@ export async function creditSignupBonusIfNew(
 }
 
 /** Referral signup bonus in kobo */
-export const REFERRAL_BONUS_KOBO = 50_000; // ₦500
+export const REFERRAL_BONUS_KOBO = 15_000; // ₦150
+
+/** Minimum approved tasks a referred user must complete before the referral bonus unlocks */
+export const REFERRAL_MIN_APPROVED_TASKS = 3;
+
+/** Minimum task/news earnings (kobo) a referred user must accumulate before the referral bonus unlocks */
+export const REFERRAL_MIN_EARNED_KOBO = 50_000; // ₦500
 
 export async function creditReferralBonus(referredUserId: string) {
   const supabase = createAdminClient();
 
-  // Require at least one approved task completion before paying referral bonus
+  // Require at least REFERRAL_MIN_APPROVED_TASKS approved task completions before paying referral bonus
   const { count: approvedTaskCount } = await supabase
     .from("task_completions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", referredUserId)
     .eq("status", "approved");
 
-  if (!approvedTaskCount || approvedTaskCount < 1) return;
+  if (!approvedTaskCount || approvedTaskCount < REFERRAL_MIN_APPROVED_TASKS) return;
+
+  // Require at least REFERRAL_MIN_EARNED_KOBO earned from tasks/news before paying referral bonus
+  const { data: earnedRows } = await supabase
+    .from("ledger")
+    .select("delta")
+    .eq("user_id", referredUserId)
+    .eq("type", "credit")
+    .in("ref_type", ["task_reward", "news_read_reward"]);
+
+  const totalEarnedKobo = (earnedRows ?? []).reduce(
+    (sum, row) => sum + Number(row.delta ?? 0),
+    0
+  );
+  if (totalEarnedKobo < REFERRAL_MIN_EARNED_KOBO) return;
 
   // If admin verification is enabled, the referred user must be kyc_verified
   // before the referral bonus is paid. This handles two paths:
-  //  - User verified first, completes task after → bonus fires here (verified = true)
-  //  - User completes task first, gets verified later → bonus fires from KYC approval route
+  //  - User verified first, completes tasks after → bonus fires here (verified = true)
+  //  - User completes tasks first, gets verified later → bonus fires from KYC approval route
   const settings = await getVerificationSettings();
   if (settings.fee_enabled) {
     const { data: profile } = await supabase
@@ -122,17 +142,17 @@ export async function creditReferralBonus(referredUserId: string) {
 }
 
 /**
- * Credit the ₦500 referral bonus to the referrer when their referred user
- * completes their first approved task.
+ * Credit the ₦150 referral bonus to the referrer when their referred user
+ * completes at least 3 approved tasks and earns ₦500+ from tasks/news.
  *
  * Gate: if admin verification is ON (fee_enabled), the referred user must
  * also be kyc_verified before the bonus is paid. This prevents rewarding
  * referrals from users who never activated their account.
- * When verification is OFF, the bonus fires on first task completion alone.
+ * When verification is OFF, the bonus fires once the task/earnings thresholds are met.
  *
  * This function is called in two places:
  *  1. task complete / admin approval routes — fires after each approval
- *  2. admin KYC approval — re-fires for users who completed a task first
+ *  2. admin KYC approval — re-fires for users who met task requirements first
  *     but weren't verified yet at that time
  */
 export async function processReferral(
@@ -177,7 +197,7 @@ export async function processReferral(
 }
 
 /** Signup bonus for new users */
-export const SIGNUP_BONUS_KOBO = 20_000; // ₦200
+export const SIGNUP_BONUS_KOBO = 5_000; // ₦50
 
 export async function creditSignupBonus(userId: string) {
   await appendLedger({

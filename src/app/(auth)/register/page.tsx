@@ -183,7 +183,7 @@ function RegisterForm() {
 
         <Button type="submit" variant="gradient" className="w-full" disabled={isSubmitting || codeStatus === "checking"}>
           {isSubmitting && <Loader2 className="animate-spin" />}
-          Create Account — Get ₦200 Bonus
+          Create Account — Get ₦50 Bonus
         </Button>
       </form>
 

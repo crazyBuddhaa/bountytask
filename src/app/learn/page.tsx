@@ -27,7 +27,7 @@ const steps = [
   {
     n: "01",
     title: "Create a free account",
-    desc: "Sign up in 60 seconds with your email. Receive ₦200 as a welcome bonus the moment you confirm your email — no card required.",
+    desc: "Sign up in 60 seconds with your email. Receive ₦50 as a welcome bonus the moment you confirm your email — no card required.",
   },
   {
     n: "02",
@@ -129,7 +129,7 @@ const faqs = [
   },
   {
     q: "How does the referral programme work?",
-    a: "Share your unique referral link. When a friend signs up and completes their first task, you earn ₦500 and they keep their ₦200 signup bonus — both are credited automatically.",
+    a: "Share your unique referral link. When a friend signs up and completes 3 approved tasks (₦500+ earned), you earn ₦150 and they keep their ₦50 signup bonus — both are credited automatically.",
   },
   {
     q: "What happens if my task is rejected?",
@@ -145,7 +145,7 @@ const faqs = [
   },
   {
     q: "Does signing up cost anything?",
-    a: "Never. Registration is always free. You even receive ₦200 just for confirming your email address.",
+    a: "Never. Registration is always free. You even receive ₦50 just for confirming your email address.",
   },
 ]
 
@@ -245,7 +245,7 @@ export default function LearnPage() {
             <div className="text-center p-10 rounded-3xl bounty-gradient text-white shadow-lg">
               <h3 className="text-2xl font-extrabold mb-2">Ready to start?</h3>
               <p className="text-white/80 mb-5">
-                Your ₦200 welcome bonus is waiting. No card, no catch.
+                Your ₦50 welcome bonus is waiting. No card, no catch.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button size="lg" variant="secondary" className="font-bold text-primary" asChild>
@@ -263,7 +263,7 @@ export default function LearnPage() {
                 </Button>
               </div>
               <div className="flex flex-wrap justify-center gap-5 mt-5 text-sm text-white/70">
-                {["₦200 signup bonus", "No card required", "Withdraw in 48hrs"].map(t => (
+                {["₦50 signup bonus", "No card required", "Withdraw in 48hrs"].map(t => (
                   <span key={t} className="flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" /> {t}
                   </span>

@@ -35,6 +35,7 @@ const CPX_SETTINGS_KEYS = new Set([
   "cpx_daily_cap",
   "cpx_app_id",
   "cpx_secure_hash_key",
+  "cpx_user_share_percent",
 ])
 
 // Keys that getMonetagSettings() reads and caches under "monetag-settings".
@@ -91,10 +92,11 @@ const settingsSchema = z.object({
 
 
   // ── CPX Research ───────────────────────────────────────────────────────────
-  cpx_enabled:          z.boolean().optional(),
-  cpx_daily_cap:        z.number().int().min(1).max(20).optional(),
-  cpx_app_id:           z.string().max(200).optional(),
-  cpx_secure_hash_key:  z.string().max(200).optional(),
+  cpx_enabled:            z.boolean().optional(),
+  cpx_daily_cap:          z.number().int().min(1).max(20).optional(),
+  cpx_app_id:             z.string().max(200).optional(),
+  cpx_secure_hash_key:    z.string().max(200).optional(),
+  cpx_user_share_percent: z.number().int().min(10).max(100).optional(),
 
   // ── Adsterra Smartlink ─────────────────────────────────────────────────────
   asterra_enabled:       z.boolean().optional(),

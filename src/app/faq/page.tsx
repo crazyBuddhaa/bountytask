@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: "How do I get started?",
-    a: "Create a free account, verify your email, and you'll receive ₦200 as a welcome bonus. Then browse the task marketplace, claim tasks you want to complete, and start earning.",
+    a: "Create a free account, verify your email, and you'll receive ₦50 as a welcome bonus. Then browse the task marketplace, claim tasks you want to complete, and start earning.",
   },
   {
     q: "How quickly are tasks credited?",
@@ -37,7 +37,7 @@ const faqs = [
   },
   {
     q: "How does the referral program work?",
-    a: "Share your unique referral link or code with friends. When they sign up, complete at least 1 approved task, and complete account verification (when enabled), you earn ₦500 and they receive a ₦200 signup bonus — both automatically credited.",
+    a: "Share your unique referral link or code with friends. When they sign up, complete at least 3 approved tasks (₦500+ earned), and complete account verification (when enabled), you earn ₦150 and they receive a ₦50 signup bonus — both automatically credited.",
   },
   {
     q: "What happens if my task submission is rejected?",

@@ -59,8 +59,8 @@ export const getNewsSettings = unstable_cache(
       enabled:                  parseBoolSetting(map.news_enabled, false),
       earnEnabled:              parseBoolSetting(map.news_earn_enabled, false),
       earnKoboPerRead:          Number(map.news_earn_kobo_per_read)          || 5,
-      earnKoboPerMinute:        Number(map.news_earn_kobo_per_minute)        || 200,
-      earnMaxMinutesPerArticle: Number(map.news_earn_max_minutes_per_article) || 5,
+      earnKoboPerMinute:        Number(map.news_earn_kobo_per_minute)        || 30,
+      earnMaxMinutesPerArticle: Number(map.news_earn_max_minutes_per_article) || 3,
       earnDailyCapMinutes:      Number(map.news_earn_daily_cap_minutes)      || 30,
       earnDailyCap:             Number(map.news_earn_daily_cap)              || 20,
     }

@@ -62,7 +62,7 @@ const FALLBACK_TASKS: LiveTaskPreview[] = [
   {
     id: "sample-6",
     title: "Read Nigerian headlines on the in-app news feed",
-    reward_amount: 200,
+    reward_amount: 30,
     type: "unverified",
     categoryLabel: "News",
     estTime: "Per min",
@@ -203,8 +203,8 @@ const TRANSPARENCY_FACTS = [
   },
   {
     label: "Referrals",
-    title: "₦500 per active friend",
-    body: "Share your personal invite link. Once your friend joins and completes their first approved task, ₦500 is credited to your balance.",
+    title: "₦150 per active friend",
+    body: "Share your personal invite link. Once your friend joins and completes 3 approved tasks (₦500+ earned), ₦150 is credited to your balance.",
   },
 ]
 
@@ -256,7 +256,7 @@ export default async function LandingPage() {
                       Welcome bonus
                     </dt>
                     <dd className="text-base sm:text-lg font-semibold tabular-nums mt-0.5">
-                      ₦200
+                      ₦50
                     </dd>
                   </div>
                   <div>
@@ -476,7 +476,7 @@ export default async function LandingPage() {
                 Open your account and claim your first task today.
               </h2>
               <p className="text-sm sm:text-base text-background/70 mt-3 leading-relaxed">
-                Free registration, ₦200 welcome bonus once verified, and direct payouts
+                Free registration, ₦50 welcome bonus once verified, and direct payouts
                 to Nigerian bank accounts.
               </p>
             </div>

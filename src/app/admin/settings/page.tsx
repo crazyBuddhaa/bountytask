@@ -45,6 +45,7 @@ type Settings = {
   cpx_daily_cap: number
   cpx_app_id: string
   cpx_secure_hash_key: string
+  cpx_user_share_percent: number
   // Adsterra Smartlink
   asterra_enabled: boolean
   asterra_daily_cap: number
@@ -101,9 +102,10 @@ const DEFAULTS: Settings = {
   cpx_daily_cap: 10,
   cpx_app_id: "",
   cpx_secure_hash_key: "",
+  cpx_user_share_percent: 65,
   asterra_enabled: false,
   asterra_daily_cap: 3,
-  asterra_reward_kobo: 250,
+  asterra_reward_kobo: 40,
   asterra_smartlink_url: "",
   monetag_enabled: false,
   monetag_multitag_script: "",
@@ -114,8 +116,8 @@ const DEFAULTS: Settings = {
   news_earn_enabled: false,
   news_earn_kobo_per_read: 5,
   news_earn_daily_cap: 20,
-  news_earn_kobo_per_minute: 200,
-  news_earn_max_minutes_per_article: 5,
+  news_earn_kobo_per_minute: 30,
+  news_earn_max_minutes_per_article: 3,
   news_earn_daily_cap_minutes: 30,
   game_entry_fees_enabled: false,
   game_entry_fee_wordle: 1000,
@@ -171,13 +173,14 @@ export default function AdminSettingsPage() {
             ima_daily_cap:   data.ima_daily_cap   ?? 2,
             ima_reward_kobo: data.ima_reward_kobo ?? 50,
             ima_ad_tag_url:  data.ima_ad_tag_url  ?? "",
-            cpx_enabled:         data.cpx_enabled          ?? false,
-            cpx_daily_cap:       data.cpx_daily_cap         ?? 10,
-            cpx_app_id:          data.cpx_app_id            ?? "",
-            cpx_secure_hash_key: data.cpx_secure_hash_key   ?? "",
+            cpx_enabled:            data.cpx_enabled          ?? false,
+            cpx_daily_cap:          data.cpx_daily_cap         ?? 10,
+            cpx_app_id:             data.cpx_app_id            ?? "",
+            cpx_secure_hash_key:    data.cpx_secure_hash_key   ?? "",
+            cpx_user_share_percent: data.cpx_user_share_percent != null ? Number(data.cpx_user_share_percent) : 65,
             asterra_enabled:       data.asterra_enabled       ?? false,
             asterra_daily_cap:     data.asterra_daily_cap     ?? 3,
-            asterra_reward_kobo:   data.asterra_reward_kobo   ?? 250,
+            asterra_reward_kobo:   data.asterra_reward_kobo   ?? 40,
             asterra_smartlink_url: data.asterra_smartlink_url ?? "",
             monetag_enabled:                    data.monetag_enabled                    ?? false,
             monetag_multitag_script:            data.monetag_multitag_script            ?? "",
@@ -188,8 +191,8 @@ export default function AdminSettingsPage() {
             news_earn_enabled:                  data.news_earn_enabled                  ?? false,
             news_earn_kobo_per_read:            data.news_earn_kobo_per_read != null ? Number(data.news_earn_kobo_per_read) : 5,
             news_earn_daily_cap:                data.news_earn_daily_cap != null ? Number(data.news_earn_daily_cap) : 20,
-            news_earn_kobo_per_minute:          data.news_earn_kobo_per_minute != null ? Number(data.news_earn_kobo_per_minute) : 200,
-            news_earn_max_minutes_per_article:  data.news_earn_max_minutes_per_article != null ? Number(data.news_earn_max_minutes_per_article) : 5,
+            news_earn_kobo_per_minute:          data.news_earn_kobo_per_minute != null ? Number(data.news_earn_kobo_per_minute) : 30,
+            news_earn_max_minutes_per_article:  data.news_earn_max_minutes_per_article != null ? Number(data.news_earn_max_minutes_per_article) : 3,
             news_earn_daily_cap_minutes:        data.news_earn_daily_cap_minutes != null ? Number(data.news_earn_daily_cap_minutes) : 30,
             game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
             game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
@@ -643,11 +646,29 @@ export default function AdminSettingsPage() {
           </div>
           {settings.cpx_enabled && (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="cpx_cap">Daily cap per user</Label>
-                <Input id="cpx_cap" type="number" min={1} max={20}
-                  value={settings.cpx_daily_cap}
-                  onChange={(e) => setSettings((s) => ({ ...s, cpx_daily_cap: parseInt(e.target.value) || 10 }))} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cpx_cap">Daily cap per user</Label>
+                  <Input id="cpx_cap" type="number" min={1} max={20}
+                    value={settings.cpx_daily_cap}
+                    onChange={(e) => setSettings((s) => ({ ...s, cpx_daily_cap: parseInt(e.target.value) || 10 }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cpx_user_share">User Share (%)</Label>
+                  <Input id="cpx_user_share" type="number" min={10} max={100}
+                    value={settings.cpx_user_share_percent}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10)
+                      setSettings((s) => ({
+                        ...s,
+                        cpx_user_share_percent: Number.isFinite(val) ? Math.min(100, Math.max(10, val)) : 65,
+                      }))
+                    }} />
+                  <p className="text-xs text-muted-foreground">
+                    Users receive {settings.cpx_user_share_percent}% of each CPX payout; the remaining{" "}
+                    {100 - settings.cpx_user_share_percent}% is kept as platform margin (default 65% user / 35% margin).
+                  </p>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cpx_app_id" className="flex items-center gap-1"><Key className="w-3 h-3" /> App ID</Label>
@@ -746,9 +767,9 @@ export default function AdminSettingsPage() {
                 <Label htmlFor="asterra_reward">Reward per click (kobo)</Label>
                 <Input id="asterra_reward" type="number" min={1}
                   value={settings.asterra_reward_kobo}
-                  onChange={(e) => setSettings((s) => ({ ...s, asterra_reward_kobo: parseInt(e.target.value) || 250 }))} />
+                  onChange={(e) => setSettings((s) => ({ ...s, asterra_reward_kobo: parseInt(e.target.value) || 40 }))} />
                 <p className="text-xs text-muted-foreground">
-                  250 kobo = ₦2.50. Start conservative and raise only after confirming your
+                  40 kobo = ₦0.40. Start conservative and raise only after confirming your
                   Adsterra revenue covers the payout. Nigerian/West African CPMs are low.
                 </p>
               </div>
@@ -936,7 +957,7 @@ export default function AdminSettingsPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        value={(settings.news_earn_kobo_per_minute ?? 200) / 100}
+                        value={(settings.news_earn_kobo_per_minute ?? 30) / 100}
                         onChange={e =>
                           setSettings(s => ({
                             ...s,
@@ -946,7 +967,7 @@ export default function AdminSettingsPage() {
                         className="w-28"
                       />
                       <span className="text-xs text-muted-foreground">
-                        ({settings.news_earn_kobo_per_minute ?? 200} kobo)
+                        ({settings.news_earn_kobo_per_minute ?? 30} kobo)
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -961,14 +982,14 @@ export default function AdminSettingsPage() {
                       type="number"
                       min={1}
                       max={60}
-                      value={settings.news_earn_max_minutes_per_article ?? 5}
+                      value={settings.news_earn_max_minutes_per_article ?? 3}
                       onChange={e =>
                         setSettings(s => ({ ...s, news_earn_max_minutes_per_article: Number(e.target.value) }))
                       }
                       className="w-28"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Caps earn per single article. Max per article: ₦{(((settings.news_earn_max_minutes_per_article ?? 5) * (settings.news_earn_kobo_per_minute ?? 200)) / 100).toFixed(2)}.
+                      Caps earn per single article. Max per article: ₦{(((settings.news_earn_max_minutes_per_article ?? 3) * (settings.news_earn_kobo_per_minute ?? 30)) / 100).toFixed(2)}.
                     </p>
                   </div>
 
@@ -987,7 +1008,7 @@ export default function AdminSettingsPage() {
                     />
                     <p className="text-xs text-muted-foreground">
                       Total minutes credited across all articles per day.
-                      Max daily earn: ₦{((( settings.news_earn_daily_cap_minutes ?? 30) * (settings.news_earn_kobo_per_minute ?? 200)) / 100).toFixed(2)}.
+                      Max daily earn: ₦{((( settings.news_earn_daily_cap_minutes ?? 30) * (settings.news_earn_kobo_per_minute ?? 30)) / 100).toFixed(2)}.
                     </p>
                   </div>
                 </div>

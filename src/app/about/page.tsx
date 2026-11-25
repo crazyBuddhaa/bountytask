@@ -83,7 +83,7 @@ export default function AboutPage() {
         <section className="py-16 px-4 text-center">
           <div className="max-w-xl mx-auto">
             <h2 className="text-2xl font-bold mb-3">Ready to join the community?</h2>
-            <p className="text-muted-foreground mb-6">Start earning today with a ₦200 welcome bonus.</p>
+            <p className="text-muted-foreground mb-6">Start earning today with a ₦50 welcome bonus.</p>
             <Button size="lg" variant="gradient" asChild>
               <Link href="/register">Get Started Free <ArrowRight className="w-4 h-4" /></Link>
             </Button>

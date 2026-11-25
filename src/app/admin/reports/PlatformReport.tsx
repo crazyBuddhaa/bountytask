@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { BarChart2, TrendingUp } from "lucide-react"
+import { BarChart2, TrendingUp, Activity, Wallet } from "lucide-react"
 import { toast } from "sonner"
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -12,12 +12,72 @@ import { formatCurrency } from "@/lib/utils"
 import type { Period } from "./period"
 import { shortDate } from "./period"
 
+interface ProfitabilityData {
+  task_rewards_kobo: number
+  news_rewards_kobo: number
+  game_prizes_kobo: number
+  signup_bonuses_kobo: number
+  referral_bonuses_kobo: number
+  other_credits_kobo: number
+  total_credits_kobo: number
+  advertiser_revenue_kobo: number
+  verification_fee_revenue_kobo: number
+  game_platform_cut_kobo: number
+  est_cpx_margin_kobo: number
+  total_recorded_revenue_kobo: number
+  net_margin_kobo: number
+}
+
+interface ProviderHealth {
+  id: string
+  name: string
+  enabled: boolean
+  configured: boolean
+  status: "active" | "needs_config" | "disabled"
+  completions: number
+  payout_kobo: number
+  note: string
+}
+
 interface ReportData {
   daily_signups:     { date: string; count: number }[]
   daily_completions: { date: string; count: number }[]
   daily_credits:     { date: string; total_kobo: number }[]
   top_tasks:         { task_id: string; title: string; count: number }[]
   withdrawal_volume: { pending_kobo: number; approved_kobo: number; paid_kobo: number }
+  profitability?:    ProfitabilityData
+  providers?:        ProviderHealth[]
+}
+
+function formatSignedCurrency(kobo: number): string {
+  if (kobo < 0) return `-${formatCurrency(Math.abs(kobo))}`
+  if (kobo > 0) return `+${formatCurrency(kobo)}`
+  return formatCurrency(0)
+}
+
+function providerStatusBadge(status: ProviderHealth["status"]) {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-xs font-medium">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Active
+      </span>
+    )
+  }
+  if (status === "needs_config") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2.5 py-0.5 text-xs font-medium">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Needs Config
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
+      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60" />
+      Disabled
+    </span>
+  )
 }
 
 export function PlatformReport({ period }: { period: Period }) {
@@ -69,6 +129,9 @@ export function PlatformReport({ period }: { period: Period }) {
   const totalSignups = data?.daily_signups.reduce((s, d) => s + d.count, 0) ?? 0
   const totalCompletions = data?.daily_completions.reduce((s, d) => s + d.count, 0) ?? 0
 
+  const prof = data?.profitability
+  const providers = data?.providers ?? []
+
   return (
     <div className="space-y-6">
       {/* Summary stats */}
@@ -86,12 +149,174 @@ export function PlatformReport({ period }: { period: Period }) {
                     <p className="text-sm text-muted-foreground">{label}</p>
                     <Icon className="w-4 h-4 text-primary" />
                   </div>
-                  <p className="text-2xl font-bold">{value}</p>
+                  <p className="text-2xl font-bold tabular-nums">{value}</p>
                   <p className="text-xs text-muted-foreground mt-1">Past {period}</p>
                 </CardContent>
               </Card>
             ))}
       </div>
+
+      {/* Profitability & Margin Overview */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-primary" />
+                Profitability &amp; Margin Overview
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Recorded platform revenue vs. user credits issued over the past {period}
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {loading ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+              <Skeleton className="h-44 w-full" />
+              <Skeleton className="h-44 w-full" />
+            </div>
+          ) : (
+            <>
+              {/* 3 Key Financial Tiles */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-lg border bg-card p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Recorded Revenue</p>
+                  <p className="text-xl font-bold tabular-nums mt-1">
+                    {formatCurrency(prof?.total_recorded_revenue_kobo ?? 0)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Advertiser {formatCurrency(prof?.advertiser_revenue_kobo ?? 0)} · Game 20%{" "}
+                    {formatCurrency(prof?.game_platform_cut_kobo ?? 0)} · Verification{" "}
+                    {formatCurrency(prof?.verification_fee_revenue_kobo ?? 0)} · Est. CPX{" "}
+                    {formatCurrency(prof?.est_cpx_margin_kobo ?? 0)}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Total Credits Issued</p>
+                  <p className="text-xl font-bold tabular-nums mt-1">
+                    {formatCurrency(prof?.total_credits_kobo ?? totalCredits)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                    All user task rewards, news rewards, game prizes &amp; bonuses
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Net Platform Margin</p>
+                  <p
+                    className={`text-xl font-bold tabular-nums mt-1 ${
+                      (prof?.net_margin_kobo ?? 0) >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {formatSignedCurrency(prof?.net_margin_kobo ?? 0)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Excludes passive AdSense/Monetag display revenue tracked in external ad dashboards
+                  </p>
+                </div>
+              </div>
+
+              {/* Payout Breakdown by Stream & Provider Status */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Payout Breakdown by Stream */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2.5">Payout Breakdown by Stream</h3>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="text-left font-medium px-3 py-2">Stream</th>
+                          <th className="text-right font-medium px-3 py-2">Amount ({period})</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {[
+                          { label: "Tasks",             kobo: prof?.task_rewards_kobo ?? 0 },
+                          { label: "News",              kobo: prof?.news_rewards_kobo ?? 0 },
+                          { label: "Game Prizes",       kobo: prof?.game_prizes_kobo ?? 0 },
+                          { label: "Signup Bonuses",    kobo: prof?.signup_bonuses_kobo ?? 0 },
+                          { label: "Referral Bonuses",  kobo: prof?.referral_bonuses_kobo ?? 0 },
+                          ...(prof && prof.other_credits_kobo > 0
+                            ? [{ label: "Other Credits", kobo: prof.other_credits_kobo }]
+                            : []),
+                          {
+                            label: "Paid Withdrawals (All-Time)",
+                            kobo: data?.withdrawal_volume.paid_kobo ?? 0,
+                          },
+                        ].map((row) => (
+                          <tr key={row.label} className="hover:bg-muted/30">
+                            <td className="px-3 py-2 text-xs sm:text-sm">{row.label}</td>
+                            <td className="px-3 py-2 text-right font-medium tabular-nums text-xs sm:text-sm">
+                              {formatCurrency(row.kobo)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Provider Status & Activity */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2.5 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-primary" />
+                    Provider Status &amp; Activity
+                  </h3>
+                  <div className="rounded-lg border overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="text-left font-medium px-3 py-2">Provider</th>
+                          <th className="text-left font-medium px-3 py-2">Status</th>
+                          <th className="text-right font-medium px-3 py-2">Completions</th>
+                          <th className="text-right font-medium px-3 py-2">Payout</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {providers.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                              No provider data available
+                            </td>
+                          </tr>
+                        ) : (
+                          providers.map((p) => (
+                            <tr key={p.id} className="hover:bg-muted/30">
+                              <td className="px-3 py-2">
+                                <p className="font-medium text-xs sm:text-sm">{p.name}</p>
+                                <p className="text-[11px] text-muted-foreground">{p.note}</p>
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {providerStatusBadge(p.status)}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-xs sm:text-sm">
+                                {p.completions.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium tabular-nums text-xs sm:text-sm">
+                                {formatCurrency(p.payout_kobo)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Signups & Completions chart */}
       <Card>

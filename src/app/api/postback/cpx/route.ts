@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Credit the user ─────────────────────────────────────────────────────────
-  const rewardKobo = cpxUsdToKobo(amountUsd)
+  const rewardKobo = cpxUsdToKobo(amountUsd, settings.userSharePercent)
   if (rewardKobo <= 0) {
     console.warn("[cpx-postback] non-positive reward amount — ignoring", { userId, transId, amountUsd })
     return ok()

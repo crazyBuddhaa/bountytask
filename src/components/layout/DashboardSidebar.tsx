@@ -115,7 +115,7 @@ export function DashboardSidebar({ mobile = false, onNavigate }: DashboardSideba
       <div className="p-4 border-t">
         <div className="rounded-xl bounty-gradient p-4 text-white">
           <p className="text-xs font-medium opacity-80">Refer & Earn</p>
-          <p className="text-sm font-semibold mt-1">Get ₦500 per referral</p>
+          <p className="text-sm font-semibold mt-1">Get ₦150 per referral</p>
           <Link
             href="/dashboard/referral"
             onClick={onNavigate}

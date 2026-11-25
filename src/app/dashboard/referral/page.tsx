@@ -108,8 +108,8 @@ export default function ReferralPage() {
       <div>
         <h1 className="text-2xl font-bold">Referral Program</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Earn <span className="font-semibold text-primary">{data ? formatCurrency(data.referral_bonus_kobo) : "₦500"}</span> for every friend who joins and activates their account.
-          Your friend gets a <span className="font-semibold text-primary">{data ? formatCurrency(data.signup_bonus_kobo) : "₦200"}</span> signup bonus too.
+          Earn <span className="font-semibold text-primary">{data ? formatCurrency(data.referral_bonus_kobo) : "₦150"}</span> for every friend who joins and completes 3 approved tasks (₦500+ earned).
+          Your friend gets a <span className="font-semibold text-primary">{data ? formatCurrency(data.signup_bonus_kobo) : "₦50"}</span> signup bonus too.
         </p>
       </div>
 
@@ -324,8 +324,8 @@ export default function ReferralPage() {
           <div className="grid sm:grid-cols-3 gap-4">
             {[
               { step: "1", title: "Share your link", desc: "Send your unique referral code or link to friends via WhatsApp, Twitter, or direct message." },
-              { step: "2", title: "Friend signs up", desc: `Your friend registers using your code and immediately receives a ${data ? formatCurrency(data.signup_bonus_kobo) : "₦200"} signup bonus.` },
-              { step: "3", title: "Both get paid", desc: `Once they activate their account and complete their first task, you receive a ${data ? formatCurrency(data.referral_bonus_kobo) : "₦500"} referral bonus.` },
+              { step: "2", title: "Friend signs up", desc: `Your friend registers using your code and immediately receives a ${data ? formatCurrency(data.signup_bonus_kobo) : "₦50"} signup bonus.` },
+              { step: "3", title: "Both get paid", desc: `Once they activate their account and complete 3 approved tasks (₦500+ earned), you receive a ${data ? formatCurrency(data.referral_bonus_kobo) : "₦150"} referral bonus.` },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-3">
                 <div className="w-7 h-7 rounded-full bounty-gradient flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -371,7 +371,7 @@ export default function ReferralPage() {
                     ? "Credited"
                     : !activated
                     ? "Awaiting activation"
-                    : "Awaiting first task"
+                    : "Awaiting 3 tasks (₦500+)"
                   const statusVariant = r.bonus_credited ? "success" : "pending"
                   return (
                   <TableRow key={r.id}>

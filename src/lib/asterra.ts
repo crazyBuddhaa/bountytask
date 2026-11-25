@@ -51,7 +51,7 @@ export async function getAsterraSettings(): Promise<AsterraSettings> {
   return {
     enabled:      parseBoolSetting(s.asterra_enabled, false),
     dailyCap:     Number(s.asterra_daily_cap      ?? 3),
-    rewardKobo:   Number(s.asterra_reward_kobo    ?? 250),
+    rewardKobo:   Number(s.asterra_reward_kobo    ?? 40),
     smartlinkUrl: String(s.asterra_smartlink_url  ?? ""),
   }
 }
