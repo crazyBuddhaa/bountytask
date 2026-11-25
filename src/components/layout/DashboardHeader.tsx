@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { DashboardSidebar } from "./DashboardSidebar"
+import { ThemeToggle } from "@/components/theme/ThemeToggle"
 import { getInitials, formatCurrency } from "@/lib/utils"
 import type { UserProfile, Tier } from "@/types"
 
@@ -85,8 +86,11 @@ export function DashboardHeader({ user, balance, unreadCount = 0, currentTier }:
         {/* Balance pill */}
         <div className="flex items-center gap-1.5 sm:gap-2 bg-primary/10 text-primary rounded-full px-2.5 sm:px-4 py-1 sm:py-1.5">
           <span className="hidden sm:inline text-xs font-medium opacity-70">Balance</span>
-          <span className="text-xs sm:text-sm font-bold">{formatCurrency(balance)}</span>
+          <span className="text-xs sm:text-sm font-bold tabular-nums">{formatCurrency(balance)}</span>
         </div>
+
+        {/* Theme toggle */}
+        <ThemeToggle />
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative" asChild>

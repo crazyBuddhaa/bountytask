@@ -89,10 +89,12 @@ export default function EarningsPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-muted-foreground font-medium">Available Balance</p>
-              <Wallet className="w-5 h-5 text-primary" />
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Wallet className="w-4 h-4 text-primary" />
+              </div>
             </div>
             {loading ? <Skeleton className="h-8 w-32" /> : (
-              <p className="text-3xl font-bold text-primary">{formatCurrency(balance ?? 0)}</p>
+              <p className="text-3xl font-bold text-primary tabular-nums">{formatCurrency(balance ?? 0)}</p>
             )}
           </CardContent>
         </Card>
@@ -101,10 +103,12 @@ export default function EarningsPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-muted-foreground font-medium">Total Earned (this page)</p>
-              <ArrowUpCircle className="w-5 h-5 text-emerald-500" />
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <ArrowUpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
             </div>
             {loading ? <Skeleton className="h-8 w-28" /> : (
-              <p className="text-2xl font-bold text-emerald-600">+{formatCurrency(totalCredits)}</p>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">+{formatCurrency(totalCredits)}</p>
             )}
           </CardContent>
         </Card>
@@ -113,10 +117,12 @@ export default function EarningsPage() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-muted-foreground font-medium">Total Withdrawn (this page)</p>
-              <ArrowDownCircle className="w-5 h-5 text-red-500" />
+              <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <ArrowDownCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+              </div>
             </div>
             {loading ? <Skeleton className="h-8 w-28" /> : (
-              <p className="text-2xl font-bold text-red-600">-{formatCurrency(totalDebits)}</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400 tabular-nums">-{formatCurrency(totalDebits)}</p>
             )}
           </CardContent>
         </Card>
@@ -166,10 +172,10 @@ export default function EarningsPage() {
                       </span>
                       {entry.note && <span className="text-muted-foreground">— {entry.note}</span>}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
                       {formatDateTime(entry.created_at)}
                     </TableCell>
-                    <TableCell className={`text-right font-bold tabular-nums ${entry.type === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                    <TableCell className={`text-right font-bold tabular-nums ${entry.type === "credit" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                       {entry.type === "credit" ? "+" : "-"}{formatCurrency(Math.abs(entry.delta))}
                     </TableCell>
                   </TableRow>
@@ -184,7 +190,7 @@ export default function EarningsPage() {
       {total > limit && (
         <div className="flex justify-center gap-2">
           <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-          <span className="flex items-center text-sm text-muted-foreground px-3">
+          <span className="flex items-center text-sm text-muted-foreground px-3 tabular-nums">
             Page {page} of {Math.ceil(total / limit)} ({total.toLocaleString()} entries)
           </span>
           <Button variant="outline" size="sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Next</Button>

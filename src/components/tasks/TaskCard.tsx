@@ -7,6 +7,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { formatCurrency } from "@/lib/utils"
 import type { Task } from "@/types"
 
+function getEstimatedTime(task: Task): string {
+  if (task.youtube_url) {
+    const secs = task.min_watch_seconds ?? 60
+    return secs < 60 ? `~${secs}s` : `~${Math.ceil(secs / 60)}m`
+  }
+  if (task.social_platform || task.type === "unverified") return "~30s"
+  return "~1–2m"
+}
+
 // ─── Watch & Earn bundle card ─────────────────────────────────────────────────
 
 interface WatchEarnBundleCardProps {
@@ -18,17 +27,24 @@ export function WatchEarnBundleCard({ tasks, onWatch }: WatchEarnBundleCardProps
   const count = tasks.length
   const rewardPerVideo = tasks[0]?.reward_amount ?? 0
   const allSame = tasks.every(t => t.reward_amount === rewardPerVideo)
+  const firstWatchSecs = tasks[0]?.min_watch_seconds ?? 60
+  const estLabel = firstWatchSecs < 60 ? `~${firstWatchSecs}s` : `~${Math.ceil(firstWatchSecs / 60)}m`
 
   return (
     <Card className="flex flex-col hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group border-l-4 border-l-red-500">
       <CardContent className="p-5 flex-1">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <Badge variant="outline" className="text-[10px] border-red-200 text-red-600 bg-red-50 gap-1">
+          <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-600 dark:text-red-400 bg-red-500/10 gap-1">
             <Youtube className="w-2.5 h-2.5" /> Watch &amp; Earn
           </Badge>
-          <Badge variant="outline" className="text-[10px] gap-1">
-            <PlayCircle className="w-2.5 h-2.5" /> {count} video{count !== 1 ? "s" : ""}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-[10px] gap-1 tabular-nums text-muted-foreground">
+              <Clock className="w-2.5 h-2.5" /> {estLabel}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1 tabular-nums">
+              <PlayCircle className="w-2.5 h-2.5" /> {count} video{count !== 1 ? "s" : ""}
+            </Badge>
+          </div>
         </div>
 
         <h3 className="font-semibold text-sm leading-snug mb-2 group-hover:text-primary transition-colors">
@@ -38,23 +54,23 @@ export function WatchEarnBundleCard({ tasks, onWatch }: WatchEarnBundleCardProps
           {count} video{count !== 1 ? "s" : ""} available. Watch each to the end and earn instantly — one reward per video.
         </p>
 
-        <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
+        <p className="text-[10px] text-red-600 dark:text-red-400 mt-2 font-medium flex items-center gap-1">
           <Youtube className="w-3 h-3" /> Watch the full video to earn instantly
         </p>
       </CardContent>
 
-      <CardFooter className="p-5 pt-0 flex items-center justify-between border-t mt-2">
+      <CardFooter className="p-5 pt-3 flex items-center justify-between border-t mt-2 gap-2">
         <div>
-          <p className="text-lg font-bold text-primary">
+          <span className="inline-flex items-baseline gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold text-base tabular-nums">
             {allSame ? formatCurrency(rewardPerVideo) : `up to ${formatCurrency(Math.max(...tasks.map(t => t.reward_amount)))}`}
-            <span className="text-xs font-normal text-muted-foreground ml-1">/ video</span>
-          </p>
-          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <span className="text-[11px] font-medium opacity-80">/ video</span>
+          </span>
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 tabular-nums">
             <Zap className="w-2.5 h-2.5 text-primary" /> Instant pay · {count} video{count !== 1 ? "s" : ""} in queue
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={onWatch}
-          className="gap-1 border-red-200 text-red-600 hover:bg-red-50">
+          className="gap-1 border-red-500/25 text-red-600 dark:text-red-400 hover:bg-red-500/10 shrink-0">
           <Youtube className="w-3 h-3" /> Watch
         </Button>
       </CardFooter>
@@ -93,12 +109,12 @@ const ACTION_LABELS_BUNDLE: Record<string, string> = {
 }
 
 const PLATFORM_BORDER_BUNDLE: Record<string, string> = {
-  twitter_x: "border-l-gray-900",
+  twitter_x: "border-l-gray-900 dark:border-l-gray-400",
   instagram:  "border-l-pink-500",
   tiktok:     "border-l-cyan-400",
   youtube:    "border-l-red-600",
   facebook:   "border-l-blue-600",
-  threads:    "border-l-gray-700",
+  threads:    "border-l-gray-700 dark:border-l-gray-400",
 }
 
 export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
@@ -116,12 +132,17 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
       <Card className="flex flex-col hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 group border-l-4 border-l-indigo-500">
         <CardContent className="p-5 flex-1">
           <div className="flex items-start justify-between gap-2 mb-3">
-            <Badge variant="outline" className="text-[10px] border-indigo-200 text-indigo-600 bg-indigo-50 gap-1">
+            <Badge variant="outline" className="text-[10px] border-indigo-500/20 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 gap-1">
               <Share2 className="w-2.5 h-2.5" /> Social Tasks
             </Badge>
-            <Badge variant="outline" className="text-[10px] gap-1">
-              {count} task{count !== 1 ? "s" : ""}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              <Badge variant="outline" className="text-[10px] gap-1 tabular-nums text-muted-foreground">
+                <Clock className="w-2.5 h-2.5" /> ~30s
+              </Badge>
+              <Badge variant="outline" className="text-[10px] gap-1 tabular-nums">
+                {count} task{count !== 1 ? "s" : ""}
+              </Badge>
+            </div>
           </div>
 
           <h3 className="font-semibold text-sm leading-snug mb-2 group-hover:text-primary transition-colors">
@@ -141,26 +162,26 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
                 </span>
               ))}
               {uniquePlatforms.length > 4 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
                   +{uniquePlatforms.length - 4} more
                 </span>
               )}
             </div>
           )}
 
-          <p className="text-[10px] text-indigo-600 mt-2 font-medium flex items-center gap-1">
+          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 mt-2 font-medium flex items-center gap-1">
             <Share2 className="w-3 h-3" /> Screenshot required for all tasks
           </p>
         </CardContent>
 
-        <CardFooter className="p-5 pt-0 flex items-center justify-between border-t mt-2">
+        <CardFooter className="p-5 pt-3 flex items-center justify-between border-t mt-2 gap-2">
           <div>
-            <p className="text-lg font-bold text-primary">
+            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold text-base tabular-nums">
               {allSameReward
                 ? formatCurrency(maxReward)
                 : `${formatCurrency(minReward)} – ${formatCurrency(maxReward)}`}
-            </p>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+            </span>
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 tabular-nums">
               <Users className="w-2.5 h-2.5" /> {count} task{count !== 1 ? "s" : ""} available
             </p>
           </div>
@@ -168,7 +189,7 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
             size="sm"
             variant="outline"
             onClick={() => setOpen(true)}
-            className="gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            className="gap-1 border-indigo-500/25 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 shrink-0"
           >
             <Share2 className="w-3 h-3" /> Browse
           </Button>
@@ -182,7 +203,7 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
             <SheetTitle className="flex items-center gap-2 text-base">
               <Share2 className="w-4 h-4 text-indigo-500" /> Social Tasks
             </SheetTitle>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground tabular-nums">
               {count} task{count !== 1 ? "s" : ""} available — pick one to start
             </p>
           </SheetHeader>
@@ -201,14 +222,17 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 font-medium">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
                           {ACTION_LABELS_BUNDLE[task.social_action!] ?? task.social_action}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                           {PLATFORM_EMOJI[task.social_platform ?? ""] ?? ""} {PLATFORM_LABELS_BUNDLE[task.social_platform!] ?? task.social_platform}
                         </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium tabular-nums">
+                          {getEstimatedTime(task)}
+                        </span>
                         {task.ai_verify_screenshot && (
-                          <span className="text-[10px] text-indigo-500 font-medium">AI verified</span>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">AI verified</span>
                         )}
                       </div>
                       <p className="font-semibold text-sm leading-snug line-clamp-2">{task.title}</p>
@@ -216,17 +240,19 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
                       )}
                       {spotsLeft !== null && (
-                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 tabular-nums">
                           <Users className="w-2.5 h-2.5" /> {spotsLeft.toLocaleString()} spots left
                         </p>
                       )}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-bold text-primary text-base">{formatCurrency(task.reward_amount)}</p>
+                    <div className="shrink-0 text-right flex flex-col items-end">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold text-sm tabular-nums">
+                        {formatCurrency(task.reward_amount)}
+                      </span>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="mt-1.5 h-7 text-xs gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                        className="mt-1.5 h-7 text-xs gap-1 border-indigo-500/25 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
                         onClick={() => { setOpen(false); onSelect(task) }}
                       >
                         <Share2 className="w-3 h-3" /> Start
@@ -245,12 +271,12 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
 
 // ─── Social platform accent colours ──────────────────────────────────────────
 const PLATFORM_BORDER: Record<string, string> = {
-  twitter_x: "border-l-gray-900",
+  twitter_x: "border-l-gray-900 dark:border-l-gray-400",
   instagram:  "border-l-pink-500",
   tiktok:     "border-l-cyan-400",
   youtube:    "border-l-red-600",
   facebook:   "border-l-blue-600",
-  threads:    "border-l-gray-700",
+  threads:    "border-l-gray-700 dark:border-l-gray-400",
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -286,6 +312,7 @@ export function TaskCard({ task, onClaim, onWatch }: TaskCardProps) {
   const isInstant = task.type === "unverified"
   const isVideo   = !!task.youtube_url
   const isSocial  = !!task.social_platform
+  const estTime   = getEstimatedTime(task)
 
   const platformBorder = isSocial
     ? `border-l-4 ${PLATFORM_BORDER[task.social_platform!] ?? "border-l-indigo-500"}`
@@ -296,30 +323,35 @@ export function TaskCard({ task, onClaim, onWatch }: TaskCardProps) {
       <CardContent className="p-5 flex-1">
         <div className="flex items-start justify-between gap-2 mb-3">
           {/* ── Badge row ── */}
-          {isSocial ? (
-            <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="text-[10px] border-indigo-200 text-indigo-600 bg-indigo-50 gap-1">
-                <Share2 className="w-2.5 h-2.5" />
-                {ACTION_LABELS[task.social_action!] ?? task.social_action}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {isSocial ? (
+              <>
+                <Badge variant="outline" className="text-[10px] border-indigo-500/20 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 gap-1">
+                  <Share2 className="w-2.5 h-2.5" />
+                  {ACTION_LABELS[task.social_action!] ?? task.social_action}
+                </Badge>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {PLATFORM_LABELS[task.social_platform!] ?? task.social_platform}
+                </span>
+              </>
+            ) : isVideo ? (
+              <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-600 dark:text-red-400 bg-red-500/10 gap-1">
+                <Youtube className="w-2.5 h-2.5" /> Watch &amp; Earn
               </Badge>
-              <span className="text-[10px] text-muted-foreground font-medium">
-                {PLATFORM_LABELS[task.social_platform!] ?? task.social_platform}
-              </span>
-            </div>
-          ) : isVideo ? (
-            <Badge variant="outline" className="text-[10px] border-red-200 text-red-600 bg-red-50 gap-1">
-              <Youtube className="w-2.5 h-2.5" /> Watch &amp; Earn
+            ) : (
+              <Badge variant={isInstant ? "success" : "pending"} className="text-[10px]">
+                {isInstant
+                  ? <><Zap className="w-2.5 h-2.5" />Instant</>
+                  : <><Clock className="w-2.5 h-2.5" />Verified</>}
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px] gap-1 tabular-nums text-muted-foreground">
+              <Clock className="w-2.5 h-2.5" /> {estTime}
             </Badge>
-          ) : (
-            <Badge variant={isInstant ? "success" : "pending"} className="text-[10px]">
-              {isInstant
-                ? <><Zap className="w-2.5 h-2.5" />Instant</>
-                : <><Clock className="w-2.5 h-2.5" />Verified</>}
-            </Badge>
-          )}
+          </div>
 
           {task.category && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground shrink-0">
               {task.category.icon ?? "🎯"} {task.category.name}
             </span>
           )}
@@ -332,31 +364,38 @@ export function TaskCard({ task, onClaim, onWatch }: TaskCardProps) {
 
         {/* ── Footer hints ── */}
         {isSocial && (
-          <p className="text-[10px] text-indigo-600 mt-2 font-medium flex items-center gap-1">
+          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 mt-2 font-medium flex items-center gap-1">
             <Share2 className="w-3 h-3" />
             {task.ai_verify_screenshot ? "AI-verified screenshot required" : "Screenshot required · Manual review"}
           </p>
         )}
         {!isSocial && !isVideo && task.requires_proof && (
-          <p className="text-[10px] mt-2 font-medium flex items-center gap-1"
-            style={{ color: task.ai_verify_screenshot ? "rgb(79 70 229)" : "rgb(217 119 6)" }}>
+          <p
+            className={`text-[10px] mt-2 font-medium flex items-center gap-1 ${
+              task.ai_verify_screenshot
+                ? "text-indigo-600 dark:text-indigo-400"
+                : "text-amber-600 dark:text-amber-400"
+            }`}
+          >
             {task.ai_verify_screenshot
               ? <><Share2 className="w-3 h-3" />AI-verified screenshot required</>
               : <>⚠ Proof of completion required</>}
           </p>
         )}
         {isVideo && (
-          <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
+          <p className="text-[10px] text-red-600 dark:text-red-400 mt-2 font-medium flex items-center gap-1">
             <Youtube className="w-3 h-3" /> Watch the full video to earn instantly
           </p>
         )}
       </CardContent>
 
-      <CardFooter className="p-5 pt-0 flex items-center justify-between border-t mt-2">
+      <CardFooter className="p-5 pt-3 flex items-center justify-between border-t mt-2 gap-2">
         <div>
-          <p className="text-lg font-bold text-primary">{formatCurrency(task.reward_amount)}</p>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold text-base tabular-nums">
+            {formatCurrency(task.reward_amount)}
+          </span>
           {spotsLeft !== null && (
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 tabular-nums">
               <Users className="w-2.5 h-2.5" />{spotsLeft.toLocaleString()} spots left
             </p>
           )}
@@ -364,16 +403,16 @@ export function TaskCard({ task, onClaim, onWatch }: TaskCardProps) {
 
         {isVideo ? (
           <Button size="sm" variant="outline" onClick={onWatch ?? onClaim}
-            className="gap-1 border-red-200 text-red-600 hover:bg-red-50">
+            className="gap-1 border-red-500/25 text-red-600 dark:text-red-400 hover:bg-red-500/10 shrink-0">
             <Youtube className="w-3 h-3" /> Watch
           </Button>
         ) : isSocial ? (
           <Button size="sm" variant="outline" onClick={onClaim}
-            className="gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+            className="gap-1 border-indigo-500/25 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 shrink-0">
             <Share2 className="w-3 h-3" /> Start
           </Button>
         ) : (
-          <Button size="sm" variant="gradient" onClick={onClaim} className="gap-1">
+          <Button size="sm" variant="gradient" onClick={onClaim} className="gap-1 shrink-0">
             Claim <ArrowRight className="w-3 h-3" />
           </Button>
         )}

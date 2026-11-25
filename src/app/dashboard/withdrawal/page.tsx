@@ -40,6 +40,10 @@ export default function WithdrawalPage() {
   const [loading, setLoading]         = useState(true)
   const [fetchError, setFetchError]   = useState<string | null>(null)
   const [needsVerification, setNeedsVerification] = useState(false)
+  const [feeEnabled, setFeeEnabled] = useState(false)
+  const [phoneVerificationEnabled, setPhoneVerificationEnabled] = useState(false)
+  const [kycVerified, setKycVerified] = useState(false)
+  const [phoneVerified, setPhoneVerified] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showWithdrawForm, setShowWithdrawForm] = useState(false)
   const [accountToDelete, setAccountToDelete] = useState<WithdrawalAccount | null>(null)
@@ -78,9 +82,17 @@ export default function WithdrawalPage() {
       setAccounts(acc.data ?? [])
       setWithdrawals(wd.data ?? [])
       setWdTotal(wd.total ?? (wd.data?.length ?? 0))
+      const isFeeEnabled = !!ver.data?.fee_enabled
+      const isPhoneEnabled = !!ver.data?.phone_verification_enabled
+      const isKycVerified = !!bal.data?.kyc_verified
+      const isPhoneVerified = !!bal.data?.phone_verified
+      setFeeEnabled(isFeeEnabled)
+      setPhoneVerificationEnabled(isPhoneEnabled)
+      setKycVerified(isKycVerified)
+      setPhoneVerified(isPhoneVerified)
       setNeedsVerification(
-        (!!ver.data?.fee_enabled && !bal.data?.kyc_verified) ||
-        (!!ver.data?.phone_verification_enabled && !bal.data?.phone_verified)
+        (isFeeEnabled && !isKycVerified) ||
+        (isPhoneEnabled && !isPhoneVerified)
       )
       if (ver.data?.min_withdrawal_kobo) setMinKobo(ver.data.min_withdrawal_kobo)
     } catch (err) {
@@ -255,8 +267,8 @@ export default function WithdrawalPage() {
       )}
 
       {needsVerification && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 flex items-start gap-3 text-sm">
-          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3 flex items-start gap-3 text-sm">
+          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="font-medium">One-time verification required before you can withdraw</p>
             <p className="text-xs mt-0.5">
@@ -266,15 +278,71 @@ export default function WithdrawalPage() {
         </div>
       )}
 
+      {/* Withdrawal Readiness checklist pill row */}
+      {!loading && (() => {
+        const balanceReady = (balance ?? 0) >= minKobo
+        const bankReady = accounts.length > 0
+        const pills: { label: string; ready: boolean; href?: string; onClick?: () => void }[] = [
+          {
+            label: `Balance ≥ ₦${MIN_NGN.toLocaleString()}`,
+            ready: balanceReady,
+            href: balanceReady ? undefined : "/dashboard/tasks",
+          },
+          {
+            label: bankReady ? "Bank account linked" : "Link bank account",
+            ready: bankReady,
+            onClick: bankReady ? undefined : () => setShowAddAccount(true),
+          },
+          ...(phoneVerificationEnabled
+            ? [{
+                label: phoneVerified ? "Phone verified" : "Verify phone",
+                ready: phoneVerified,
+                href: phoneVerified ? undefined : "/dashboard/verify",
+              }]
+            : []),
+          ...(feeEnabled
+            ? [{
+                label: kycVerified ? "Account verified" : "Verify account",
+                ready: kycVerified,
+                href: kycVerified ? undefined : "/dashboard/verify",
+              }]
+            : []),
+        ]
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {pills.map((pill) => {
+              const cls = `inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border tabular-nums transition-colors ${
+                pill.ready
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                  : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/15"
+              }`
+              const content = (
+                <>
+                  {pill.ready ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                  {pill.label}
+                </>
+              )
+              if (pill.href) {
+                return <Link key={pill.label} href={pill.href} className={cls}>{content}</Link>
+              }
+              if (pill.onClick) {
+                return <button key={pill.label} type="button" onClick={pill.onClick} className={cls}>{content}</button>
+              }
+              return <span key={pill.label} className={cls}>{content}</span>
+            })}
+          </div>
+        )
+      })()}
+
       {/* Balance card */}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
         <CardContent className="p-6 flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1">Available to Withdraw</p>
             {loading ? <Skeleton className="h-10 w-36" /> : (
-              <p className="text-4xl font-bold text-primary">{formatCurrency(balance ?? 0)}</p>
+              <p className="text-4xl font-bold text-primary tabular-nums">{formatCurrency(balance ?? 0)}</p>
             )}
-            <p className="text-xs text-muted-foreground mt-1">Minimum: ₦{MIN_NGN.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1 tabular-nums">Minimum: ₦{MIN_NGN.toLocaleString()}</p>
           </div>
           <Banknote className="w-12 h-12 text-primary/30" />
         </CardContent>
@@ -306,7 +374,7 @@ export default function WithdrawalPage() {
                 <div key={acc.id} className={`flex items-center justify-between p-4 rounded-lg border ${acc.is_default ? "border-primary/40 bg-primary/5" : "border-border"}`}>
                   <div>
                     <p className="font-medium text-sm">{acc.account_name}</p>
-                    <p className="text-xs text-muted-foreground">{acc.bank_name} · ****{acc.account_number.slice(-4)}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{acc.bank_name} · ****{acc.account_number.slice(-4)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {acc.is_default
@@ -357,8 +425,8 @@ export default function WithdrawalPage() {
                 <TableBody>
                   {withdrawals.map(w => (
                     <TableRow key={w.id}>
-                      <TableCell className="font-bold">{formatCurrency(w.amount)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="font-bold tabular-nums">{formatCurrency(w.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground tabular-nums">
                         {(w as Withdrawal & { account?: { bank_name: string; account_number: string } }).account?.bank_name} ····{(w as Withdrawal & { account?: { account_number: string } }).account?.account_number?.slice(-4)}
                       </TableCell>
                       <TableCell>
@@ -367,7 +435,7 @@ export default function WithdrawalPage() {
                           {w.status.replace("_", " ")}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
                         {formatDateTime(w.created_at)}
                       </TableCell>
                     </TableRow>
@@ -379,7 +447,7 @@ export default function WithdrawalPage() {
                   <Button variant="outline" size="sm" disabled={wdPage === 1} onClick={() => setWdPage(p => p - 1)}>
                     Previous
                   </Button>
-                  <span className="text-xs text-muted-foreground px-2">
+                  <span className="text-xs text-muted-foreground px-2 tabular-nums">
                     Page {wdPage} of {Math.ceil(wdTotal / WD_LIMIT)}
                   </span>
                   <Button variant="outline" size="sm" disabled={wdPage * WD_LIMIT >= wdTotal} onClick={() => setWdPage(p => p + 1)}>
@@ -440,11 +508,11 @@ export default function WithdrawalPage() {
             </div>
             <div>
               <Label>Account Number</Label>
-              <Input className="mt-1" placeholder="10-digit account number" maxLength={10}
+              <Input className="mt-1 tabular-nums" placeholder="10-digit account number" maxLength={10}
                 value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, ""))} />
             </div>
             {(resolving || resolvedName) && (
-              <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${resolvedName ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+              <div className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${resolvedName ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
                 {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {resolving ? "Verifying account..." : resolvedName}
               </div>
@@ -468,7 +536,7 @@ export default function WithdrawalPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="p-3 rounded-lg bg-muted text-sm">
-              Available balance: <span className="font-bold text-primary">{formatCurrency(balance ?? 0)}</span>
+              Available balance: <span className="font-bold text-primary tabular-nums">{formatCurrency(balance ?? 0)}</span>
             </div>
             <div>
               <Label>Bank Account</Label>
@@ -485,7 +553,7 @@ export default function WithdrawalPage() {
             </div>
             <div>
               <Label>Amount (₦)</Label>
-              <Input className="mt-1" type="number" placeholder={`Min ₦${MIN_NGN.toLocaleString()}`}
+              <Input className="mt-1 tabular-nums" type="number" placeholder={`Min ₦${MIN_NGN.toLocaleString()}`}
                 min={MIN_NGN} value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
             <Separator />

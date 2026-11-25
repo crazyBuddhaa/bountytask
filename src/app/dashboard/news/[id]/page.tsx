@@ -282,7 +282,7 @@ export default function ArticleReaderPage() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Coins className={`w-4 h-4 ${capReached ? "text-muted-foreground" : "text-amber-500"}`} />
-              <span className="text-sm font-semibold">
+              <span className="text-sm font-semibold tabular-nums">
                 {capReached
                   ? capReason === "daily"
                     ? "Daily earning limit reached"
@@ -292,12 +292,12 @@ export default function ArticleReaderPage() {
             </div>
             <div className="flex items-center gap-3">
               {totalEarnedKobo > 0 && (
-                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                   +{fmt(totalEarnedKobo)} earned
                 </span>
               )}
               {!capReached && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
                   <Timer className="w-3 h-3" />
                   <span>Next credit in {nextMinSecs}s</span>
                 </div>
@@ -309,14 +309,14 @@ export default function ArticleReaderPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>This article</span>
-                <span>{minutesCredited}/{maxMin} min</span>
+                <span className="tabular-nums">{minutesCredited}/{maxMin} min</span>
               </div>
               <Progress value={articlePct} className="h-1.5" />
             </div>
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Today</span>
-                <span>{dailyMinutesUsed}/{dailyCap} min</span>
+                <span className="tabular-nums">{dailyMinutesUsed}/{dailyCap} min</span>
               </div>
               <Progress value={dailyPct} className="h-1.5" />
             </div>
@@ -446,9 +446,9 @@ export default function ArticleReaderPage() {
 
       {/* ── Earn summary at the bottom ────────────────────────────────────── */}
       {earnInfo?.earnEnabled && minutesCredited > 0 && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 p-4">
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-700 dark:text-emerald-300">
+          <p className="text-sm text-emerald-700 dark:text-emerald-300 tabular-nums">
             You earned <strong>{fmt(minutesCredited * koboPerMin)}</strong> for reading this article
             ({minutesCredited} min × {fmt(koboPerMin)}/min).
           </p>

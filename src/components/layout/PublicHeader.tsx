@@ -4,6 +4,7 @@ import Image from "next/image"
 import { useState } from "react"
 import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme/ThemeToggle"
 
 const links = [
   { href: "/about",    label: "About"    },
@@ -36,6 +37,7 @@ export function PublicHeader() {
 
         {/* CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           <Button variant="ghost" size="sm" asChild>
             <Link href="/sign-in">Sign in</Link>
           </Button>
@@ -44,11 +46,14 @@ export function PublicHeader() {
           </Button>
         </div>
 
-        {/* Mobile toggle */}
-        <button className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
-          onClick={() => setOpen(o => !o)} aria-label="Toggle menu" aria-expanded={open}>
-          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        {/* Mobile controls */}
+        <div className="flex md:hidden items-center gap-1">
+          <ThemeToggle />
+          <button className="p-2 rounded-lg hover:bg-muted transition-colors"
+            onClick={() => setOpen(o => !o)} aria-label="Toggle menu" aria-expanded={open}>
+            {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}

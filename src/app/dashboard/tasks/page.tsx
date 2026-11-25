@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Filter, Zap, Clock, Gauge, AlertCircle, RefreshCw } from "lucide-react"
+import { Search, Filter, Zap, Clock, Gauge, AlertCircle, RefreshCw, Gamepad2, Newspaper, ArrowUpRight } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -140,7 +140,7 @@ export default function TasksPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Available Tasks</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-muted-foreground text-sm mt-1 tabular-nums">
             {type === "ads" ? visibleAdTasks.length : total + visibleAdTasks.length} tasks available
           </p>
         </div>
@@ -151,10 +151,31 @@ export default function TasksPage() {
             }`}
           >
             <Gauge className="w-4 h-4" />
-            <span className="font-medium">{tierUsage.tasksCompletedToday}/{tierUsage.dailyLimit}</span>
-            <span className="text-muted-foreground">today (tasks & ads) · Tier {tierUsage.currentTier.id} ({tierUsage.currentTier.name})</span>
+            <span className="font-medium tabular-nums">{tierUsage.tasksCompletedToday}/{tierUsage.dailyLimit}</span>
+            <span className="text-muted-foreground">today (tasks &amp; ads) · Tier {tierUsage.currentTier.id} ({tierUsage.currentTier.name})</span>
           </div>
         )}
+      </div>
+
+      {/* More Ways to Earn quick-jump bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/30 px-3.5 py-2.5">
+        <span className="text-xs font-medium text-muted-foreground mr-1">More ways to earn:</span>
+        <Link
+          href="/dashboard/games"
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+        >
+          <Gamepad2 className="w-3.5 h-3.5" />
+          Games &amp; Earn
+          <ArrowUpRight className="w-3 h-3 opacity-70" />
+        </Link>
+        <Link
+          href="/dashboard/news"
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 transition-colors"
+        >
+          <Newspaper className="w-3.5 h-3.5" />
+          Read News
+          <ArrowUpRight className="w-3 h-3 opacity-70" />
+        </Link>
       </div>
 
       {limitReached && (

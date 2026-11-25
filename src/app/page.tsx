@@ -1,236 +1,508 @@
 import Link from "next/link"
-import { ArrowRight, Zap, Shield, Banknote, Users, Star, CheckCircle2 } from "lucide-react"
+import { ArrowRight, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
+import { RecentPayoutsStrip } from "@/components/trust/RecentPayoutsStrip"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { formatCurrency } from "@/lib/utils"
 
-const features = [
+export const revalidate = 120
+
+interface LiveTaskPreview {
+  id: string
+  title: string
+  reward_amount: number
+  type: "verified" | "unverified"
+  categoryLabel: string
+  estTime: string
+}
+
+const FALLBACK_TASKS: LiveTaskPreview[] = [
   {
-    icon: Zap,
-    title: "Instant Payouts",
-    desc: "Unverified tasks pay immediately to your in-app wallet — no waiting, no delays.",
+    id: "sample-1",
+    title: "Follow a verified brand account on Instagram",
+    reward_amount: 15000,
+    type: "verified",
+    categoryLabel: "Social",
+    estTime: "~30s",
   },
   {
-    icon: Shield,
-    title: "Fraud-Protected",
-    desc: "Device fingerprinting, rate limits, and manual review keep the platform fair for everyone.",
+    id: "sample-2",
+    title: "Watch a short creator video on YouTube",
+    reward_amount: 20000,
+    type: "unverified",
+    categoryLabel: "Video",
+    estTime: "~2m",
   },
   {
-    icon: Banknote,
-    title: "Nigerian Bank Withdrawal",
-    desc: "Withdraw directly to any Nigerian bank account. Verified via Paystack, paid manually within 48hrs.",
+    id: "sample-3",
+    title: "Like and leave a genuine comment on X",
+    reward_amount: 10000,
+    type: "verified",
+    categoryLabel: "Social",
+    estTime: "~45s",
   },
   {
-    icon: Users,
-    title: "Referral Bonuses",
-    desc: "Earn ₦500 for every friend you refer. Your friend gets ₦200 just for signing up.",
+    id: "sample-4",
+    title: "Complete a partner market research survey",
+    reward_amount: 50000,
+    type: "unverified",
+    categoryLabel: "Survey",
+    estTime: "~4m",
+  },
+  {
+    id: "sample-5",
+    title: "Subscribe to a YouTube channel and upload screenshot",
+    reward_amount: 25000,
+    type: "verified",
+    categoryLabel: "Social",
+    estTime: "~1m",
+  },
+  {
+    id: "sample-6",
+    title: "Read Nigerian headlines on the in-app news feed",
+    reward_amount: 200,
+    type: "unverified",
+    categoryLabel: "News",
+    estTime: "Per min",
   },
 ]
 
-const taskExamples = [
-  { title: "Follow and like our Instagram post",  reward: "₦200",  type: "Instant", category: "Social Media" },
-  { title: "Leave a 5-star review on Google Maps", reward: "₦500", type: "Verified", category: "Reviews"     },
-  { title: "Sign up for our newsletter",           reward: "₦150", type: "Instant", category: "Email"        },
-  { title: "Watch a YouTube video for 5 minutes",  reward: "₦300", type: "Instant", category: "Content"      },
-  { title: "Download and rate our mobile app",     reward: "₦600", type: "Verified", category: "App Store"   },
-  { title: "Share our post on WhatsApp",           reward: "₦250", type: "Instant", category: "Social Media" },
+async function getLandingData(): Promise<{
+  tasks: LiveTaskPreview[]
+  isLiveTasks: boolean
+  minWithdrawalKobo: number
+}> {
+  try {
+    const admin = createAdminClient()
+    const [tasksRes, settingRes] = await Promise.all([
+      admin
+        .from("tasks")
+        .select("id, title, reward_amount, type, youtube_url, min_watch_seconds, social_platform")
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(6),
+      admin
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "min_withdrawal_kobo")
+        .maybeSingle(),
+    ])
+
+    const minWithdrawalKobo =
+      settingRes.data?.value != null && Number(settingRes.data.value) > 0
+        ? Number(settingRes.data.value)
+        : 500000
+
+    const rows = tasksRes.data ?? []
+    if (rows.length > 0) {
+      const mapped: LiveTaskPreview[] = rows.map((t) => {
+        const isVideo = Boolean(t.youtube_url)
+        const isSocial = Boolean(t.social_platform)
+        const categoryLabel = isVideo
+          ? "Video"
+          : isSocial
+            ? "Social"
+            : t.type === "verified"
+              ? "Verified"
+              : "Quick Task"
+        const estTime = isVideo
+          ? `~${Math.max(1, Math.ceil((t.min_watch_seconds ?? 60) / 60))}m`
+          : t.type === "verified"
+            ? "~1m"
+            : "~30s"
+
+        return {
+          id: t.id,
+          title: t.title,
+          reward_amount: t.reward_amount,
+          type: t.type as "verified" | "unverified",
+          categoryLabel,
+          estTime,
+        }
+      })
+      return { tasks: mapped, isLiveTasks: true, minWithdrawalKobo }
+    }
+
+    return { tasks: FALLBACK_TASKS, isLiveTasks: false, minWithdrawalKobo }
+  } catch {
+    return { tasks: FALLBACK_TASKS, isLiveTasks: false, minWithdrawalKobo: 500000 }
+  }
+}
+
+const EARNING_STREAMS = [
+  {
+    index: "01",
+    name: "Social & Micro-Tasks",
+    summary: "Follow, like, comment, review, or test apps for Nigerian brands. Instant credit on quick tasks; AI and human review on proof-based tasks.",
+    meta: "30 sec – 2 min per task",
+    href: "/register",
+  },
+  {
+    index: "02",
+    name: "Watch & Earn Videos",
+    summary: "Watch partner YouTube videos in the built-in player with verified playback tracking. Rewards credit automatically once watch time completes.",
+    meta: "1 – 5 min per video",
+    href: "/register",
+  },
+  {
+    index: "03",
+    name: "Daily Skill Games",
+    summary: "Play Wordle, 2048, Color Rush, Tap Target, Word Scramble, and Higher or Lower. Top weekly leaderboard players split the prize pool.",
+    meta: "Weekly Naira pools",
+    href: "/register",
+  },
+  {
+    index: "04",
+    name: "Read & Earn News",
+    summary: "Stay updated with curated Nigerian news from local publications and earn per active reading minute straight to your wallet.",
+    meta: "Per-minute credit",
+    href: "/register",
+  },
 ]
 
-const steps = [
-  { n: "01", title: "Create free account",  desc: "Sign up in 60 seconds with your email. Receive ₦200 as a welcome bonus instantly."   },
-  { n: "02", title: "Pick a task",          desc: "Browse the marketplace and claim tasks that match your skills and available time."     },
-  { n: "03", title: "Complete & submit",    desc: "Follow the instructions, submit proof if required, and get credited automatically."   },
-  { n: "04", title: "Withdraw to your bank",desc: "Once your balance hits ₦5,000, request a transfer to any Nigerian bank account."     },
+const PAYOUT_STEPS = [
+  {
+    step: "1",
+    title: "Create a free account",
+    body: "Sign up with your email in under a minute. No debit card, no subscription, and no registration fee.",
+  },
+  {
+    step: "2",
+    title: "Complete tasks you choose",
+    body: "Every task shows its exact Naira reward, review type, and estimated time before you start.",
+  },
+  {
+    step: "3",
+    title: "Build your wallet balance",
+    body: "Approved tasks, video watches, news reading, and referral bonuses settle directly into your Naira ledger.",
+  },
+  {
+    step: "4",
+    title: "Withdraw to your Nigerian bank",
+    body: "Link any Paystack-verified bank account (OPay, PalmPay, Kuda, GTBank, Access, Zenith, UBA, First Bank) and request transfer.",
+  },
 ]
 
-const testimonials = [
-  { name: "Chioma A.", location: "Lagos",    text: "I earned ₦12,000 in my first week. The tasks are simple and the payouts are real.", stars: 5 },
-  { name: "Emeka O.",  location: "Abuja",    text: "Best legitimate money-making platform I've found in Nigeria. Already referred 8 friends!", stars: 5 },
-  { name: "Fatima M.", location: "Kano",     text: "Withdrew ₦30,000 this month. It's become part of my daily routine.", stars: 5 },
+const TRANSPARENCY_FACTS = [
+  {
+    label: "Registration",
+    title: "Free to join, always",
+    body: "Creating an account and earning on BountyTask requires zero upfront payment or card details.",
+  },
+  {
+    label: "Bank Verification",
+    title: "Paystack name-match",
+    body: "Your withdrawal bank account is resolved directly through Paystack so transfers go to your real name without typos.",
+  },
+  {
+    label: "Review Integrity",
+    title: "Honest approval timelines",
+    body: "Quick tasks credit immediately. Social screenshot tasks are checked by Gemini Vision AI and escalated to human reviewers when uncertain.",
+  },
+  {
+    label: "Referrals",
+    title: "₦500 per active friend",
+    body: "Share your personal invite link. Once your friend joins and completes their first approved task, ₦500 is credited to your balance.",
+  },
 ]
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const { tasks, isLiveTasks, minWithdrawalKobo } = await getLandingData()
+  const minWithdrawalLabel = formatCurrency(minWithdrawalKobo)
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       <PublicHeader />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden py-20 sm:py-28 px-4 text-center">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
-        <div className="max-w-3xl mx-auto relative">
-          <Badge variant="outline" className="mb-6 text-xs font-medium px-3 py-1 rounded-full border-primary/30 text-primary bg-primary/5">
-            🇳🇬 Nigeria&apos;s #1 Task-to-Earn Platform
-          </Badge>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-6">
-            Complete Tasks.<br />
-            <span className="bounty-text-gradient">Earn Real Naira.</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
-            BountyTask connects everyday Nigerians with businesses that need reviews, followers, and engagement.
-            Complete simple tasks and withdraw directly to your Nigerian bank account.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" variant="gradient" className="text-base px-8" asChild>
-              <Link href="/register">
-                Start Earning Free <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" className="text-base" asChild>
-              <Link href="/learn#how-it-works">How it works</Link>
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-4">
-            ₦200 signup bonus · No card required · Withdraw in 48hrs
-          </p>
-        </div>
-      </section>
+      <main className="flex-1">
+        {/* ─── Hero: Asymmetric Editorial Split ─────────────────────────────── */}
+        <section className="border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 lg:py-28">
+            <div className="grid lg:grid-cols-12 gap-12 lg:gap-10 items-start">
+              {/* Left: Editorial Copy */}
+              <div className="lg:col-span-7 space-y-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  BountyTask · Nigeria
+                </p>
 
-      {/* Stats bar */}
-      <section className="border-y border-border bg-muted/30 py-8">
-        <div className="max-w-4xl mx-auto px-4 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
-          {[
-            { value: "50,000+", label: "Active Earners"       },
-            { value: "₦5M+",    label: "Paid Out Monthly"     },
-            { value: "200+",    label: "Available Tasks"       },
-            { value: "48hrs",   label: "Avg. Withdrawal Time"  },
-          ].map(({ value, label }) => (
-            <div key={label}>
-              <p className="text-2xl sm:text-3xl font-extrabold bounty-text-gradient">{value}</p>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">{label}</p>
+                <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-bold tracking-[-0.035em] leading-[1.06] text-foreground">
+                  Earn Naira for everyday digital tasks.
+                </h1>
+
+                <p className="text-base sm:text-lg text-muted-foreground max-w-xl leading-relaxed">
+                  Complete verified social actions, watch short videos, read local news,
+                  or compete in daily skill games. Every reward settles in Naira and
+                  withdraws directly to any Nigerian bank account.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+                  <Button size="lg" className="text-sm font-semibold px-7 h-11" asChild>
+                    <Link href="/register">
+                      Start earning free
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                  <Button size="lg" variant="outline" className="text-sm font-medium h-11" asChild>
+                    <Link href="#how-it-works">How payouts work</Link>
+                  </Button>
+                </div>
+
+                {/* Plain-spoken terms strip */}
+                <dl className="grid grid-cols-3 gap-4 pt-6 border-t border-border max-w-lg">
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Welcome bonus
+                    </dt>
+                    <dd className="text-base sm:text-lg font-semibold tabular-nums mt-0.5">
+                      ₦200
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Min. withdrawal
+                    </dt>
+                    <dd className="text-base sm:text-lg font-semibold tabular-nums mt-0.5">
+                      {minWithdrawalLabel}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Payout window
+                    </dt>
+                    <dd className="text-base sm:text-lg font-semibold tabular-nums mt-0.5">
+                      24 – 48h
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* Right: Live Marketplace Ledger Sheet */}
+              <div className="lg:col-span-5">
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-muted/30">
+                    <span className="text-xs font-semibold text-foreground">
+                      {isLiveTasks ? "Active tasks right now" : "Example task board"}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      Settled in NGN
+                    </span>
+                  </div>
+
+                  <ul className="divide-y divide-border">
+                    {tasks.slice(0, 5).map((task) => (
+                      <li
+                        key={task.id}
+                        className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {task.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {task.categoryLabel} · {task.estTime} ·{" "}
+                            {task.type === "verified" ? "Reviewed" : "Instant"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-sm font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                          +{formatCurrency(task.reward_amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      Sign up to claim &amp; track rewards
+                    </span>
+                    <Link
+                      href="/register"
+                      className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      Open marketplace
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        </section>
 
-      {/* How it works */}
-      <section id="how-it-works" className="py-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">How BountyTask Works</h2>
-            <p className="text-muted-foreground">Four simple steps from signup to your first withdrawal.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {steps.map(({ n, title, desc }) => (
-              <div key={n} className="relative text-center p-6 rounded-2xl border border-border bg-card hover:border-primary/30 transition-colors">
-                <div className="w-12 h-12 rounded-full bounty-gradient flex items-center justify-center text-white font-bold text-lg mx-auto mb-4 shadow-md">
-                  {n}
-                </div>
-                <h3 className="font-semibold mb-2">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        {/* ─── Real Verified Payouts / Guarantee Strip ─────────────────────── */}
+        <RecentPayoutsStrip />
 
-      {/* Features */}
-      <section className="py-20 px-4 bg-muted/20">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">Why Choose BountyTask?</h2>
-            <p className="text-muted-foreground">Built for Nigerians, by Nigerians. Real money, real fast.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-6">
-            {features.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex gap-4 p-6 rounded-2xl border border-border bg-card">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Icon className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-1">{title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Sample tasks */}
-      <section className="py-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">Sample Tasks Available Today</h2>
-            <p className="text-muted-foreground">Browse hundreds of tasks across multiple categories.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {taskExamples.map(({ title, reward, type, category }) => (
-              <div key={title}
-                className="p-5 rounded-2xl border border-border bg-card hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200 group">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{category}</span>
-                  <Badge variant={type === "Instant" ? "success" : "pending"} className="text-[10px]">
-                    {type === "Instant" ? <Zap className="w-2.5 h-2.5" /> : null}
-                    {type}
-                  </Badge>
-                </div>
-                <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors mb-3">{title}</p>
-                <p className="text-xl font-bold text-primary">{reward}</p>
-              </div>
-            ))}
-          </div>
-          <div className="text-center mt-8">
-            <Button variant="gradient" size="lg" asChild>
-              <Link href="/register">See All Tasks <ArrowRight className="w-4 h-4" /></Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-20 px-4 bg-muted/20">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">What Earners Are Saying</h2>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {testimonials.map(({ name, location, text, stars }) => (
-              <div key={name} className="p-6 rounded-2xl border border-border bg-card">
-                <div className="flex mb-3">
-                  {Array.from({ length: stars }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">&ldquo;{text}&rdquo;</p>
-                <div>
-                  <p className="font-semibold text-sm">{name}</p>
-                  <p className="text-xs text-muted-foreground">{location}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 px-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="p-10 rounded-3xl bounty-gradient text-white shadow-xl">
-            <h2 className="text-3xl font-extrabold mb-3">Ready to Start Earning?</h2>
-            <p className="text-white/80 mb-6 text-lg">
-              Join 50,000+ Nigerians already earning on BountyTask. Your ₦200 welcome bonus is waiting.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button size="lg" variant="secondary" className="font-bold text-primary" asChild>
-                <Link href="/register">
-                  Create Free Account <ArrowRight className="w-4 h-4" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="ghost" className="text-white border border-white/30 hover:bg-white/10" asChild>
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
+        {/* ─── Four Ways to Earn (Editorial Bands) ─────────────────────────── */}
+        <section className="py-20 sm:py-24 px-4 sm:px-6 border-b border-border">
+          <div className="max-w-6xl mx-auto">
+            <div className="max-w-xl mb-12">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                Ways to earn
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.025em]">
+                Four ways to build your balance, all in one wallet.
+              </h2>
             </div>
-            <div className="flex flex-wrap justify-center gap-6 mt-6 text-sm text-white/70">
-              {["₦200 signup bonus", "No card required", "Withdraw in 48hrs"].map(t => (
-                <span key={t} className="flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />{t}
-                </span>
+
+            <div className="divide-y divide-border border-t border-b border-border">
+              {EARNING_STREAMS.map((stream) => (
+                <div
+                  key={stream.index}
+                  className="py-6 sm:py-7 grid md:grid-cols-12 gap-3 md:gap-6 items-baseline"
+                >
+                  <div className="md:col-span-4 flex items-baseline gap-4">
+                    <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                      {stream.index}
+                    </span>
+                    <h3 className="text-base sm:text-lg font-semibold text-foreground">
+                      {stream.name}
+                    </h3>
+                  </div>
+                  <p className="md:col-span-6 text-sm text-muted-foreground leading-relaxed">
+                    {stream.summary}
+                  </p>
+                  <div className="md:col-span-2 md:text-right">
+                    <span className="text-xs font-medium text-foreground/80">
+                      {stream.meta}
+                    </span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        {/* ─── How Payouts Work (Hairline Ledger Steps) ────────────────────── */}
+        <section id="how-it-works" className="py-20 sm:py-24 px-4 sm:px-6 bg-muted/20 border-b border-border">
+          <div className="max-w-6xl mx-auto">
+            <div className="max-w-xl mb-12">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                How it works
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.025em]">
+                From signup to Nigerian bank transfer in four steps.
+              </h2>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {PAYOUT_STEPS.map((item) => (
+                <div key={item.step} className="pt-5 border-t-2 border-foreground/15">
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                    Step {item.step}
+                  </span>
+                  <h3 className="text-base font-semibold text-foreground mt-2 mb-2">
+                    {item.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {item.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Radical Transparency / Trust Rules ──────────────────────────── */}
+        <section className="py-20 sm:py-24 px-4 sm:px-6 border-b border-border">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid lg:grid-cols-12 gap-10">
+              <div className="lg:col-span-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                  Straight rules
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-[-0.025em] mb-3">
+                  What to expect before you sign up.
+                </h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  No hidden catch, no inflated promises. Here is how BountyTask
+                  handles accounts, reviews, and withdrawals.
+                </p>
+                <div className="mt-6">
+                  <Link
+                    href="/faq"
+                    className="text-sm font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Read the full FAQ
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="lg:col-span-8 grid sm:grid-cols-2 gap-x-8 gap-y-8">
+                {TRANSPARENCY_FACTS.map((fact) => (
+                  <div key={fact.label} className="pt-4 border-t border-border">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {fact.label}
+                    </p>
+                    <h3 className="text-base font-semibold text-foreground mt-1.5 mb-1.5">
+                      {fact.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {fact.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── For Businesses / Advertisers Band ───────────────────────────── */}
+        <section className="py-12 px-4 sm:px-6 bg-muted/30 border-b border-border">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Promoting a Nigerian brand, creator channel, or mobile app?
+              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Launch a verified task campaign and pay only for real completed actions.
+              </p>
+            </div>
+            <Button variant="outline" className="shrink-0" asChild>
+              <Link href="/advertise">
+                Advertise on BountyTask
+                <ArrowUpRight className="w-4 h-4" />
+              </Link>
+            </Button>
+          </div>
+        </section>
+
+        {/* ─── Editorial Closing CTA ───────────────────────────────────────── */}
+        <section className="bg-foreground text-background py-20 px-4 sm:px-6">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-end md:justify-between gap-8">
+            <div className="max-w-xl">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.03em] leading-tight">
+                Open your account and claim your first task today.
+              </h2>
+              <p className="text-sm sm:text-base text-background/70 mt-3 leading-relaxed">
+                Free registration, ₦200 welcome bonus once verified, and direct payouts
+                to Nigerian bank accounts.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+              <Button
+                size="lg"
+                className="bg-background text-foreground hover:bg-background/90 font-semibold px-7 h-11"
+                asChild
+              >
+                <Link href="/register">
+                  Create free account
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="ghost"
+                className="text-background border border-background/25 hover:bg-background/10 hover:text-background h-11"
+                asChild
+              >
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <Footer />
     </div>

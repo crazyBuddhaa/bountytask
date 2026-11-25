@@ -2,9 +2,22 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getLiveBalance, getLedgerHistory } from "@/lib/ledger"
 import { getUserTierStatus } from "@/lib/tiers"
+import { getVerificationSettings } from "@/lib/verification"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { TrendingUp, CheckCircle2, Clock, ArrowRight, Zap, ListTodo, Award, ChevronRight } from "lucide-react"
+import {
+  CheckCircle2,
+  Circle,
+  Clock,
+  ArrowRight,
+  Zap,
+  ListTodo,
+  Award,
+  ChevronRight,
+  Target,
+  ShieldAlert,
+  Sparkles,
+} from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,12 +26,12 @@ import type { TaskCompletion, LedgerEntry } from "@/types"
 
 function tierBadgeClass(name?: string | null) {
   switch (name?.toLowerCase()) {
-    case "bronze":   return "bg-amber-100 text-amber-800 border-amber-200"
-    case "silver":   return "bg-slate-100 text-slate-700 border-slate-200"
-    case "gold":     return "bg-yellow-100 text-yellow-800 border-yellow-200"
-    case "platinum": return "bg-cyan-100 text-cyan-800 border-cyan-200"
-    case "diamond":  return "bg-blue-100 text-blue-800 border-blue-200"
-    case "elite":    return "bg-purple-100 text-purple-800 border-purple-200"
+    case "bronze":   return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+    case "silver":   return "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20"
+    case "gold":     return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
+    case "platinum": return "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20"
+    case "diamond":  return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+    case "elite":    return "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20"
     default:         return "bg-muted text-muted-foreground border-border"
   }
 }
@@ -31,8 +44,24 @@ export default async function DashboardPage() {
   if (!user) redirect("/sign-in")
 
   const admin = createAdminClient()
+  const startOfDayUtc = new Date()
+  startOfDayUtc.setUTCHours(0, 0, 0, 0)
 
-  const [balance, { entries: recentLedger }, recentCompletions, approvedCountResult, pendingCountResult, tasksResult, tierStatus] = await Promise.all([
+  const [
+    balance,
+    { entries: recentLedger },
+    recentCompletions,
+    approvedCountResult,
+    pendingCountResult,
+    tasksResult,
+    tierStatus,
+    verificationSettings,
+    userVerificationResult,
+    accountCountResult,
+    todayTasksResult,
+    gameSessionsResult,
+    newsReadsResult,
+  ] = await Promise.all([
     getLiveBalance(user.id),
     getLedgerHistory(user.id, { page: 1, limit: 5 }),
     admin
@@ -56,44 +85,119 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
     getUserTierStatus(user.id),
+    getVerificationSettings(),
+    admin
+      .from("users")
+      .select("kyc_verified, phone_verified")
+      .eq("id", user.id)
+      .single(),
+    admin
+      .from("withdrawal_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    admin
+      .from("task_completions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", startOfDayUtc.toISOString()),
+    admin
+      .from("game_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    admin
+      .from("news_reads")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
   ])
 
   const completions = (recentCompletions.data ?? []) as unknown as (TaskCompletion & { task: { title: string } })[]
   const approvedCount = approvedCountResult.count ?? 0
   const pendingCount = pendingCountResult.count ?? 0
   const activeTaskCount = tasksResult.count ?? 0
+  const todayTasks = todayTasksResult.count ?? 0
+  const dailyLimit = tierStatus.dailyLimit
+  const accountCount = accountCountResult.count ?? 0
+  const kycVerified = !!userVerificationResult.data?.kyc_verified
+  const phoneVerified = !!userVerificationResult.data?.phone_verified
+  const hasExploredGamesOrNews = (gameSessionsResult.count ?? 0) > 0 || (newsReadsResult.count ?? 0) > 0
+
+  const minWithdrawalKobo = verificationSettings.min_withdrawal_kobo
+  const remainingKobo = Math.max(0, minWithdrawalKobo - balance)
+  const withdrawalProgressPct = minWithdrawalKobo > 0
+    ? Math.min(100, Math.round((balance / minWithdrawalKobo) * 100))
+    : 100
+  const readyToWithdraw = balance >= minWithdrawalKobo
+
+  const quickStartSteps = [
+    {
+      label: "Complete your first task",
+      done: approvedCount >= 1,
+      href: "/dashboard/tasks",
+      cta: "Browse tasks",
+    },
+    {
+      label: "Link your Nigerian bank account",
+      done: accountCount >= 1,
+      href: "/dashboard/withdrawal",
+      cta: "Add bank",
+    },
+    {
+      label: "Try Games or News to earn daily",
+      done: hasExploredGamesOrNews,
+      href: "/dashboard/games",
+      cta: "Explore",
+    },
+  ]
+  const quickStartDoneCount = quickStartSteps.filter(s => s.done).length
+  const showQuickStart = quickStartDoneCount < quickStartSteps.length
+
+  const verificationEnabled = verificationSettings.fee_enabled || verificationSettings.phone_verification_enabled
+  const readinessItems = [
+    { label: "Bank Account", done: accountCount >= 1 },
+    ...(verificationSettings.phone_verification_enabled
+      ? [{ label: "Phone Verification", done: phoneVerified }]
+      : []),
+    ...(verificationSettings.fee_enabled
+      ? [{ label: "Account Verification", done: kycVerified }]
+      : []),
+    { label: `Min ${formatCurrency(minWithdrawalKobo)}`, done: readyToWithdraw },
+  ]
+  const needsVerificationStep =
+    (verificationSettings.phone_verification_enabled && !phoneVerified) ||
+    (verificationSettings.fee_enabled && !kycVerified)
+  const showReadinessBanner = verificationEnabled && readinessItems.some(item => !item.done)
 
   const stats = [
     {
-      label: "Available Balance",
-      value: formatCurrency(balance),
-      icon: TrendingUp,
+      label: "Today's Tasks",
+      value: dailyLimit > 0 ? `${todayTasks}/${dailyLimit}` : `${todayTasks} today`,
+      icon: Target,
       color: "text-primary",
       bg: "bg-primary/10",
-      href: "/dashboard/earnings",
+      href: "/dashboard/tasks",
     },
     {
       label: "Tasks Completed",
       value: approvedCount.toString(),
       icon: CheckCircle2,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
+      color: "text-emerald-600 dark:text-emerald-400",
+      bg: "bg-emerald-500/10",
       href: "/dashboard/my-tasks",
     },
     {
       label: "Pending Review",
       value: pendingCount.toString(),
       icon: Clock,
-      color: "text-amber-600",
-      bg: "bg-amber-50",
+      color: "text-amber-600 dark:text-amber-400",
+      bg: "bg-amber-500/10",
       href: "/dashboard/my-tasks",
     },
     {
       label: "Available Tasks",
       value: activeTaskCount.toString(),
       icon: ListTodo,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
+      color: "text-blue-600 dark:text-blue-400",
+      bg: "bg-blue-500/10",
       href: "/dashboard/tasks",
     },
   ]
@@ -108,26 +212,53 @@ export default async function DashboardPage() {
 
       {/* Balance hero */}
       <div className="rounded-2xl bounty-gradient p-6 text-white bounty-glow relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10"
+        <div
+          className="absolute inset-0 opacity-10"
           style={{
             backgroundImage: "radial-gradient(circle at 80% 50%, rgba(255,255,255,0.3) 0%, transparent 60%)",
           }}
         />
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="text-white/70 text-sm font-medium">Total Balance</p>
-            <p className="text-4xl font-bold mt-1">{formatCurrency(balance)}</p>
-            <p className="text-white/60 text-xs mt-2">
-              Balance is always computed live from your transaction ledger.
-            </p>
+        <div className="relative z-10 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-white/75 text-sm font-medium">Total Balance</p>
+              <p className="text-4xl font-bold mt-1 tabular-nums">{formatCurrency(balance)}</p>
+              <p className="text-white/75 text-xs mt-2">
+                Paid via Nigerian bank transfer · Verified by Paystack · Processed within 24h
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button asChild variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                <Link href="/dashboard/withdrawal">Withdraw</Link>
+              </Button>
+              <Button asChild size="sm" className="bg-white text-primary hover:bg-white/90">
+                <Link href="/dashboard/tasks"><Zap className="w-3.5 h-3.5" />Earn More</Link>
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Button asChild variant="outline" size="sm" className="bg-white/20 border-white/30 text-white hover:bg-white/30">
-              <Link href="/dashboard/withdrawal">Withdraw</Link>
-            </Button>
-            <Button asChild size="sm" className="bg-white text-primary hover:bg-white/90">
-              <Link href="/dashboard/tasks"><Zap className="w-3.5 h-3.5" />Earn More</Link>
-            </Button>
+
+          {/* Embedded Next Withdrawal Progress */}
+          <div className="rounded-xl bg-white/10 border border-white/15 p-3.5 space-y-2 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium text-white/90">Next Withdrawal Progress</span>
+              <span className="font-semibold text-white tabular-nums">{withdrawalProgressPct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/20 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${readyToWithdraw ? "bg-emerald-300" : "bg-white"}`}
+                style={{ width: `${withdrawalProgressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-white/85 tabular-nums">
+              {readyToWithdraw ? (
+                "Ready to withdraw! You've reached the minimum threshold."
+              ) : (
+                <>
+                  {formatCurrency(balance)} / {formatCurrency(minWithdrawalKobo)} —{" "}
+                  <span className="font-semibold text-white">{formatCurrency(remainingKobo)}</span> away from cashing out
+                </>
+              )}
+            </p>
           </div>
         </div>
       </div>
@@ -141,7 +272,7 @@ export default async function DashboardPage() {
                 <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
-                <p className="text-2xl font-bold">{stat.value}</p>
+                <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
                 <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
               </CardContent>
             </Card>
@@ -149,9 +280,93 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      {/* New-user Quick Start Checklist */}
+      {showQuickStart && (
+        <Card className="border-primary/20">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Quick Start Checklist</CardTitle>
+                <p className="text-xs text-muted-foreground">Complete these steps to start earning and cashing out.</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-xs tabular-nums">
+              {quickStartDoneCount}/{quickStartSteps.length} done
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {quickStartSteps.map((step) => (
+              <Link
+                key={step.label}
+                href={step.href}
+                className="flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {step.done ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <span className={`text-sm ${step.done ? "line-through text-muted-foreground" : "font-medium"}`}>
+                    {step.label}
+                  </span>
+                </div>
+                {!step.done && (
+                  <span className="text-xs font-medium text-primary flex items-center gap-1 shrink-0">
+                    {step.cta} <ArrowRight className="w-3 h-3" />
+                  </span>
+                )}
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upfront Withdrawal Readiness Banner */}
+      {showReadinessBanner && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <p className="text-sm font-semibold">Withdrawal Readiness</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {readinessItems.map((item) => (
+                  <span
+                    key={item.label}
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border tabular-nums ${
+                      item.done
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                    }`}
+                  >
+                    {item.done ? (
+                      <CheckCircle2 className="w-3 h-3" />
+                    ) : (
+                      <Clock className="w-3 h-3" />
+                    )}
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1 border-amber-500/30 hover:bg-amber-500/10">
+              <Link href={needsVerificationStep ? "/dashboard/verify" : "/dashboard/withdrawal"}>
+                {needsVerificationStep ? "Complete Verification" : "Manage Withdrawal"}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tier status card */}
       {tierStatus.currentTier && (
-        <Link href="/dashboard/referral" className="block mt-2">
+        <Link href="/dashboard/tasks" className="block mt-2">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-primary/20">
             <CardContent className="p-5">
               <div className="flex items-center justify-between gap-4">
@@ -162,18 +377,20 @@ export default async function DashboardPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge className={`text-[10px] border ${tierBadgeClass(tierStatus.currentTier.name)}`}>
+                      <Badge className={`text-[10px] border tabular-nums ${tierBadgeClass(tierStatus.currentTier.name)}`}>
                         Tier {tierStatus.currentTier.id} · {tierStatus.currentTier.name}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{tierStatus.currentTier.perks}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      Complete tasks to unlock higher daily limits
+                    </p>
                   </div>
                 </div>
 
                 {/* Centre: daily limit progress */}
                 <div className="hidden sm:block text-center shrink-0">
-                  <p className="text-sm font-bold">{tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit}</p>
-                  <p className="text-[10px] text-muted-foreground">today (tasks & ads)</p>
+                  <p className="text-sm font-bold tabular-nums">{tierStatus.tasksCompletedToday}/{tierStatus.dailyLimit}</p>
+                  <p className="text-[10px] text-muted-foreground">today (tasks &amp; ads)</p>
                 </div>
 
                 {/* Right: next tier nudge */}
@@ -197,13 +414,13 @@ export default async function DashboardPage() {
                 return (
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">{referralCount}/{nextTier.min_referrals} referrals</p>
+                      <p className="text-[10px] text-muted-foreground mb-1 tabular-nums">{referralCount}/{nextTier.min_referrals} referrals</p>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                         <div className="h-full bounty-gradient rounded-full transition-all" style={{ width: `${refPct}%` }} />
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">{totalCompletions}/{nextTier.min_completions} completions (tasks & ads)</p>
+                      <p className="text-[10px] text-muted-foreground mb-1 tabular-nums">{totalCompletions}/{nextTier.min_completions} completions (tasks &amp; ads)</p>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${compPct}%` }} />
                       </div>
@@ -235,7 +452,7 @@ export default async function DashboardPage() {
                     <p className="text-sm font-medium capitalize">{entry.ref_type.replace(/_/g, " ")}</p>
                     <p className="text-xs text-muted-foreground">{timeAgo(entry.created_at)}</p>
                   </div>
-                  <span className={`text-sm font-bold ${entry.delta > 0 ? "text-emerald-600" : "text-destructive"}`}>
+                  <span className={`text-sm font-bold tabular-nums ${entry.delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
                     {entry.delta > 0 ? "+" : "-"}{formatCurrency(Math.abs(entry.delta))}
                   </span>
                 </div>

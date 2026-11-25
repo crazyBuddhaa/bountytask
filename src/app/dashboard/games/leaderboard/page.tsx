@@ -143,7 +143,7 @@ export default function LeaderboardPage() {
             <Gift className="w-3.5 h-3.5" />
             My Winnings
             {totalEarned > 0 && (
-              <span className="ml-1 text-[10px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-1.5 py-0.5 tabular-nums">
+              <span className="ml-1 text-[10px] font-black bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-full px-1.5 py-0.5 tabular-nums">
                 {fmt(totalEarned)}
               </span>
             )}
@@ -351,7 +351,7 @@ export default function LeaderboardPage() {
                     </div>
                     <div>
                       <p className="font-bold text-base">Total prize earnings</p>
-                      <p className="text-xs text-muted-foreground">{payouts.length} prize{payouts.length !== 1 ? "s" : ""} across all games</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">{payouts.length} prize{payouts.length !== 1 ? "s" : ""} across all games</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -368,11 +368,11 @@ export default function LeaderboardPage() {
                       {GAME_META[p.game_slug as GameSlug]?.emoji ?? "🎮"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate">
+                      <p className="text-sm font-bold truncate tabular-nums">
                         {["🥇","🥈","🥉"][p.rank - 1] ?? `#${p.rank}`}{" "}
                         {GAME_META[p.game_slug as GameSlug]?.name ?? p.game_slug}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground tabular-nums">
                         {new Date(p.week_start + "T00:00:00Z").toLocaleDateString("en-NG", {
                           month: "short", day: "numeric", year: "numeric", timeZone: "UTC"
                         })}

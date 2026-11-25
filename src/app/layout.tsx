@@ -65,6 +65,13 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("bt_theme");document.documentElement.classList.toggle("dark",t==="dark");}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         {/* Google AdSense — public pages only (gated client-side via AdSenseScript). */}
         <AdSenseScript />
