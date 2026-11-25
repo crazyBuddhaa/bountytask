@@ -7,7 +7,15 @@ const PROTECTED_ROUTES = ["/dashboard", "/admin"];
 const AUTH_ROUTES = ["/sign-in", "/register"];
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
+
+  // If Supabase redirects an auth/recovery link to the Site URL ("/") with ?code
+  // or ?token_hash, forward it to /api/auth/callback so the session is exchanged.
+  if (pathname === "/" && (searchParams.has("code") || searchParams.has("token_hash"))) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/api/auth/callback";
+    return NextResponse.redirect(callbackUrl);
+  }
 
   // Response we'll mutate as Supabase refreshes/reads cookies, then
   // ultimately return (or replace with a redirect further down).

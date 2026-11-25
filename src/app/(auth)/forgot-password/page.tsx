@@ -28,8 +28,14 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     try {
       const supabase = createClient()
+      // Store recovery destination in a short-lived same-site cookie so redirectTo
+      // stays the exact allowlisted `/api/auth/callback` URL (without query params
+      // that Supabase's strict Redirect URL allowlist might reject).
+      const secureFlag = window.location.protocol === "https:" ? "; Secure" : ""
+      document.cookie = `bt_auth_next=/reset-password; Path=/; Max-Age=3600; SameSite=Lax${secureFlag}`
+
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/reset-password`,
+        redirectTo: `${window.location.origin}/api/auth/callback`,
       })
       if (error) {
         toast.error(error.message)
