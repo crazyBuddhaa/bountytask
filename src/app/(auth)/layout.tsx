@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Zap } from "lucide-react"
+import Image from "next/image"
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,10 +16,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <div className="relative z-10 flex flex-col h-full p-12">
-          <Link href="/" className="flex items-center gap-2 text-white">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
+          <Link href="/" className="flex items-center gap-2.5 text-white">
+            <Image src="/logo.png" alt="BountyTask" width={36} height={36} className="rounded-xl" />
             <span className="text-xl font-bold">BountyTask</span>
           </Link>
 
@@ -33,9 +31,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
             <div className="mt-12 space-y-4">
               {[
-                { label: "Total Users", value: "50,000+" },
-                { label: "Tasks Completed", value: "2.4M+" },
-                { label: "Total Paid Out", value: "₦180M+" },
+                { label: "Active Earners", value: "50,000+" },
+                { label: "Paid Out Monthly", value: "₦5M+" },
+                { label: "Available Tasks", value: "200+" },
+                { label: "Avg. Withdrawal Time", value: "48hrs" },
               ].map((stat) => (
                 <div key={stat.label} className="flex items-center gap-4">
                   <div className="w-2 h-2 rounded-full bg-white/60" />
@@ -56,12 +55,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="flex flex-col items-center justify-center p-6 lg:p-12 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bounty-gradient flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
+          <Link href="/" className="inline-flex items-center gap-2.5 mb-8 lg:hidden">
+            <Image src="/logo.png" alt="BountyTask" width={36} height={36} className="rounded-xl" />
             <span className="text-xl font-bold bounty-text-gradient">BountyTask</span>
-          </div>
+          </Link>
           {children}
         </div>
       </div>

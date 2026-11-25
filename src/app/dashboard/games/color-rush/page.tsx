@@ -1,10 +1,10 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft, Timer } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const GAME_DURATION = 30
 
@@ -44,47 +44,60 @@ function Stars({ score }: { score: number }) {
   )
 }
 
-export default function ColorRushPage() {
-  const [phase, setPhase]     = useState<"idle" | "playing" | "done">("idle")
-  const [score, setScore]     = useState(0)
-  const [wrong, setWrong]     = useState(0)
-  const [streak, setStreak]   = useState(0)
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
-  const [round, setRound]     = useState(() => generateRound())
-  const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null)
+function ColorRushContent() {
+  const { entering, ensureEntry, submitSession } = useGameEntry("color-rush")
+
+  const [phase, setPhase]         = useState<"idle" | "playing" | "done">("idle")
+  const [score, setScore]         = useState(0)
+  const [wrong, setWrong]         = useState(0)
+  const [streak, setStreak]       = useState(0)
+  const [timeLeft, setTimeLeft]   = useState(GAME_DURATION)
+  const [round, setRound]         = useState(() => generateRound())
+  const [feedback, setFeedback]   = useState<"correct" | "wrong" | null>(null)
   const [submitted, setSubmitted] = useState(false)
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef       = useRef<ReturnType<typeof setInterval> | null>(null)
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scoreRef  = useRef(0)
   const wrongRef  = useRef(0)
   const streakRef = useRef(0)
 
-  const endGame = useCallback(() => {
-    if (countdownRef.current) clearInterval(countdownRef.current)
-    setPhase("done")
+  const clearTimers = useCallback(() => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current)
+      feedbackTimeoutRef.current = null
+    }
   }, [])
+
+  const endGame = useCallback(() => {
+    clearTimers()
+    setFeedback(null)
+    setPhase("done")
+  }, [clearTimers])
 
   useEffect(() => {
     if (phase === "done" && !submitted) {
       setSubmitted(true)
-      fetch("/api/games/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          game_slug: "color-rush",
-          score: scoreRef.current,
-          completed: true,
-          duration_seconds: GAME_DURATION,
-          metadata: { correct: scoreRef.current, wrong: wrongRef.current },
-        }),
+      void submitSession({
+        score: scoreRef.current,
+        completed: true,
+        duration_seconds: GAME_DURATION,
+        metadata: { correct: scoreRef.current, wrong: wrongRef.current },
       })
     }
-  }, [phase, submitted])
+  }, [phase, submitted, submitSession])
 
-  useEffect(() => () => {
-    if (countdownRef.current) clearInterval(countdownRef.current)
-  }, [])
+  useEffect(() => () => clearTimers(), [clearTimers])
 
-  function startGame() {
+  async function startGame() {
+    if (entering) return
+    const ok = await ensureEntry()
+    if (!ok) return
+
+    clearTimers()
     scoreRef.current = 0; wrongRef.current = 0; streakRef.current = 0
     setScore(0); setWrong(0); setStreak(0)
     setTimeLeft(GAME_DURATION); setFeedback(null); setSubmitted(false)
@@ -113,7 +126,12 @@ export default function ColorRushPage() {
       setWrong(w => w + 1)
       setStreak(0)
     }
-    setTimeout(() => { setFeedback(null); setRound(generateRound()) }, 380)
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+    feedbackTimeoutRef.current = setTimeout(() => {
+      feedbackTimeoutRef.current = null
+      setFeedback(null)
+      setRound(generateRound())
+    }, 380)
   }
 
   const progress  = ((GAME_DURATION - timeLeft) / GAME_DURATION) * 100
@@ -163,8 +181,8 @@ export default function ColorRushPage() {
                 <div key={c.name} className="w-10 h-10 rounded-full shadow-lg border-2 border-white/20" style={{ backgroundColor: c.hex }} />
               ))}
             </div>
-            <Button onClick={startGame} className="w-full bg-violet-500 hover:bg-violet-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-violet-500/30">
-              Start!
+            <Button onClick={() => void startGame()} disabled={entering} className="w-full bg-violet-500 hover:bg-violet-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-violet-500/30">
+              {entering ? "Starting…" : "Start!"}
             </Button>
           </div>
         </div>
@@ -263,12 +281,22 @@ export default function ColorRushPage() {
               {score >= 20 ? "🔥 Incredible focus!" : score >= 12 ? "👏 Great reflexes!" : "Keep playing to improve!"}
             </p>
             <div className="flex justify-center gap-3">
-              <Button onClick={startGame} className="bg-violet-500 hover:bg-violet-600 text-white border-0 font-bold shadow-md shadow-violet-500/30">Play Again</Button>
+              <Button onClick={() => void startGame()} disabled={entering} className="bg-violet-500 hover:bg-violet-600 text-white border-0 font-bold shadow-md shadow-violet-500/30">
+                {entering ? "Starting…" : "Play Again"}
+              </Button>
               <Link href="/dashboard/games"><Button variant="outline">All Games</Button></Link>
             </div>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+export default function ColorRushPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" /></div>}>
+      <ColorRushContent />
+    </Suspense>
   )
 }

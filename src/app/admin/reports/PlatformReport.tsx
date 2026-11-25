@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { BarChart2, TrendingUp } from "lucide-react"
+import { toast } from "sonner"
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
@@ -24,18 +25,45 @@ export function PlatformReport({ period }: { period: Period }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let active = true
     setLoading(true)
     fetch(`/api/admin/reports?period=${period}`)
-      .then(r => r.json())
-      .then(j => { setData(j.data); setLoading(false) })
+      .then(async (r) => {
+        const j = await r.json()
+        if (!r.ok) throw new Error(j.error ?? "Failed to load platform report")
+        return j
+      })
+      .then((j) => {
+        if (active) setData(j.data ?? null)
+      })
+      .catch((err) => {
+        if (active) toast.error(err instanceof Error ? err.message : "Failed to load platform report")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
   }, [period])
 
-  const chartData = data ? data.daily_signups.map((s, i) => ({
-    date:        shortDate(s.date),
-    signups:     s.count,
-    completions: data.daily_completions[i]?.count ?? 0,
-    credits_ngn: Math.round((data.daily_credits[i]?.total_kobo ?? 0) / 100),
-  })) : []
+  const chartData = (() => {
+    if (!data) return []
+    const signupsMap = new Map<string, number>(data.daily_signups.map(d => [d.date, d.count]))
+    const completionsMap = new Map<string, number>(data.daily_completions.map(d => [d.date, d.count]))
+    const creditsMap = new Map<string, number>(data.daily_credits.map(d => [d.date, d.total_kobo]))
+    const allDates = Array.from(
+      new Set([
+        ...data.daily_signups.map(d => d.date),
+        ...data.daily_completions.map(d => d.date),
+        ...data.daily_credits.map(d => d.date),
+      ])
+    ).sort()
+    return allDates.map(date => ({
+      date:        shortDate(date),
+      signups:     signupsMap.get(date) ?? 0,
+      completions: completionsMap.get(date) ?? 0,
+      credits_ngn: Math.round((creditsMap.get(date) ?? 0) / 100),
+    }))
+  })()
 
   const totalCredits = data?.daily_credits.reduce((s, d) => s + d.total_kobo, 0) ?? 0
   const totalSignups = data?.daily_signups.reduce((s, d) => s + d.count, 0) ?? 0

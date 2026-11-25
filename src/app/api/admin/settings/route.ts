@@ -74,7 +74,7 @@ const settingsSchema = z.object({
   advertiser_min_budget_kobo:        z.number().int().positive().optional(),
   advertiser_requirements:           z.string().max(4000).optional(),
   advertiser_pricing_info:           z.string().max(4000).optional(),
-  advertiser_contact_email:          z.string().email().optional(),
+  advertiser_contact_email:          z.union([z.string().email(), z.literal("")]).optional(),
   advertiser_submission_fee_enabled: z.boolean().optional(),
   advertiser_submission_fee_kobo:    z.number().int().positive().optional(),
 

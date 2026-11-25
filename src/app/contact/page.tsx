@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { Loader2, Mail, MessageSquare, CheckCircle2 } from "lucide-react"
+import { toast } from "sonner"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
 import { Button } from "@/components/ui/button"
@@ -31,10 +32,28 @@ export default function ContactPage() {
     e.preventDefault()
     if (!name || !email || !topic || !message) return
     setSending(true)
-    // Simulate — in production wire to Resend or a database table
-    await new Promise(r => setTimeout(r, 1000))
-    setSent(true)
-    setSending(false)
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          subject: topic,
+          message,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to send message. Please try again.")
+        return
+      }
+      setSent(true)
+    } catch {
+      toast.error("Network error. Please check your connection and try again.")
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -102,9 +121,9 @@ export default function ContactPage() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Topic *</Label>
+                    <Label htmlFor="subject">Topic *</Label>
                     <Select value={topic} onValueChange={setTopic} required>
-                      <SelectTrigger><SelectValue placeholder="What is your message about?" /></SelectTrigger>
+                      <SelectTrigger id="subject"><SelectValue placeholder="What is your message about?" /></SelectTrigger>
                       <SelectContent>
                         {topics.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
@@ -113,7 +132,7 @@ export default function ContactPage() {
                   <div className="space-y-1.5">
                     <Label htmlFor="message">Message *</Label>
                     <Textarea id="message" placeholder="Describe your issue or question in detail…"
-                      rows={5} value={message} onChange={e => setMessage(e.target.value)} required />
+                      rows={5} minLength={10} value={message} onChange={e => setMessage(e.target.value)} required />
                   </div>
                   <Button type="submit" variant="gradient" className="w-full" disabled={sending || !name || !email || !topic || !message}>
                     {sending && <Loader2 className="animate-spin" />}

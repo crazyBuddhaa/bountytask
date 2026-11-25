@@ -1,10 +1,12 @@
 import Link from "next/link"
+import Image from "next/image"
 
 const links = {
   Product: [
-    { label: "How it works",  href: "/#how-it-works" },
-    { label: "Task Marketplace", href: "/register"   },
-    { label: "Referral Program", href: "/register"   },
+    { label: "How it works",     href: "/learn#how-it-works" },
+    { label: "Task Marketplace", href: "/register"           },
+    { label: "Referral Program", href: "/register"           },
+    { label: "Advertise",        href: "/advertise"          },
   ],
   Company: [
     { label: "About",   href: "/about"   },
@@ -25,7 +27,7 @@ export function Footer() {
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
             <Link href="/" className="flex items-center gap-2 font-bold text-base mb-3">
-              <div className="w-7 h-7 rounded-lg bounty-gradient" />
+              <Image src="/logo.png" alt="BountyTask" width={28} height={28} className="rounded-lg" />
               <span className="bounty-text-gradient">BountyTask</span>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed">

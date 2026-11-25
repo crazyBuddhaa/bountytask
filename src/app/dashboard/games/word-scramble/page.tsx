@@ -1,12 +1,12 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft, Timer, CheckCircle, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
 import { SCRAMBLE_WORDS, scrambleWord, seededShuffle } from "@/lib/games"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const ROUNDS = 10
 const SECONDS_PER_ROUND = 15
@@ -35,25 +35,44 @@ function Stars({ correct }: { correct: number }) {
   )
 }
 
-export default function WordScramblePage() {
-  const [phase, setPhase]     = useState<"idle" | "playing" | "done">("idle")
-  const [rounds, setRounds]   = useState<Round[]>([])
-  const [roundIdx, setRoundIdx] = useState(0)
-  const [answer, setAnswer]   = useState("")
-  const [timeLeft, setTimeLeft] = useState(SECONDS_PER_ROUND)
-  const [score, setScore]     = useState(0)
-  const [correct, setCorrect] = useState(0)
-  const [results, setResults] = useState<{ word: string; guess: string; ok: boolean }[]>([])
-  const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null)
+function WordScrambleContent() {
+  const { entering, ensureEntry, submitSession } = useGameEntry("word-scramble")
+
+  const [phase, setPhase]         = useState<"idle" | "playing" | "done">("idle")
+  const [rounds, setRounds]       = useState<Round[]>([])
+  const [roundIdx, setRoundIdx]   = useState(0)
+  const [answer, setAnswer]       = useState("")
+  const [timeLeft, setTimeLeft]   = useState(SECONDS_PER_ROUND)
+  const [score, setScore]         = useState(0)
+  const [correct, setCorrect]     = useState(0)
+  const [lastPoints, setLastPoints] = useState(0)
+  const [results, setResults]     = useState<{ word: string; guess: string; ok: boolean }[]>([])
+  const [feedback, setFeedback]   = useState<"correct" | "wrong" | null>(null)
   const [submitted, setSubmitted] = useState(false)
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const focusTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef    = useRef<HTMLInputElement>(null)
   const timeLeftRef = useRef(SECONDS_PER_ROUND)
   const scoreRef    = useRef(0)
   const correctRef  = useRef(0)
 
   const clearTimer = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
+  const clearTimeouts = useCallback(() => {
+    if (advanceTimeoutRef.current) {
+      clearTimeout(advanceTimeoutRef.current)
+      advanceTimeoutRef.current = null
+    }
+    if (focusTimeoutRef.current) {
+      clearTimeout(focusTimeoutRef.current)
+      focusTimeoutRef.current = null
+    }
   }, [])
 
   const advanceRound = useCallback((guess: string, currentRounds: Round[], currentIdx: number, currentTimeLeft: number) => {
@@ -65,9 +84,12 @@ export default function WordScramblePage() {
     if (ok) correctRef.current++
     setScore(scoreRef.current)
     setCorrect(correctRef.current)
+    setLastPoints(pts)
     setFeedback(ok ? "correct" : "wrong")
     setResults(prev => [...prev, { word: round.word, guess, ok }])
-    setTimeout(() => {
+    if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
+    advanceTimeoutRef.current = setTimeout(() => {
+      advanceTimeoutRef.current = null
       setFeedback(null)
       setAnswer("")
       if (currentIdx + 1 >= ROUNDS) {
@@ -98,30 +120,37 @@ export default function WordScramblePage() {
   useEffect(() => {
     if (phase === "done" && !submitted) {
       setSubmitted(true)
-      fetch("/api/games/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          game_slug: "word-scramble",
-          score: scoreRef.current,
-          completed: true,
-          duration_seconds: ROUNDS * SECONDS_PER_ROUND,
-          metadata: { correct: correctRef.current, rounds: ROUNDS },
-        }),
+      void submitSession({
+        score: scoreRef.current,
+        completed: true,
+        duration_seconds: ROUNDS * SECONDS_PER_ROUND,
+        metadata: { correct: correctRef.current, rounds: ROUNDS },
       })
     }
-  }, [phase, submitted])
+  }, [phase, submitted, submitSession])
 
-  useEffect(() => () => clearTimer(), [clearTimer])
+  useEffect(() => () => {
+    clearTimer()
+    clearTimeouts()
+  }, [clearTimer, clearTimeouts])
 
-  function startGame() {
+  async function startGame() {
+    if (entering) return
+    const ok = await ensureEntry()
+    if (!ok) return
+
+    clearTimer()
+    clearTimeouts()
     const newRounds = buildRounds()
     setRounds(newRounds); setRoundIdx(0); setAnswer("")
-    setScore(0); setCorrect(0); setResults([]); setFeedback(null); setSubmitted(false)
+    setScore(0); setCorrect(0); setLastPoints(0); setResults([]); setFeedback(null); setSubmitted(false)
     setTimeLeft(SECONDS_PER_ROUND); timeLeftRef.current = SECONDS_PER_ROUND
     scoreRef.current = 0; correctRef.current = 0
     setPhase("playing")
-    setTimeout(() => inputRef.current?.focus(), 100)
+    focusTimeoutRef.current = setTimeout(() => {
+      focusTimeoutRef.current = null
+      inputRef.current?.focus()
+    }, 100)
   }
 
   function handleSubmit() {
@@ -176,8 +205,8 @@ export default function WordScramblePage() {
                 </div>
               ))}
             </div>
-            <Button onClick={startGame} className="w-full bg-pink-500 hover:bg-pink-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-pink-500/30">
-              Start!
+            <Button onClick={() => void startGame()} disabled={entering} className="w-full bg-pink-500 hover:bg-pink-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-pink-500/30">
+              {entering ? "Starting…" : "Start!"}
             </Button>
           </div>
         </div>
@@ -243,7 +272,7 @@ export default function WordScramblePage() {
                 <p className="text-2xl font-black">{currentRound.word}</p>
                 <p className="text-xs text-muted-foreground font-semibold">
                   {feedback === "correct"
-                    ? `+${scoreForAnswer(timeLeftRef.current + 1, true)} pts`
+                    ? `+${lastPoints} pts`
                     : "No points this round"}
                 </p>
               </div>
@@ -318,12 +347,22 @@ export default function WordScramblePage() {
               ))}
             </div>
             <div className="flex justify-center gap-3 pt-1">
-              <Button onClick={startGame} className="bg-pink-500 hover:bg-pink-600 text-white border-0 font-bold shadow-md shadow-pink-500/30">Play Again</Button>
+              <Button onClick={() => void startGame()} disabled={entering} className="bg-pink-500 hover:bg-pink-600 text-white border-0 font-bold shadow-md shadow-pink-500/30">
+                {entering ? "Starting…" : "Play Again"}
+              </Button>
               <Link href="/dashboard/games"><Button variant="outline">All Games</Button></Link>
             </div>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+export default function WordScramblePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-pink-500 border-t-transparent animate-spin" /></div>}>
+      <WordScrambleContent />
+    </Suspense>
   )
 }

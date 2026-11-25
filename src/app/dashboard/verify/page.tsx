@@ -1,8 +1,8 @@
 "use client"
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone, Clock, AlertCircle, X } from "lucide-react"
+import { CreditCard, Building2, Loader2, ShieldCheck, Smartphone, Clock, AlertCircle, X, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +47,7 @@ function VerifyPageInner() {
   const [kycVerified, setKycVerified] = useState(false)
   const [phoneVerified, setPhoneVerified] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [reference, setReference] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState(false)
@@ -61,20 +62,37 @@ function VerifyPageInner() {
   const [sendingCode, setSendingCode] = useState(false)
   const [confirmingCode, setConfirmingCode] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/settings/verification").then((r) => r.json()),
-      fetch("/api/profile").then((r) => r.json()),
-      fetch("/api/verification/request").then((r) => r.json()),
-    ])
-      .then(([ver, prof, pending]) => {
-        setSettings(ver.data)
-        setKycVerified(!!prof.data?.kyc_verified)
-        setPhoneVerified(!!prof.data?.phone_verified)
-        setPendingRequest(pending.data ?? null)
-      })
-      .finally(() => setLoading(false))
+  const loadVerification = useCallback(async () => {
+    setLoading(true)
+    setFetchError(null)
+    try {
+      const [verRes, profRes, pendingRes] = await Promise.all([
+        fetch("/api/settings/verification"),
+        fetch("/api/profile"),
+        fetch("/api/verification/request"),
+      ])
+      if (!verRes.ok || !profRes.ok || !pendingRes.ok) {
+        throw new Error("Could not load verification status. Please try again.")
+      }
+      const [ver, prof, pending] = await Promise.all([
+        verRes.json(),
+        profRes.json(),
+        pendingRes.json(),
+      ])
+      setSettings(ver.data)
+      setKycVerified(!!prof.data?.kyc_verified)
+      setPhoneVerified(!!prof.data?.phone_verified)
+      setPendingRequest(pending.data ?? null)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load verification status. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadVerification()
+  }, [loadVerification])
 
   // Paystack redirects back here with `reference`/`trxref` in the query
   // string after checkout. This is the counterpart to the redirect kicked
@@ -96,6 +114,9 @@ function VerifyPageInner() {
         setKycVerified(true)
         toast.success("You're verified!")
       })
+      .catch(() => {
+        toast.error("Could not confirm payment. Please try again.")
+      })
       .finally(() => {
         setConfirming(false)
         router.replace("/dashboard/verify")
@@ -106,13 +127,18 @@ function VerifyPageInner() {
 
   async function handleCancelRequest() {
     setCancelling(true)
-    const res = await fetch("/api/verification/request", { method: "DELETE" })
-    const json = await res.json()
-    setCancelling(false)
-    if (json.error) { toast.error(json.error); return }
-    setPendingRequest(null)
-    setReference("")
-    toast.success("Verification request cancelled. You can submit a new one.")
+    try {
+      const res = await fetch("/api/verification/request", { method: "DELETE" })
+      const json = await res.json()
+      if (!res.ok || json.error) { toast.error(json.error ?? "Failed to cancel request"); return }
+      setPendingRequest(null)
+      setReference("")
+      toast.success("Verification request cancelled. You can submit a new one.")
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setCancelling(false)
+    }
   }
 
   // Redirects to Paystack's own hosted checkout page instead of opening an
@@ -125,59 +151,81 @@ function VerifyPageInner() {
   async function handlePaystackPayment() {
     if (!settings) return
     setPaying(true)
-    const res = await fetch("/api/verification/paystack/initialize", { method: "POST" })
-    const json = await res.json()
-    if (json.error || !json.data?.authorization_url) {
-      setPaying(false)
-      toast.error(json.error ?? "Could not start payment. Try again.")
-      return
+    let redirecting = false
+    try {
+      const res = await fetch("/api/verification/paystack/initialize", { method: "POST" })
+      const json = await res.json()
+      if (!res.ok || json.error || !json.data?.authorization_url) {
+        toast.error(json.error ?? "Could not start payment. Try again.")
+        return
+      }
+      redirecting = true
+      window.location.href = json.data.authorization_url
+    } catch {
+      toast.error("Could not start payment. Please check your connection and try again.")
+    } finally {
+      if (!redirecting) setPaying(false)
     }
-    window.location.href = json.data.authorization_url
   }
 
   async function handleBankTransferSubmit() {
     if (!reference.trim()) { toast.error("Enter your transfer reference"); return }
     setSubmitting(true)
-    const res = await fetch("/api/verification/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payment_reference: reference.trim() }),
-    })
-    const json = await res.json()
-    setSubmitting(false)
-    if (json.error) { toast.error(json.error); return }
-    setPendingRequest({ id: "", status: "pending", payment_reference: reference.trim(), created_at: new Date().toISOString() })
-    toast.success("Submitted! An admin will verify your transfer within 24 hours.")
+    try {
+      const res = await fetch("/api/verification/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_reference: reference.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) { toast.error(json.error ?? "Submission failed"); return }
+      setPendingRequest({ id: "", status: "pending", payment_reference: reference.trim(), created_at: new Date().toISOString() })
+      toast.success("Submitted! An admin will verify your transfer within 24 hours.")
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleSendCode() {
     if (!phone.trim()) { toast.error("Enter your phone number"); return }
     setSendingCode(true)
-    const res = await fetch("/api/verification/phone/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: phone.trim() }),
-    })
-    const json = await res.json()
-    setSendingCode(false)
-    if (json.error) { toast.error(json.error); return }
-    setPhoneStep("sent")
-    toast.success("Code sent! Check your phone.")
+    try {
+      const res = await fetch("/api/verification/phone/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) { toast.error(json.error ?? "Could not send code"); return }
+      setPhoneStep("sent")
+      toast.success("Code sent! Check your phone.")
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setSendingCode(false)
+    }
   }
 
   async function handleConfirmCode() {
     if (!/^\d{6}$/.test(code.trim())) { toast.error("Enter the 6-digit code"); return }
     setConfirmingCode(true)
-    const res = await fetch("/api/verification/phone/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim() }),
-    })
-    const json = await res.json()
-    setConfirmingCode(false)
-    if (json.error) { toast.error(json.error); return }
-    setPhoneVerified(true)
-    toast.success("Phone verified!")
+    try {
+      const res = await fetch("/api/verification/phone/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) { toast.error(json.error ?? "Could not confirm code"); return }
+      setPhoneVerified(true)
+      toast.success("Phone verified!")
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setConfirmingCode(false)
+    }
   }
 
   if (loading) {
@@ -185,6 +233,23 @@ function VerifyPageInner() {
       <div className="max-w-lg space-y-4">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="max-w-lg">
+        <Card>
+          <CardContent className="p-8 text-center space-y-3">
+            <AlertCircle className="w-10 h-10 mx-auto text-destructive" />
+            <p className="font-medium">Failed to load verification status</p>
+            <p className="text-sm text-muted-foreground">{fetchError}</p>
+            <Button variant="outline" size="sm" onClick={loadVerification} className="gap-2">
+              <RefreshCw className="w-3.5 h-3.5" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }

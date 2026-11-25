@@ -37,19 +37,39 @@ export async function POST(
 
   if (!article) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
+
+  const getDailyMinutesUsed = async () => {
+    const { data: todayReads } = await admin
+      .from("news_reads")
+      .select("minutes_credited")
+      .eq("user_id", user.id)
+      .gte("last_heartbeat_at", startOfDay.toISOString())
+
+    return (todayReads ?? []).reduce(
+      (sum, row) => sum + (row.minutes_credited ?? 0),
+      0
+    )
+  }
+
   // Idempotency check
-  const { data: existing } = await admin
-    .from("news_reads")
-    .select("id, minutes_credited")
-    .eq("user_id", user.id)
-    .eq("article_id", articleId)
-    .maybeSingle()
+  const [{ data: existing }, settings, dailyMinutesUsed] = await Promise.all([
+    admin
+      .from("news_reads")
+      .select("id, minutes_credited")
+      .eq("user_id", user.id)
+      .eq("article_id", articleId)
+      .maybeSingle(),
+    getNewsSettings(),
+    getDailyMinutesUsed(),
+  ])
 
   if (existing) {
-    const settings = await getNewsSettings()
     return NextResponse.json({
       alreadyRead:          true,
       minutesCredited:      existing.minutes_credited ?? 0,
+      dailyMinutesUsed,
       earnEnabled:          settings.earnEnabled,
       koboPerMinute:        settings.earnKoboPerMinute,
       maxMinutesPerArticle: settings.earnMaxMinutesPerArticle,
@@ -64,13 +84,13 @@ export async function POST(
     credited:   false,
   })
 
-  const settings = await getNewsSettings()
-
   return NextResponse.json({
-    alreadyRead:         false,
-    earnEnabled:         settings.earnEnabled,
-    koboPerMinute:       settings.earnKoboPerMinute,
+    alreadyRead:          false,
+    minutesCredited:      0,
+    dailyMinutesUsed,
+    earnEnabled:          settings.earnEnabled,
+    koboPerMinute:        settings.earnKoboPerMinute,
     maxMinutesPerArticle: settings.earnMaxMinutesPerArticle,
-    dailyCapMinutes:     settings.earnDailyCapMinutes,
+    dailyCapMinutes:      settings.earnDailyCapMinutes,
   })
 }

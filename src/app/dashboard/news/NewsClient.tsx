@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { Fragment, useState, useCallback, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
-  ExternalLink, Newspaper, Clock, RefreshCw,
-  ChevronDown, TrendingUp, Coins, CheckCircle2,
+  ArrowRight, Newspaper, Clock, RefreshCw,
+  ChevronDown, Coins, CheckCircle2,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { NewsSettings } from "@/lib/news"
@@ -31,7 +31,6 @@ interface Props {
   initialArticles: NewsArticle[]
   initialHasMore:  boolean
   settings:        NewsSettings
-  readsToday:      number
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -57,30 +56,48 @@ const CATEGORY_STYLES: Record<string, string> = {
 
 // ─── Main client ──────────────────────────────────────────────────────────────
 
-export function NewsClient({ initialArticles, initialHasMore, settings, readsToday }: Props) {
+export function NewsClient({ initialArticles, initialHasMore, settings }: Props) {
   const router = useRouter()
 
-  const [articles, setArticles]   = useState<NewsArticle[]>(initialArticles)
-  const [hasMore, setHasMore]     = useState(initialHasMore)
-  const [category, setCategory]   = useState("all")
-  const [page, setPage]           = useState(1)
-  const [loading, setLoading]     = useState(false)
+  const [articles, setArticles]       = useState<NewsArticle[]>(initialArticles)
+  const [hasMore, setHasMore]         = useState(initialHasMore)
+  const [category, setCategory]       = useState("all")
+  const [page, setPage]               = useState(1)
+  const [loading, setLoading]         = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const categoryAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => {
+    categoryAbortRef.current?.abort()
+  }, [])
 
   // ── Category switch ────────────────────────────────────────────────────────
   const switchCategory = useCallback(async (cat: string) => {
     if (cat === category) return
+    categoryAbortRef.current?.abort()
+    const controller = new AbortController()
+    categoryAbortRef.current = controller
+
     setCategory(cat)
     setLoading(true)
     setPage(1)
 
-    const qs  = new URLSearchParams({ category: cat, page: "1", limit: "20" })
-    const res = await fetch(`/api/news?${qs}`)
-    const json = await res.json()
+    try {
+      const qs  = new URLSearchParams({ category: cat, page: "1", limit: "20" })
+      const res = await fetch(`/api/news?${qs}`, { signal: controller.signal })
+      if (!res.ok) throw new Error("Failed to load articles")
+      const json = await res.json()
 
-    setArticles(json.data ?? [])
-    setHasMore(json.hasMore ?? false)
-    setLoading(false)
+      setArticles(json.data ?? [])
+      setHasMore(json.hasMore ?? false)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
+      toast.error("Could not load articles for this category. Please try again.")
+    } finally {
+      if (categoryAbortRef.current === controller) {
+        setLoading(false)
+      }
+    }
   }, [category])
 
   // ── Load more ──────────────────────────────────────────────────────────────
@@ -88,14 +105,20 @@ export function NewsClient({ initialArticles, initialHasMore, settings, readsTod
     const nextPage = page + 1
     setLoadingMore(true)
 
-    const qs  = new URLSearchParams({ category, page: String(nextPage), limit: "20" })
-    const res = await fetch(`/api/news?${qs}`)
-    const json = await res.json()
+    try {
+      const qs  = new URLSearchParams({ category, page: String(nextPage), limit: "20" })
+      const res = await fetch(`/api/news?${qs}`)
+      if (!res.ok) throw new Error("Failed to load more articles")
+      const json = await res.json()
 
-    setArticles(prev => [...prev, ...(json.data ?? [])])
-    setHasMore(json.hasMore ?? false)
-    setPage(nextPage)
-    setLoadingMore(false)
+      setArticles(prev => [...prev, ...(json.data ?? [])])
+      setHasMore(json.hasMore ?? false)
+      setPage(nextPage)
+    } catch {
+      toast.error("Could not load more articles. Please try again.")
+    } finally {
+      setLoadingMore(false)
+    }
   }, [category, page])
 
   const fmt = (kobo: number) => `₦${(kobo / 100).toFixed(2)}`
@@ -138,7 +161,7 @@ export function NewsClient({ initialArticles, initialHasMore, settings, readsTod
         {CATEGORIES.map(cat => (
           <button
             key={cat.value}
-            onClick={() => switchCategory(cat.value)}
+            onClick={() => void switchCategory(cat.value)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
               category === cat.value
                 ? "bg-primary text-primary-foreground border-primary"
@@ -173,20 +196,19 @@ export function NewsClient({ initialArticles, initialHasMore, settings, readsTod
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {articles.map((article, i) => (
-            <>
+            <Fragment key={article.id}>
               <ArticleCard
-                key={article.id}
                 article={article}
                 earnEnabled={settings.earnEnabled}
                 onClick={() => router.push(`/dashboard/news/${article.id}`)}
               />
               {/* Insert a full-width ad slot after every 4th article */}
               {(i + 1) % 4 === 0 && (
-                <div key={`ad-${i}`} className="sm:col-span-2">
+                <div className="sm:col-span-2">
                   <AdSlot placement="news" />
                 </div>
               )}
-            </>
+            </Fragment>
           ))}
         </div>
       )}
@@ -196,7 +218,7 @@ export function NewsClient({ initialArticles, initialHasMore, settings, readsTod
         <div className="flex justify-center pt-2">
           <Button
             variant="outline"
-            onClick={loadMore}
+            onClick={() => void loadMore()}
             disabled={loadingMore}
             className="gap-2"
           >
@@ -224,20 +246,23 @@ function ArticleCard({
   earnEnabled: boolean
   onClick:     () => void
 }) {
+  const [imgBroken, setImgBroken] = useState(false)
+  const showThumbnail = Boolean(article.thumbnail_url) && !imgBroken
+
   return (
     <button
       onClick={onClick}
       className="group text-left rounded-2xl border bg-card overflow-hidden hover:border-primary/40 hover:shadow-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {/* Thumbnail */}
-      {article.thumbnail_url ? (
+      {showThumbnail ? (
         <div className="relative overflow-hidden bg-muted h-40">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={article.thumbnail_url}
+            src={article.thumbnail_url!}
             alt=""
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={e => { (e.currentTarget as HTMLImageElement).parentElement?.classList.add("hidden") }}
+            onError={() => setImgBroken(true)}
           />
           {article.read && (
             <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
@@ -247,8 +272,14 @@ function ArticleCard({
           )}
         </div>
       ) : (
-        <div className="h-20 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+        <div className="relative h-20 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
           <Newspaper className="w-8 h-8 text-muted-foreground/40" />
+          {article.read && (
+            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-0.5 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span className="text-[10px] text-white font-medium">Read</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -298,7 +329,7 @@ function ArticleCard({
             <span />
           )}
           <span className="text-xs text-primary font-medium flex items-center gap-0.5 group-hover:gap-1.5 transition-all">
-            Read more <ExternalLink className="w-3 h-3" />
+            Read more <ArrowRight className="w-3 h-3" />
           </span>
         </div>
       </div>

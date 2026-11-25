@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, Mail, Lock } from "lucide-react"
+import { Loader2, Mail, Lock, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,7 @@ function SignInForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const redirect     = sanitizeRedirectPath(searchParams.get("redirect"))
+  const authError    = searchParams.get("error")
   const [loading, setLoading] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -72,6 +73,18 @@ function SignInForm() {
         <p className="text-muted-foreground mt-1">Sign in to your BountyTask account</p>
       </div>
 
+      {authError === "auth_failed" && (
+        <div
+          role="alert"
+          className="mb-6 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>
+            Verification or sign-in link failed or expired. Please sign in below or request a new link.
+          </p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
@@ -80,6 +93,7 @@ function SignInForm() {
             <Input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder="you@example.com"
               className="pl-9"
               {...register("email")}
@@ -100,6 +114,7 @@ function SignInForm() {
             <Input
               id="password"
               type="password"
+              autoComplete="current-password"
               placeholder="••••••••"
               className="pl-9"
               {...register("password")}

@@ -8,6 +8,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 type Target = "all" | "user"
 type Channel = "in_app" | "email"
@@ -25,15 +33,27 @@ export default function AdminNotificationsPage() {
   const [message, setMessage] = useState("")
   const [channels, setChannels] = useState<Channel[]>(["in_app"])
   const [sending, setSending] = useState(false)
+  const [confirmBroadcastOpen, setConfirmBroadcastOpen] = useState(false)
 
   useEffect(() => {
     if (target !== "user" || search.trim().length < 2) { setUserOptions([]); return }
     setSearching(true)
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}&limit=10`)
-      const json = await res.json()
-      setUserOptions(json.data ?? [])
-      setSearching(false)
+      try {
+        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}&limit=10`)
+        const json = await res.json()
+        if (!res.ok) {
+          toast.error(json.error ?? "Failed to search users")
+          setUserOptions([])
+          return
+        }
+        setUserOptions(json.data ?? [])
+      } catch {
+        toast.error("Failed to search users")
+        setUserOptions([])
+      } finally {
+        setSearching(false)
+      }
     }, 400)
     return () => clearTimeout(timer)
   }, [search, target])
@@ -42,31 +62,45 @@ export default function AdminNotificationsPage() {
     setChannels((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])
   }
 
-  async function handleSend() {
+  function handleSubmitClick() {
     if (!title.trim() || !message.trim()) { toast.error("Title and message are required"); return }
     if (channels.length === 0) { toast.error("Choose at least one delivery channel"); return }
     if (target === "user" && !selectedUserId) { toast.error("Select a user"); return }
 
-    setSending(true)
-    const res = await fetch("/api/admin/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        target,
-        userId: target === "user" ? selectedUserId : undefined,
-        title: title.trim(),
-        message: message.trim(),
-        channels,
-      }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      toast.error(json.error ?? "Failed to send notification")
-    } else {
-      toast.success(`Sent to ${json.data.recipientCount} recipient${json.data.recipientCount === 1 ? "" : "s"}`)
-      setTitle(""); setMessage(""); setSelectedUserId(""); setSearch("")
+    if (target === "all") {
+      setConfirmBroadcastOpen(true)
+      return
     }
-    setSending(false)
+    handleSend()
+  }
+
+  async function handleSend() {
+    setSending(true)
+    try {
+      const res = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target,
+          userId: target === "user" ? selectedUserId : undefined,
+          title: title.trim(),
+          message: message.trim(),
+          channels,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to send notification")
+      } else {
+        toast.success(`Sent to ${json.data.recipientCount} recipient${json.data.recipientCount === 1 ? "" : "s"}`)
+        setTitle(""); setMessage(""); setSelectedUserId(""); setSearch("")
+        setConfirmBroadcastOpen(false)
+      }
+    } catch {
+      toast.error("Failed to send notification")
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -192,10 +226,31 @@ export default function AdminNotificationsPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={handleSend} disabled={sending} className="w-full sm:w-auto">
+      <Button onClick={handleSubmitClick} disabled={sending} className="w-full sm:w-auto">
         {sending ? <Loader2 className="animate-spin" /> : <Send className="w-4 h-4" />}
         Send Notification
       </Button>
+
+      <Dialog open={confirmBroadcastOpen} onOpenChange={(o) => { if (!o && !sending) setConfirmBroadcastOpen(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Send broadcast to all users?</DialogTitle>
+            <DialogDescription>
+              This will send &ldquo;{title.trim()}&rdquo; to every active account via{" "}
+              {channels.map((c) => (c === "in_app" ? "in-platform notification" : "email")).join(" and ")}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={sending} onClick={() => setConfirmBroadcastOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={sending} onClick={handleSend}>
+              {sending ? <Loader2 className="animate-spin" /> : <Send className="w-4 h-4" />}
+              Confirm &amp; Broadcast
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

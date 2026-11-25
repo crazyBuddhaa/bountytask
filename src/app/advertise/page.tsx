@@ -1,7 +1,7 @@
 "use client"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Loader2, Megaphone, Mail, CheckCircle2 } from "lucide-react"
+import { Loader2, Megaphone, Mail, CheckCircle2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
@@ -52,28 +52,43 @@ function AdvertisePageInner() {
   const router = useRouter()
   const [settings, setSettings] = useState<AdvertiserSettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
   const [form, setForm] = useState(empty)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
-  const [pendingPayment, setPendingPayment] = useState<{ submissionId: string; feeAmount: number } | null>(null)
+  const [pendingPayment, setPendingPayment] = useState<{ submissionId: string } | null>(null)
   const [paying, setPaying] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const handledReturn = useRef(false)
 
-  useEffect(() => {
-    fetch("/api/advertiser/settings")
-      .then((r) => r.json())
-      .then(({ data }) => setSettings(data))
-      .finally(() => setLoading(false))
+  const loadSettings = useCallback(async () => {
+    setLoading(true)
+    setSettingsError(null)
+    try {
+      const res = await fetch("/api/advertiser/settings")
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? "Failed to load advertiser settings.")
+      }
+      setSettings(json.data)
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Could not load advertiser settings. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   // Paystack redirects back here with `?submission_id=...&reference=...` (or
   // `trxref`) after checkout — this page is public/unauthenticated, so
   // unlike dashboard/verify there's no session to recover the in-progress
   // submission from; the round-trip query params are the only state that
   // survives the redirect. Confirm the payment server-side, then either show
-  // the success screen or let the user retry with the fee amount we already
-  // have from settings.
+  // the success screen or let the user retry (reading feeAmount from settings
+  // at render time so there is no race with settings loading).
   useEffect(() => {
     if (handledReturn.current) return
     const submissionId = searchParams.get("submission_id")
@@ -91,16 +106,20 @@ function AdvertisePageInner() {
       .then((json) => {
         if (json.error) {
           toast.error(json.error)
-          if (settings) setPendingPayment({ submissionId, feeAmount: settings.submission_fee_kobo })
+          setPendingPayment({ submissionId })
           return
         }
         setDone(true)
+      })
+      .catch(() => {
+        toast.error("Could not verify your payment. Please try again.")
+        setPendingPayment({ submissionId })
       })
       .finally(() => {
         setConfirming(false)
         router.replace("/advertise")
       })
-  }, [searchParams, settings, router])
+  }, [searchParams, router])
 
   // Watchdog: a redirect can still leave `paying` stuck true if the fetch to
   // our own initialize endpoint hangs (e.g. flaky mobile network) before the
@@ -117,34 +136,42 @@ function AdvertisePageInner() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
-    const res = await fetch("/api/advertiser/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        company_name: form.company_name,
-        contact_name: form.contact_name || null,
-        contact_email: form.contact_email,
-        contact_phone: form.contact_phone || null,
-        task_title: form.task_title,
-        description: form.description,
-        instructions: form.instructions || null,
-        task_type: form.task_type,
-        proposed_reward_kobo: Math.round(parseFloat(form.proposed_reward_naira || "0") * 100),
-        desired_completions: form.desired_completions ? parseInt(form.desired_completions) : null,
-        budget_kobo: Math.round(parseFloat(form.budget_naira || "0") * 100),
-        cost_type: form.cost_type,
-        proof_requirements: form.proof_requirements || null,
-        verification_url: form.verification_url || null,
-      }),
-    })
-    const json = await res.json()
-    setSubmitting(false)
-    if (!res.ok) { toast.error(json.error); return }
+    try {
+      const res = await fetch("/api/advertiser/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: form.company_name,
+          contact_name: form.contact_name || null,
+          contact_email: form.contact_email,
+          contact_phone: form.contact_phone || null,
+          task_title: form.task_title,
+          description: form.description,
+          instructions: form.instructions || null,
+          task_type: form.task_type,
+          proposed_reward_kobo: Math.round(parseFloat(form.proposed_reward_naira || "0") * 100),
+          desired_completions: form.desired_completions ? parseInt(form.desired_completions, 10) : null,
+          budget_kobo: Math.round(parseFloat(form.budget_naira || "0") * 100),
+          cost_type: form.cost_type,
+          proof_requirements: form.proof_requirements || null,
+          verification_url: form.verification_url || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? "Could not submit your campaign. Please try again.")
+        return
+      }
 
-    if (json.data.requires_payment) {
-      setPendingPayment({ submissionId: json.data.submission.id, feeAmount: json.data.fee_amount })
-    } else {
-      setDone(true)
+      if (json.data?.requires_payment) {
+        setPendingPayment({ submissionId: json.data.submission.id })
+      } else {
+        setDone(true)
+      }
+    } catch {
+      toast.error("Network error. Please check your connection and try again.")
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -155,18 +182,25 @@ function AdvertisePageInner() {
   async function handlePaystackPayment() {
     if (!pendingPayment) return
     setPaying(true)
-    const res = await fetch("/api/advertiser/paystack/initialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ submission_id: pendingPayment.submissionId }),
-    })
-    const json = await res.json()
-    if (json.error || !json.data?.authorization_url) {
-      setPaying(false)
-      toast.error(json.error ?? "Could not start payment. Try again.")
-      return
+    let redirected = false
+    try {
+      const res = await fetch("/api/advertiser/paystack/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: pendingPayment.submissionId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error || !json.data?.authorization_url) {
+        toast.error(json.error ?? "Could not start payment. Try again.")
+        return
+      }
+      redirected = true
+      window.location.href = json.data.authorization_url
+    } catch {
+      toast.error("Network error while starting payment. Please try again.")
+    } finally {
+      if (!redirected) setPaying(false)
     }
-    window.location.href = json.data.authorization_url
   }
 
   const minBudgetNaira = settings ? Math.round(settings.min_budget_kobo / 100) : 0
@@ -186,18 +220,11 @@ function AdvertisePageInner() {
           </p>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-16"><Loader2 className="animate-spin text-muted-foreground w-6 h-6" /></div>
-        ) : !settings?.submissions_enabled ? (
+        {confirming ? (
           <Card>
-            <CardContent className="p-8 text-center space-y-3">
-              <p className="font-medium">We're not accepting new advertiser submissions right now.</p>
-              {settings?.contact_email && (
-                <a href={`mailto:${settings.contact_email}`}
-                  className="inline-flex items-center gap-2 text-primary underline underline-offset-2">
-                  <Mail className="w-4 h-4" /> {settings.contact_email}
-                </a>
-              )}
+            <CardContent className="p-8 text-center space-y-2">
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
+              <p className="font-medium">Confirming your payment…</p>
             </CardContent>
           </Card>
         ) : done ? (
@@ -210,11 +237,31 @@ function AdvertisePageInner() {
               </p>
             </CardContent>
           </Card>
-        ) : confirming ? (
+        ) : loading ? (
+          <div className="flex justify-center py-16"><Loader2 className="animate-spin text-muted-foreground w-6 h-6" /></div>
+        ) : settingsError ? (
           <Card>
-            <CardContent className="p-8 text-center space-y-2">
-              <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
-              <p className="font-medium">Confirming your payment…</p>
+            <CardContent className="p-8 text-center space-y-4">
+              <AlertCircle className="w-10 h-10 mx-auto text-destructive" />
+              <div className="space-y-1">
+                <p className="font-medium">Unable to load advertiser settings</p>
+                <p className="text-sm text-muted-foreground">{settingsError}</p>
+              </div>
+              <Button variant="outline" onClick={loadSettings}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : !settings?.submissions_enabled ? (
+          <Card>
+            <CardContent className="p-8 text-center space-y-3">
+              <p className="font-medium">We&apos;re not accepting new advertiser submissions right now.</p>
+              {settings?.contact_email && (
+                <a href={`mailto:${settings.contact_email}`}
+                  className="inline-flex items-center gap-2 text-primary underline underline-offset-2">
+                  <Mail className="w-4 h-4" /> {settings.contact_email}
+                </a>
+              )}
             </CardContent>
           </Card>
         ) : pendingPayment ? (
@@ -265,14 +312,14 @@ function AdvertisePageInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Submit your task</CardTitle>
-                <CardDescription>We'll review and get back to you before anything goes live.</CardDescription>
+                <CardDescription>We&apos;ll review and get back to you before anything goes live.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="company_name">Company Name</Label>
-                      <Input id="company_name" required value={form.company_name}
+                      <Input id="company_name" required minLength={2} maxLength={120} value={form.company_name}
                         onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
@@ -281,7 +328,7 @@ function AdvertisePageInner() {
                         onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="contact_email">Contact Email</Label>
                       <Input id="contact_email" type="email" required value={form.contact_email}
@@ -296,12 +343,12 @@ function AdvertisePageInner() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="task_title">Task Title</Label>
-                    <Input id="task_title" required minLength={5} value={form.task_title}
+                    <Input id="task_title" required minLength={5} maxLength={120} value={form.task_title}
                       onChange={e => setForm(f => ({ ...f, task_title: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" required rows={3} value={form.description}
+                    <Textarea id="description" required minLength={10} rows={3} value={form.description}
                       onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
@@ -320,11 +367,11 @@ function AdvertisePageInner() {
                       onChange={e => setForm(f => ({ ...f, proof_requirements: e.target.value }))} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label>Task Type</Label>
+                      <Label htmlFor="task_type">Task Type</Label>
                       <Select value={form.task_type} onValueChange={(v: "verified" | "unverified") => setForm(f => ({ ...f, task_type: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="task_type"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="verified">Verified (proof reviewed by us)</SelectItem>
                           <SelectItem value="unverified">Instant (no proof required)</SelectItem>
@@ -332,9 +379,9 @@ function AdvertisePageInner() {
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Billing Type</Label>
+                      <Label htmlFor="cost_type">Billing Type</Label>
                       <Select value={form.cost_type} onValueChange={(v: "flat" | "cpa") => setForm(f => ({ ...f, cost_type: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="cost_type"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="flat">Flat budget</SelectItem>
                           <SelectItem value="cpa">Pay per completion (CPA)</SelectItem>
@@ -343,7 +390,7 @@ function AdvertisePageInner() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="proposed_reward">Reward / Completion (₦)</Label>
                       <Input id="proposed_reward" type="number" min={1} step="0.01" required value={form.proposed_reward_naira}

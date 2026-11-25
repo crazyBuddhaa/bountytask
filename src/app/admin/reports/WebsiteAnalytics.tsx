@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { Users, UserCheck, Clock, Activity } from "lucide-react"
+import { toast } from "sonner"
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
@@ -50,10 +51,24 @@ export function WebsiteAnalytics({ period }: { period: Period }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let active = true
     setLoading(true)
     fetch(`/api/admin/analytics?period=${period}`)
-      .then(r => r.json())
-      .then(j => { setData(j.data); setLoading(false) })
+      .then(async (r) => {
+        const j = await r.json()
+        if (!r.ok) throw new Error(j.error ?? "Failed to load website analytics")
+        return j
+      })
+      .then((j) => {
+        if (active) setData(j.data ?? null)
+      })
+      .catch((err) => {
+        if (active) toast.error(err instanceof Error ? err.message : "Failed to load website analytics")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
   }, [period])
 
   const chartData = data ? data.daily_visitors.map((v, i) => ({

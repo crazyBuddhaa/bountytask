@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
 
-export const metadata = { title: "FAQ — BountyTask", description: "Frequently asked questions about BountyTask." }
+export const metadata = { title: "FAQ", description: "Frequently asked questions about BountyTask." }
 
 const faqs = [
   {
@@ -33,11 +33,11 @@ const faqs = [
   },
   {
     q: "Can I complete the same task twice?",
-    a: "No. Each task can only be completed once per user. Attempting to submit the same task twice will result in a 409 error. Repeated fraud attempts may lead to account suspension.",
+    a: "No. Each task can only be completed once per user. Attempting to submit the same task twice is not permitted and will be blocked. Repeated fraud attempts may lead to account suspension.",
   },
   {
     q: "How does the referral program work?",
-    a: "Share your unique referral link or code with friends. When they sign up and complete their first task, you earn ₦500 and they receive a ₦200 signup bonus — both automatically credited.",
+    a: "Share your unique referral link or code with friends. When they sign up, complete at least 1 approved task, and complete account verification (when enabled), you earn ₦500 and they receive a ₦200 signup bonus — both automatically credited.",
   },
   {
     q: "What happens if my task submission is rejected?",

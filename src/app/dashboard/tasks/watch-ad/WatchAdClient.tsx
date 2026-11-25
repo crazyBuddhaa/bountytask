@@ -11,7 +11,8 @@
  * The token is signed server-side with a 10-min TTL — prevents replay attacks
  * and ensures credits only happen after real ad completion events.
  */
-import { useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import Script from "next/script"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export default function WatchAdClient({ initialCap, rewardKobo }: Props) {
+  const router = useRouter()
   const [phase, setPhase]         = useState<Phase>("idle")
   const [errorMsg, setErrorMsg]   = useState("")
   const [cap, setCap]             = useState(initialCap)
@@ -44,6 +46,19 @@ export default function WatchAdClient({ initialCap, rewardKobo }: Props) {
   const adContainerRef = useRef<HTMLDivElement>(null)
   const contentVideoRef = useRef<HTMLVideoElement>(null)
   const imaReady = useRef(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adsManagerRef = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adsLoaderRef = useRef<any>(null)
+
+  useEffect(() => {
+    return () => {
+      try { adsManagerRef.current?.destroy() } catch { /* ignore */ }
+      try { adsLoaderRef.current?.destroy() } catch { /* ignore */ }
+      adsManagerRef.current = null
+      adsLoaderRef.current = null
+    }
+  }, [])
 
   const setError = (msg: string) => { setPhase("error"); setErrorMsg(msg) }
 
@@ -55,56 +70,79 @@ export default function WatchAdClient({ initialCap, rewardKobo }: Props) {
     setErrorMsg("")
 
     // 1. Get one-time token + ad tag URL from our server
-    const startRes = await fetch("/api/ad-tasks/ima/start", { method: "POST" })
-    const startJson = await startRes.json()
+    let token: string
+    let adTagUrl: string
+    try {
+      const startRes = await fetch("/api/ad-tasks/ima/start", { method: "POST" })
+      const startJson = await startRes.json()
 
-    if (!startRes.ok) {
-      setError(startJson.error ?? "Could not start ad session. Try again.")
+      if (!startRes.ok) {
+        setError(startJson.error ?? "Could not start ad session. Try again.")
+        return
+      }
+      token = startJson.token
+      adTagUrl = startJson.adTagUrl
+    } catch {
+      setError("Network error while preparing your ad. Please check your connection and try again.")
       return
     }
-
-    const { token, adTagUrl } = startJson as { token: string; adTagUrl: string }
 
     setPhase("loading-ad")
 
     try {
+      // Destroy any previous IMA instances
+      try { adsManagerRef.current?.destroy() } catch { /* ignore */ }
+      try { adsLoaderRef.current?.destroy() } catch { /* ignore */ }
+      adsManagerRef.current = null
+      adsLoaderRef.current = null
+
       // 2. Initialise IMA
       const container = adContainerRef.current!
       const content   = contentVideoRef.current!
+      const width  = container.clientWidth  || 640
+      const height = container.clientHeight || 360
 
       const adDisplayContainer = new google.ima.AdDisplayContainer(container, content)
       adDisplayContainer.initialize()
 
       const adsLoader = new google.ima.AdsLoader(adDisplayContainer)
+      adsLoaderRef.current = adsLoader
 
       adsLoader.addEventListener(
         google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (event: any) => {
           const adsManager = event.getAdsManager(content)
+          adsManagerRef.current = adsManager
 
           adsManager.addEventListener(
             google.ima.AdEvent.Type.ALL_ADS_COMPLETED,
             async () => {
               setPhase("crediting")
               adsManager.destroy()
+              adsManagerRef.current = null
 
               // 3. Credit the user server-side with the token
-              const completeRes = await fetch("/api/ad-tasks/ima/complete", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ token }),
-              })
-              const completeJson = await completeRes.json()
+              try {
+                const completeRes = await fetch("/api/ad-tasks/ima/complete", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ token }),
+                })
+                const completeJson = await completeRes.json()
 
-              if (!completeRes.ok) {
-                setError(completeJson.error ?? "Ad completed but could not credit. Please contact support.")
-                return
+                if (!completeRes.ok) {
+                  setError(completeJson.error ?? "Ad completed but could not credit. Please contact support.")
+                  return
+                }
+
+                setCreditedKobo(completeJson.rewardKobo ?? rewardKobo)
+                setCap((prev) => ({ ...prev, used: prev.used + 1 }))
+                setPhase("done")
+                router.refresh()
+              } catch {
+                setError("Network error while crediting your reward. Please check your balance or try again.")
               }
-
-              setCreditedKobo(completeJson.rewardKobo ?? rewardKobo)
-              setCap((prev) => ({ ...prev, used: prev.used + 1 }))
-              setPhase("done")
             }
           )
 
@@ -113,12 +151,15 @@ export default function WatchAdClient({ initialCap, rewardKobo }: Props) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (adErrorEvent: any) => {
               adsManager.destroy()
+              adsManagerRef.current = null
               setError(`Ad error: ${adErrorEvent.getError().getMessage()}`)
             }
           )
 
           try {
-            adsManager.init(640, 360, google.ima.ViewMode.NORMAL)
+            const slotWidth  = adContainerRef.current?.clientWidth  || width
+            const slotHeight = adContainerRef.current?.clientHeight || height
+            adsManager.init(slotWidth, slotHeight, google.ima.ViewMode.NORMAL)
             adsManager.start()
             setPhase("playing")
           } catch {
@@ -137,15 +178,15 @@ export default function WatchAdClient({ initialCap, rewardKobo }: Props) {
 
       const adsRequest = new google.ima.AdsRequest()
       adsRequest.adTagUrl = adTagUrl
-      adsRequest.linearAdSlotWidth  = 640
-      adsRequest.linearAdSlotHeight = 360
-      adsRequest.nonLinearAdSlotWidth  = 640
-      adsRequest.nonLinearAdSlotHeight = 150
+      adsRequest.linearAdSlotWidth  = width
+      adsRequest.linearAdSlotHeight = height
+      adsRequest.nonLinearAdSlotWidth  = width
+      adsRequest.nonLinearAdSlotHeight = Math.round(height / 3) || 150
       adsLoader.requestAds(adsRequest)
     } catch (err) {
       setError(`Unexpected error: ${err instanceof Error ? err.message : "Unknown"}`)
     }
-  }, [cap, rewardKobo])
+  }, [cap, rewardKobo, router])
 
   const capHit = cap.used >= cap.cap
 

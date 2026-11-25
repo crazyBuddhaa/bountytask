@@ -1,10 +1,10 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { Bell, CheckCheck, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Bell, CheckCheck, Loader2, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateTime } from "@/lib/utils"
 import type { Notification } from "@/types"
@@ -19,8 +19,10 @@ const typeIcons: Record<string, string> = {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading]             = useState(true)
+  const [fetchError, setFetchError]       = useState<string | null>(null)
   const [markingAll, setMarkingAll]       = useState(false)
   const [page, setPage]                   = useState(1)
   const [total, setTotal]                 = useState(0)
@@ -28,36 +30,62 @@ export default function NotificationsPage() {
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true)
-    const res  = await fetch(`/api/notifications?page=${page}&limit=${limit}`)
-    const json = await res.json()
-    setNotifications(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    setFetchError(null)
+    try {
+      const res  = await fetch(`/api/notifications?page=${page}&limit=${limit}`)
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error ?? "Could not load notifications. Please try again.")
+      }
+      setNotifications(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load notifications. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [page])
 
   useEffect(() => { fetchNotifications() }, [fetchNotifications])
 
   async function markRead(ids: string[]) {
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    })
-    setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n))
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) {
+        toast.error("Failed to mark notification as read")
+        return
+      }
+      setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n))
+      router.refresh()
+    } catch {
+      toast.error("Network error. Please try again.")
+    }
   }
 
   async function markAllRead() {
     setMarkingAll(true)
-    const res = await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ all: true }),
-    })
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      })
+      if (!res.ok) {
+        toast.error("Failed to mark all notifications as read")
+        return
+      }
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       toast.success("All notifications marked as read")
+      router.refresh()
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setMarkingAll(false)
     }
-    setMarkingAll(false)
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -83,19 +111,37 @@ export default function NotificationsPage() {
         <div className="space-y-3">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
         </div>
+      ) : fetchError ? (
+        <Card className="border-destructive/30">
+          <CardContent className="p-8 text-center space-y-3">
+            <AlertCircle className="w-8 h-8 mx-auto text-destructive" />
+            <p className="text-sm font-medium text-destructive">{fetchError}</p>
+            <Button variant="outline" size="sm" onClick={fetchNotifications} className="gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : notifications.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <Bell className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No notifications yet.</p>
-          <p className="text-sm mt-1">We'll let you know when tasks are reviewed or bonuses land.</p>
+          <p className="text-sm mt-1">We&apos;ll let you know when tasks are reviewed or bonuses land.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {notifications.map(n => (
             <Card
               key={n.id}
-              className={`cursor-pointer transition-all duration-150 hover:shadow-sm ${!n.read ? "border-primary/30 bg-primary/[0.02]" : ""}`}
+              role="button"
+              tabIndex={0}
+              className={`cursor-pointer transition-all duration-150 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${!n.read ? "border-primary/30 bg-primary/[0.02]" : ""}`}
               onClick={() => { if (!n.read) markRead([n.id]) }}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && !n.read) {
+                  e.preventDefault()
+                  markRead([n.id])
+                }
+              }}
             >
               <CardContent className="p-4 flex items-start gap-4">
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-xl shrink-0">

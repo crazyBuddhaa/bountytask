@@ -19,11 +19,12 @@ const MAX_HTML_BYTES = 2 * 1024 * 1024 // 2 MB
 // Lightweight article-body extractor
 // ---------------------------------------------------------------------------
 
-/** Strip HTML tags, decode common entities, collapse whitespace. */
+/** Strip HTML tags, decode common entities, preserve paragraph breaks. */
 function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<\/(?:p|div|h[1-6]|li)>|<br\s*\/?>/gi, "\n\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&amp;/g,  "&")
     .replace(/&lt;/g,   "<")
@@ -31,7 +32,10 @@ function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g,  "'")
     .replace(/&nbsp;/g, " ")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
 }
 

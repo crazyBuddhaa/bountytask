@@ -1,7 +1,7 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Camera, User, ShieldCheck, Smartphone, Award } from "lucide-react"
+import { Loader2, Camera, User, ShieldCheck, Smartphone, Award, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,6 +31,7 @@ export default function ProfilePage() {
   const [profile, setProfile]     = useState<UserProfile | null>(null)
   const [currentTier, setCurrentTier] = useState<Tier | null>(null)
   const [loading, setLoading]     = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -39,20 +40,35 @@ export default function ProfilePage() {
   const [username, setUsername]   = useState("")
   const [phone, setPhone]         = useState("")
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/profile").then(r => r.json()),
-      fetch("/api/tiers").then(r => r.json()),
-    ]).then(([profileJson, tiersJson]) => {
+  const fetchProfile = useCallback(async () => {
+    setLoading(true)
+    setFetchError(null)
+    try {
+      const [profileRes, tiersRes] = await Promise.all([
+        fetch("/api/profile"),
+        fetch("/api/tiers"),
+      ])
+      if (!profileRes.ok) {
+        throw new Error("Could not load profile. Please try again.")
+      }
+      const [profileJson, tiersJson] = await Promise.all([
+        profileRes.json(),
+        tiersRes.ok ? tiersRes.json() : Promise.resolve({ data: null }),
+      ])
       const p = profileJson.data as UserProfile & { balance: number }
       setProfile(p)
       setFullName(p?.full_name ?? "")
       setUsername(p?.username ?? "")
       setPhone(p?.phone ?? "")
       setCurrentTier(tiersJson.data?.currentTier ?? null)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load profile. Please try again.")
+    } finally {
       setLoading(false)
-    })
+    }
   }, [])
+
+  useEffect(() => { fetchProfile() }, [fetchProfile])
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -67,12 +83,12 @@ export default function ProfilePage() {
         body: JSON.stringify({ avatar_url: url }),
       })
       const json = await res.json()
-      if (!res.ok) { toast.error(json.error); return }
+      if (!res.ok) { toast.error(json.error ?? "Failed to update avatar"); return }
       setProfile(prev => prev ? { ...prev, avatar_url: url } : prev)
       toast.success("Avatar updated!")
       router.refresh()
-    } catch {
-      toast.error("Upload failed. Please try again.")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed. Please try again.")
     } finally {
       setUploading(false)
     }
@@ -80,17 +96,22 @@ export default function ProfilePage() {
 
   async function handleSave() {
     setSaving(true)
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ full_name: fullName, username: username || null, phone: phone || null }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setSaving(false); return }
-    setProfile(prev => prev ? { ...prev, ...json.data } : prev)
-    toast.success("Profile saved!")
-    setSaving(false)
-    router.refresh()
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: fullName, username: username || null, phone: phone || null }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error ?? "Failed to save profile"); return }
+      setProfile(prev => prev ? { ...prev, ...json.data } : prev)
+      toast.success("Profile saved!")
+      router.refresh()
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const initials = profile?.full_name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() ?? "?"
@@ -101,6 +122,18 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-bold">Profile</h1>
         <p className="text-muted-foreground text-sm mt-1">Manage your public profile and account details.</p>
       </div>
+
+      {fetchError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchProfile} className="shrink-0 gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Avatar section */}
       <Card>
@@ -114,6 +147,8 @@ export default function ProfilePage() {
               <AvatarFallback className="text-2xl bounty-gradient text-white">{initials}</AvatarFallback>
             </Avatar>
             <button
+              type="button"
+              aria-label="Upload profile photo"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
               className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
@@ -122,7 +157,7 @@ export default function ProfilePage() {
                 ? <Loader2 className="w-5 h-5 text-white animate-spin" />
                 : <Camera className="w-5 h-5 text-white" />}
             </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleAvatarChange} />
           </div>
           <div>
             <p className="font-medium">{loading ? <Skeleton className="h-5 w-32" /> : profile?.full_name}</p>
@@ -176,6 +211,7 @@ export default function ProfilePage() {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
                     <Input id="username" className="pl-7" value={username} onChange={e => setUsername(e.target.value)} placeholder="yourhandle" />
                   </div>
+                  <p className="text-xs text-muted-foreground">Use lowercase letters, numbers, underscores.</p>
                 </div>
               </div>
               <div className="space-y-1.5">

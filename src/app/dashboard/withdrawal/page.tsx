@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { Plus, Trash2, Star, Banknote, Clock, CheckCircle2, XCircle, Loader2, CreditCard, ShieldAlert } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, Trash2, Star, Banknote, Clock, CheckCircle2, XCircle, Loader2, CreditCard, ShieldAlert, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,13 +11,15 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import type { WithdrawalAccount, Withdrawal } from "@/types"
 
 interface Bank { code: string; name: string }
+
+const WD_LIMIT = 10
 
 const statusIcons = {
   pending:      <Clock className="w-3.5 h-3.5 text-amber-500" />,
@@ -27,14 +30,20 @@ const statusIcons = {
 }
 
 export default function WithdrawalPage() {
+  const router = useRouter()
   const [balance, setBalance]         = useState<number | null>(null)
   const [accounts, setAccounts]       = useState<WithdrawalAccount[]>([])
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
+  const [wdPage, setWdPage]           = useState(1)
+  const [wdTotal, setWdTotal]         = useState(0)
   const [banks, setBanks]             = useState<Bank[]>([])
   const [loading, setLoading]         = useState(true)
+  const [fetchError, setFetchError]   = useState<string | null>(null)
   const [needsVerification, setNeedsVerification] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showWithdrawForm, setShowWithdrawForm] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState<WithdrawalAccount | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   // Add-account form
   const [bankCode, setBankCode]         = useState("")
@@ -53,83 +62,127 @@ export default function WithdrawalPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [balRes, accRes, wdRes, verRes] = await Promise.all([
-      fetch("/api/profile"),
-      fetch("/api/withdrawals/accounts"),
-      fetch("/api/withdrawals?limit=10"),
-      fetch("/api/settings/verification"),
-    ])
-    const [bal, acc, wd, ver] = await Promise.all([balRes.json(), accRes.json(), wdRes.json(), verRes.json()])
-    setBalance(bal.data?.balance ?? 0)
-    setAccounts(acc.data ?? [])
-    setWithdrawals(wd.data ?? [])
-    setNeedsVerification(
-      (!!ver.data?.fee_enabled && !bal.data?.kyc_verified) ||
-      (!!ver.data?.phone_verification_enabled && !bal.data?.phone_verified)
-    )
-    if (ver.data?.min_withdrawal_kobo) setMinKobo(ver.data.min_withdrawal_kobo)
-    setLoading(false)
-  }, [])
+    setFetchError(null)
+    try {
+      const [balRes, accRes, wdRes, verRes] = await Promise.all([
+        fetch("/api/profile"),
+        fetch("/api/withdrawals/accounts"),
+        fetch(`/api/withdrawals?page=${wdPage}&limit=${WD_LIMIT}`),
+        fetch("/api/settings/verification"),
+      ])
+      if (!balRes.ok || !accRes.ok || !wdRes.ok || !verRes.ok) {
+        throw new Error("Could not load withdrawal details. Please try again.")
+      }
+      const [bal, acc, wd, ver] = await Promise.all([balRes.json(), accRes.json(), wdRes.json(), verRes.json()])
+      setBalance(bal.data?.balance ?? 0)
+      setAccounts(acc.data ?? [])
+      setWithdrawals(wd.data ?? [])
+      setWdTotal(wd.total ?? (wd.data?.length ?? 0))
+      setNeedsVerification(
+        (!!ver.data?.fee_enabled && !bal.data?.kyc_verified) ||
+        (!!ver.data?.phone_verification_enabled && !bal.data?.phone_verified)
+      )
+      if (ver.data?.min_withdrawal_kobo) setMinKobo(ver.data.min_withdrawal_kobo)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load withdrawal details. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }, [wdPage])
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => {
     fetch("/api/bank-verification/banks")
       .then(r => r.json())
       .then(j => setBanks(j.data ?? []))
+      .catch(() => { /* banks list retryable on reload */ })
   }, [])
 
   // Auto-resolve account name when both fields are complete
   useEffect(() => {
     if (accountNumber.length !== 10 || !bankCode) { setResolvedName(""); return }
-    let cancelled = false
+    const controller = new AbortController()
     const timer = setTimeout(async () => {
       setResolving(true)
-      const res  = await fetch("/api/bank-verification/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_number: accountNumber, bank_code: bankCode }),
-      })
-      const json = await res.json()
-      if (!cancelled) {
-        setResolvedName(res.ok ? json.data?.account_name ?? "" : "")
-        if (!res.ok) toast.error(json.error ?? "Could not verify account")
-        setResolving(false)
+      try {
+        const res  = await fetch("/api/bank-verification/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_number: accountNumber, bank_code: bankCode }),
+          signal: controller.signal,
+        })
+        const json = await res.json()
+        if (!controller.signal.aborted) {
+          setResolvedName(res.ok ? json.data?.account_name ?? "" : "")
+          if (!res.ok) toast.error(json.error ?? "Could not verify account")
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return
+        if (!controller.signal.aborted) {
+          setResolvedName("")
+          toast.error("Could not verify account. Please try again.")
+        }
+      } finally {
+        if (!controller.signal.aborted) setResolving(false)
       }
     }, 600)
-    return () => { cancelled = true; clearTimeout(timer) }
+    return () => { controller.abort(); clearTimeout(timer) }
   }, [accountNumber, bankCode])
+
+  function openWithdrawModal() {
+    const defaultAcc = accounts.find(a => a.is_default) ?? accounts[0]
+    if (defaultAcc) setSelectedAccountId(defaultAcc.id)
+    setShowWithdrawForm(true)
+  }
 
   async function handleAddAccount() {
     if (!resolvedName) return
     setAddingAccount(true)
-    const bank = banks.find(b => b.code === bankCode)
-    const res  = await fetch("/api/withdrawals/accounts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bank_code: bankCode, bank_name: bank?.name ?? "", account_number: accountNumber }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setAddingAccount(false); return }
-    toast.success("Bank account added successfully!")
-    setAccounts(prev => [...prev, json.data])
-    setShowAddAccount(false)
-    setBankCode(""); setAccountNumber(""); setResolvedName("")
-    setAddingAccount(false)
+    try {
+      const bank = banks.find(b => b.code === bankCode)
+      const res  = await fetch("/api/withdrawals/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bank_code: bankCode, bank_name: bank?.name ?? "", account_number: accountNumber }),
+      })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error ?? "Could not add account"); return }
+      toast.success("Bank account added successfully!")
+      setAccounts(prev => [...prev, json.data])
+      setShowAddAccount(false)
+      setBankCode(""); setAccountNumber(""); setResolvedName("")
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setAddingAccount(false)
+    }
   }
 
   async function handleDeleteAccount(id: string) {
-    const res  = await fetch(`/api/withdrawals/accounts/${id}`, { method: "DELETE" })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); return }
-    toast.success("Account removed")
-    setAccounts(prev => prev.filter(a => a.id !== id))
+    setDeletingAccount(true)
+    try {
+      const res  = await fetch(`/api/withdrawals/accounts/${id}`, { method: "DELETE" })
+      const json = await res.json()
+      if (!res.ok) { toast.error(json.error ?? "Failed to remove account"); return }
+      toast.success("Account removed")
+      setAccounts(prev => prev.filter(a => a.id !== id))
+      setAccountToDelete(null)
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setDeletingAccount(false)
+    }
   }
 
   async function handleSetDefault(id: string) {
-    const res = await fetch(`/api/withdrawals/accounts/${id}`, { method: "PATCH" })
-    if (!res.ok) { toast.error("Failed to set default"); return }
-    setAccounts(prev => prev.map(a => ({ ...a, is_default: a.id === id })))
-    toast.success("Default account updated")
+    try {
+      const res = await fetch(`/api/withdrawals/accounts/${id}`, { method: "PATCH" })
+      if (!res.ok) { toast.error("Failed to set default"); return }
+      setAccounts(prev => prev.map(a => ({ ...a, is_default: a.id === id })))
+      toast.success("Default account updated")
+    } catch {
+      toast.error("Network error. Please try again.")
+    }
   }
 
   async function handleWithdraw() {
@@ -137,23 +190,33 @@ export default function WithdrawalPage() {
     if (isNaN(kobo) || kobo < MIN_NGN * 100) {
       toast.error(`Minimum withdrawal is ₦${MIN_NGN.toLocaleString()}`); return
     }
+    if (balance !== null && kobo > balance) {
+      toast.error("Amount exceeds your available balance"); return
+    }
     if (!selectedAccountId) { toast.error("Select a bank account"); return }
     setSubmittingWithdrawal(true)
-    const res  = await fetch("/api/withdrawals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_id: selectedAccountId, amount: kobo }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      if (json.code === "VERIFICATION_REQUIRED" || json.code === "PHONE_VERIFICATION_REQUIRED") setNeedsVerification(true)
-      toast.error(json.error); setSubmittingWithdrawal(false); return
+    try {
+      const res  = await fetch("/api/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: selectedAccountId, amount: kobo }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        if (json.code === "VERIFICATION_REQUIRED" || json.code === "PHONE_VERIFICATION_REQUIRED") setNeedsVerification(true)
+        toast.error(json.error ?? "Withdrawal request failed"); return
+      }
+      toast.success("Withdrawal request submitted! We'll process it within 1–2 business days.")
+      setShowWithdrawForm(false)
+      setAmount(""); setSelectedAccountId("")
+      if (wdPage !== 1) setWdPage(1)
+      else fetchAll()
+      router.refresh()
+    } catch {
+      toast.error("Network error. Please try again.")
+    } finally {
+      setSubmittingWithdrawal(false)
     }
-    toast.success("Withdrawal request submitted! We'll process it within 1–2 business days.")
-    setShowWithdrawForm(false)
-    setAmount(""); setSelectedAccountId("")
-    fetchAll()
-    setSubmittingWithdrawal(false)
   }
 
   return (
@@ -172,12 +235,24 @@ export default function WithdrawalPage() {
               <Link href="/dashboard/verify"><ShieldAlert className="w-4 h-4" /> Verify to Withdraw</Link>
             </Button>
           ) : (
-            <Button variant="gradient" size="sm" onClick={() => setShowWithdrawForm(true)} disabled={accounts.length === 0}>
+            <Button variant="gradient" size="sm" onClick={openWithdrawModal} disabled={accounts.length === 0}>
               <Banknote className="w-4 h-4" /> Withdraw
             </Button>
           )}
         </div>
       </div>
+
+      {fetchError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchAll} className="shrink-0 gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
+        </div>
+      )}
 
       {needsVerification && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 flex items-start gap-3 text-sm">
@@ -238,8 +313,13 @@ export default function WithdrawalPage() {
                       ? <Badge variant="success" className="text-[10px]"><Star className="w-2.5 h-2.5" />Default</Badge>
                       : <Button variant="ghost" size="sm" onClick={() => handleSetDefault(acc.id)} className="text-xs h-7">Set default</Button>
                     }
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteAccount(acc.id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete bank account"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => setAccountToDelete(acc)}
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -264,38 +344,83 @@ export default function WithdrawalPage() {
               <p className="text-sm">No withdrawals yet.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {withdrawals.map(w => (
-                  <TableRow key={w.id}>
-                    <TableCell className="font-bold">{formatCurrency(w.amount)}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {(w as Withdrawal & { account?: { bank_name: string; account_number: string } }).account?.bank_name} ····{(w as Withdrawal & { account?: { account_number: string } }).account?.account_number?.slice(-4)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-1 text-xs font-medium capitalize">
-                        {statusIcons[w.status as keyof typeof statusIcons]}
-                        {w.status.replace("_", " ")}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(w.created_at)}
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {withdrawals.map(w => (
+                    <TableRow key={w.id}>
+                      <TableCell className="font-bold">{formatCurrency(w.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {(w as Withdrawal & { account?: { bank_name: string; account_number: string } }).account?.bank_name} ····{(w as Withdrawal & { account?: { account_number: string } }).account?.account_number?.slice(-4)}
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1 text-xs font-medium capitalize">
+                          {statusIcons[w.status as keyof typeof statusIcons]}
+                          {w.status.replace("_", " ")}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(w.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {wdTotal > WD_LIMIT && (
+                <div className="flex items-center justify-center gap-2 p-4 border-t">
+                  <Button variant="outline" size="sm" disabled={wdPage === 1} onClick={() => setWdPage(p => p - 1)}>
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground px-2">
+                    Page {wdPage} of {Math.ceil(wdTotal / WD_LIMIT)}
+                  </span>
+                  <Button variant="outline" size="sm" disabled={wdPage * WD_LIMIT >= wdTotal} onClick={() => setWdPage(p => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
+
+      {/* Delete account confirmation dialog */}
+      <Dialog open={!!accountToDelete} onOpenChange={open => { if (!open) setAccountToDelete(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove Bank Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove{" "}
+              <span className="font-medium text-foreground">
+                {accountToDelete?.bank_name} · ****{accountToDelete?.account_number.slice(-4)}
+              </span>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setAccountToDelete(null)} disabled={deletingAccount} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => accountToDelete && handleDeleteAccount(accountToDelete.id)}
+              disabled={deletingAccount}
+              className="flex-1"
+            >
+              {deletingAccount && <Loader2 className="animate-spin" />}
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add account modal */}
       <Dialog open={showAddAccount} onOpenChange={setShowAddAccount}>

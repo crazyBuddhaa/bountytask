@@ -1,6 +1,6 @@
 "use client"
-import { useState, useEffect } from "react"
-import { Copy, Check, Users, Gift, Share2, Trophy, Sparkles, CheckSquare } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { Copy, Check, Users, Gift, Share2, Trophy, Sparkles, CheckSquare, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -42,7 +42,15 @@ export default function ReferralPage() {
   const [data, setData]             = useState<ReferralData | null>(null)
   const [tierStatus, setTierStatus] = useState<TierStatus | null>(null)
   const [loading, setLoading]       = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [copied, setCopied]         = useState<"code" | "url" | null>(null)
+  const copyTimeoutRef              = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   // Always build the referral URL from the browser's real origin so share
   // links point to the correct public domain, not an internal proxy hostname.
@@ -50,20 +58,39 @@ export default function ReferralPage() {
     ? `${window.location.origin}/register?ref=${data.referral_code}`
     : (data?.referral_url ?? "")
 
-  useEffect(() => {
-    fetch("/api/referrals")
-      .then(r => r.json())
-      .then(j => { setData(j.data); setLoading(false) })
-    fetch("/api/tiers")
-      .then(r => r.json())
-      .then(j => setTierStatus(j.data))
+  const fetchReferrals = useCallback(async () => {
+    setLoading(true)
+    setFetchError(null)
+    try {
+      const [refRes, tierRes] = await Promise.all([
+        fetch("/api/referrals"),
+        fetch("/api/tiers"),
+      ])
+      if (!refRes.ok || !tierRes.ok) {
+        throw new Error("Could not load referral data. Please try again.")
+      }
+      const [refJson, tierJson] = await Promise.all([refRes.json(), tierRes.json()])
+      setData(refJson.data)
+      setTierStatus(tierJson.data)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load referral data. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
+  useEffect(() => { fetchReferrals() }, [fetchReferrals])
+
   async function copy(value: string, type: "code" | "url") {
-    await navigator.clipboard.writeText(value)
-    setCopied(type)
-    toast.success(type === "code" ? "Referral code copied!" : "Referral link copied!")
-    setTimeout(() => setCopied(null), 2000)
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(type)
+      toast.success(type === "code" ? "Referral code copied!" : "Referral link copied!")
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => setCopied(null), 2000)
+    } catch {
+      toast.error("Could not copy to clipboard. Please copy it manually.")
+    }
   }
 
   const shareOnWhatsApp = () => {
@@ -85,6 +112,18 @@ export default function ReferralPage() {
           Your friend gets a <span className="font-semibold text-primary">{data ? formatCurrency(data.signup_bonus_kobo) : "₦200"}</span> signup bonus too.
         </p>
       </div>
+
+      {fetchError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchReferrals} className="shrink-0 gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -240,8 +279,13 @@ export default function ReferralPage() {
                 <div className="flex-1 font-mono text-2xl font-bold tracking-widest text-center py-3 px-4 rounded-lg bg-primary/5 border border-primary/20 text-primary">
                   {data?.referral_code}
                 </div>
-                <Button variant="outline" size="icon" className="h-14 w-14 shrink-0"
-                  onClick={() => copy(data?.referral_code ?? "", "code")}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Copy referral code"
+                  className="h-14 w-14 shrink-0"
+                  onClick={() => copy(data?.referral_code ?? "", "code")}
+                >
                   {copied === "code" ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>

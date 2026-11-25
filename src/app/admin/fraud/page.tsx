@@ -35,34 +35,52 @@ export default function AdminFraudPage() {
 
   const fetchFlags = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (severity && severity !== "all") params.set("severity", severity)
-    const res  = await fetch(`/api/admin/fraud?${params}`)
-    const json = await res.json()
-    setFlags(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (severity && severity !== "all") params.set("severity", severity)
+      const res  = await fetch(`/api/admin/fraud?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load fraud flags")
+        return
+      }
+      setFlags(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load fraud flags")
+    } finally {
+      setLoading(false)
+    }
   }, [page, severity])
 
   useEffect(() => { fetchFlags() }, [fetchFlags])
 
   async function handleResolve(id: string) {
     setResolving(id)
-    const res  = await fetch("/api/admin/fraud", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setResolving(null); return }
-    toast.success("Flag resolved")
-    setFlags(prev => prev.filter(f => f.id !== id))
-    setTotal(t => t - 1)
-    setResolving(null)
+    try {
+      const res  = await fetch("/api/admin/fraud", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to resolve flag")
+        return
+      }
+      toast.success("Flag resolved")
+      setFlags(prev => prev.filter(f => f.id !== id))
+      setTotal(t => t - 1)
+    } catch {
+      toast.error("Failed to resolve flag")
+    } finally {
+      setResolving(null)
+    }
   }
 
   const criticalCount = flags.filter(f => f.severity === "critical").length
   const highCount     = flags.filter(f => f.severity === "high").length
+  const isPaginated   = total > flags.length
 
   return (
     <div className="space-y-5">
@@ -79,7 +97,9 @@ export default function AdminFraudPage() {
               <CardContent className="p-4 flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 text-destructive" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Critical</p>
+                  <p className="text-xs text-muted-foreground">
+                    Critical{isPaginated ? " (on this page)" : ""}
+                  </p>
                   <p className="text-xl font-bold text-destructive">{criticalCount}</p>
                 </div>
               </CardContent>
@@ -90,7 +110,9 @@ export default function AdminFraudPage() {
               <CardContent className="p-4 flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 text-amber-600" />
                 <div>
-                  <p className="text-xs text-muted-foreground">High</p>
+                  <p className="text-xs text-muted-foreground">
+                    High{isPaginated ? " (on this page)" : ""}
+                  </p>
                   <p className="text-xl font-bold text-amber-600">{highCount}</p>
                 </div>
               </CardContent>

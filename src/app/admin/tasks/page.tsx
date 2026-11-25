@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { Plus, Pencil, Archive, Youtube, Share2 } from "lucide-react"
+import { Plus, Pencil, Archive, Youtube, Share2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Task, SocialPlatform, SocialAction } from "@/types"
@@ -135,6 +135,10 @@ const EDITABLE_TASK_FIELDS = [
 
 function margin(t: Task) {
   if (t.advertiser_cost_kobo == null) return null
+  if (t.cost_type === "flat") {
+    const completions = t.max_completions ?? t.current_completions
+    return t.advertiser_cost_kobo - t.reward_amount * completions
+  }
   return t.advertiser_cost_kobo - t.reward_amount
 }
 
@@ -152,36 +156,55 @@ export default function AdminTasksPage() {
   const [page, setPage]             = useState(1)
   const [total, setTotal]           = useState(0)
   const [editing, setEditing]       = useState<Partial<Task> | null>(null)
+  const [taskFormat, setTaskFormat] = useState<"standard" | "video" | "social">("standard")
   const [saving, setSaving]         = useState(false)
+  const [confirmArchiveTask, setConfirmArchiveTask] = useState<Task | null>(null)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
   const limit = 20
 
-  // Derived: what format is the task being edited?
-  const isVideo  = editing != null && editing.youtube_url !== null && editing.youtube_url !== undefined
-  const isSocial = editing != null && editing.social_platform != null
-  const taskFormat: "standard" | "video" | "social" =
-    isSocial ? "social" : isVideo ? "video" : "standard"
+  const isVideo  = taskFormat === "video"
+  const isSocial = taskFormat === "social"
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
-    const res  = await fetch(`/api/admin/tasks?${params}`)
-    const json = await res.json()
-    setTasks(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
+      const res  = await fetch(`/api/admin/tasks?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load tasks")
+        return
+      }
+      setTasks(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load tasks")
+    } finally {
+      setLoading(false)
+    }
   }, [page, statusFilter])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
   useEffect(() => {
+    let active = true
     fetch("/api/tasks?limit=100")
-      .then(r => r.json())
+      .then(async (r) => {
+        const j = await r.json()
+        if (!r.ok) throw new Error(j.error ?? "Failed to load categories")
+        return j
+      })
       .then(j => {
+        if (!active) return
         const cats = Array.from(
           new Map((j.data ?? []).map((t: Task) => [t.category_id, t.category])).values()
         ).filter(Boolean)
         setCategories(cats as { id: string; name: string }[])
       })
+      .catch(() => {
+        // Non-fatal: category dropdown simply remains optional
+      })
+    return () => { active = false }
   }, [])
 
   function toTaskPayload(t: Partial<Task>) {
@@ -195,6 +218,10 @@ export default function AdminTasksPage() {
   async function handleSave() {
     if (!editing) return
 
+    if (isVideo && !editing.youtube_url?.trim()) {
+      toast.error("YouTube URL is required for video tasks.")
+      return
+    }
     if (editing.youtube_url && !isYouTubeUrl(editing.youtube_url)) {
       toast.error("Please enter a valid YouTube URL (youtube.com/watch?v=... or youtu.be/...)")
       return
@@ -209,29 +236,50 @@ export default function AdminTasksPage() {
     }
 
     setSaving(true)
-    const isNew = !editing.id
-    const url    = isNew ? "/api/admin/tasks" : `/api/admin/tasks/${editing.id}`
-    const method = isNew ? "POST" : "PATCH"
-    const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(toTaskPayload(editing)) })
-    const json   = await res.json()
-    if (!res.ok) { toast.error(json.error); setSaving(false); return }
-    toast.success(isNew ? "Task created!" : "Task updated!")
-    setEditing(null)
-    fetchTasks()
-    setSaving(false)
+    try {
+      const isNew = !editing.id
+      const url    = isNew ? "/api/admin/tasks" : `/api/admin/tasks/${editing.id}`
+      const method = isNew ? "POST" : "PATCH"
+      const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(toTaskPayload(editing)) })
+      const json   = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to save task")
+        return
+      }
+      toast.success(isNew ? "Task created!" : "Task updated!")
+      setEditing(null)
+      fetchTasks()
+    } catch {
+      toast.error("Failed to save task")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleArchive(id: string) {
-    const res = await fetch(`/api/admin/tasks/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "archived" }),
-    })
-    if (!res.ok) { toast.error("Failed to archive task"); return }
-    toast.success("Task archived")
-    setTasks(prev => prev.filter(t => t.id !== id))
+    setArchivingId(id)
+    try {
+      const res = await fetch(`/api/admin/tasks/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "archived" }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to archive task")
+        return
+      }
+      toast.success("Task archived")
+      setConfirmArchiveTask(null)
+      fetchTasks()
+    } catch {
+      toast.error("Failed to archive task")
+    } finally {
+      setArchivingId(null)
+    }
   }
 
   function openNew() {
+    setTaskFormat("standard")
     setEditing({
       status: "draft", type: "unverified", reward_amount: 0,
       requires_proof: false, max_completions_per_user: 1,
@@ -242,8 +290,14 @@ export default function AdminTasksPage() {
     })
   }
 
+  function openEdit(t: Task) {
+    setTaskFormat(t.social_platform != null ? "social" : t.youtube_url != null ? "video" : "standard")
+    setEditing(t)
+  }
+
   /** Switch between Standard / YouTube / Social formats */
   function setFormat(fmt: "standard" | "video" | "social") {
+    setTaskFormat(fmt)
     if (fmt === "standard") {
       setEditing(prev => ({
         ...prev,
@@ -254,7 +308,7 @@ export default function AdminTasksPage() {
     } else if (fmt === "video") {
       setEditing(prev => ({
         ...prev,
-        youtube_url: "", type: "unverified", requires_proof: false, max_completions_per_user: 1,
+        youtube_url: prev?.youtube_url ?? "", type: "unverified", requires_proof: false, max_completions_per_user: 1,
         social_platform: null, social_action: null, social_target_handle: null,
         social_target_post_url: null, social_required_comment_text: null, ai_verify_screenshot: false,
       }))
@@ -347,12 +401,22 @@ export default function AdminTasksPage() {
             {loading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
-              : tasks.map(t => (
+              : tasks.length === 0
+              ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                      No tasks match this filter.
+                    </TableCell>
+                  </TableRow>
+                )
+              : tasks.map(t => {
+                  const taskMargin = margin(t)
+                  return (
                   <TableRow key={t.id}>
                     <TableCell className="max-w-xs">
                       <div className="flex items-center gap-1.5">
@@ -384,13 +448,18 @@ export default function AdminTasksPage() {
                     </TableCell>
                     <TableCell className="font-medium tabular-nums">{formatCurrency(t.reward_amount)}</TableCell>
                     <TableCell className="text-sm tabular-nums">
-                      {margin(t) === null
+                      {taskMargin === null
                         ? <span className="text-muted-foreground">—</span>
-                        : <span className={margin(t)! >= 0 ? "text-emerald-600" : "text-destructive"}>
-                            {margin(t)! >= 0 ? "+" : ""}{formatCurrency(margin(t)!)}
+                        : <span className={taskMargin >= 0 ? "text-emerald-600" : "text-destructive"}>
+                            {taskMargin >= 0 ? "+" : ""}{formatCurrency(taskMargin)}
                           </span>}
-                      {t.task_source === "advertiser" && (
-                        <p className="text-[10px] text-muted-foreground capitalize">{t.cost_type} · advertiser</p>
+                      {t.advertiser_cost_kobo != null && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {t.cost_type === "flat"
+                            ? `total (${t.max_completions != null ? "est." : "so far"})`
+                            : "per completion"}
+                          {t.task_source === "advertiser" ? " · advertiser" : ""}
+                        </p>
                       )}
                     </TableCell>
                     <TableCell className="text-sm tabular-nums">
@@ -407,19 +476,23 @@ export default function AdminTasksPage() {
                     <TableCell className="text-xs text-muted-foreground">{formatDate(t.created_at)}</TableCell>
                     <TableCell className="sticky right-0 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.1)]">
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(t)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(t)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
                         {t.status !== "archived" && (
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => handleArchive(t.id)}>
-                            <Archive className="w-3.5 h-3.5" />
+                            disabled={archivingId === t.id}
+                            onClick={() => setConfirmArchiveTask(t)}>
+                            {archivingId === t.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Archive className="w-3.5 h-3.5" />}
                           </Button>
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
           </TableBody>
         </Table>
       </div>
@@ -766,6 +839,24 @@ export default function AdminTasksPage() {
                 </div>
               </div>
 
+              {categories.length > 0 && (
+                <div>
+                  <Label>Category</Label>
+                  <Select
+                    value={editing.category_id ?? "none"}
+                    onValueChange={v => setEditing(prev => ({ ...prev, category_id: v === "none" ? undefined : v }))}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No category</SelectItem>
+                      {categories.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="reward">Reward (kobo)</Label>
@@ -824,6 +915,7 @@ export default function AdminTasksPage() {
               <div className="flex gap-3 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
                 <Button variant="gradient" className="flex-1" disabled={saving} onClick={handleSave}>
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   {editing.id ? "Save changes" : "Create task"}
                 </Button>
               </div>
@@ -831,6 +923,40 @@ export default function AdminTasksPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ── Archive confirmation dialog ──────────────────────────────────────── */}
+      <Dialog
+        open={!!confirmArchiveTask}
+        onOpenChange={(open) => { if (!open && !archivingId) setConfirmArchiveTask(null) }}
+      >
+        {confirmArchiveTask && (
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Archive task?</DialogTitle>
+              <DialogDescription>
+                &ldquo;{confirmArchiveTask.title}&rdquo; will be moved to archived status and hidden from workers.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={archivingId === confirmArchiveTask.id}
+                onClick={() => setConfirmArchiveTask(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={archivingId === confirmArchiveTask.id}
+                onClick={() => handleArchive(confirmArchiveTask.id)}
+              >
+                {archivingId === confirmArchiveTask.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                Archive Task
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   )
 }

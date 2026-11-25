@@ -196,8 +196,7 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
               return (
                 <div
                   key={task.id}
-                  className={`rounded-lg border border-l-4 ${borderClass} bg-card p-4 cursor-pointer hover:shadow-sm active:scale-[0.99] transition-all`}
-                  onClick={() => { setOpen(false); onSelect(task) }}
+                  className={`rounded-lg border border-l-4 ${borderClass} bg-card p-4 hover:shadow-sm transition-all`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -228,7 +227,7 @@ export function SocialBundleCard({ tasks, onSelect }: SocialBundleCardProps) {
                         size="sm"
                         variant="outline"
                         className="mt-1.5 h-7 text-xs gap-1 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                        onClick={e => { e.stopPropagation(); setOpen(false); onSelect(task) }}
+                        onClick={() => { setOpen(false); onSelect(task) }}
                       >
                         <Share2 className="w-3 h-3" /> Start
                       </Button>

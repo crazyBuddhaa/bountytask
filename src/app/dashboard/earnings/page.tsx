@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { ArrowUpCircle, ArrowDownCircle, Wallet, RefreshCw } from "lucide-react"
+import { ArrowUpCircle, ArrowDownCircle, Wallet, RefreshCw, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,7 @@ export default function EarningsPage() {
   const [balance, setBalance]       = useState<number | null>(null)
   const [entries, setEntries]       = useState<LedgerEntry[]>([])
   const [loading, setLoading]       = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [page, setPage]             = useState(1)
   const [total, setTotal]           = useState(0)
@@ -32,16 +33,24 @@ export default function EarningsPage() {
   const fetchData = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true)
     else setLoading(true)
-
-    const res  = await fetch(`/api/ledger?page=${page}&limit=${limit}`)
-    const json = await res.json()
-    if (json.data) {
-      setBalance(json.data.balance)
-      setEntries(json.data.entries ?? [])
-      setTotal(json.data.total ?? 0)
+    setFetchError(null)
+    try {
+      const res  = await fetch(`/api/ledger?page=${page}&limit=${limit}`)
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error ?? "Could not load earnings history. Please try again.")
+      }
+      if (json.data) {
+        setBalance(json.data.balance)
+        setEntries(json.data.entries ?? [])
+        setTotal(json.data.total ?? 0)
+      }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Could not load earnings history. Please try again.")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    setLoading(false)
-    setRefreshing(false)
   }, [page])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -61,6 +70,18 @@ export default function EarningsPage() {
           Refresh
         </Button>
       </div>
+
+      {fetchError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => fetchData(false)} className="shrink-0 gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

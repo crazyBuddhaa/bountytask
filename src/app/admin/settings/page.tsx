@@ -135,12 +135,19 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/admin/settings")
-      .then((r) => r.json())
-      .then(({ data }) => {
-        if (data) {
+    let active = true
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/admin/settings")
+        const json = await res.json()
+        if (!res.ok || json.error) {
+          throw new Error(json.error ?? "Failed to load platform settings")
+        }
+        const data = json.data
+        if (active && data) {
           setSettings({
             verification_fee_enabled:    data.verification_fee_enabled    ?? false,
             verification_fee_amount:     data.verification_fee_amount      ?? 50000,
@@ -179,11 +186,11 @@ export default function AdminSettingsPage() {
             ai_verify_all_tasks:   data.ai_verify_all_tasks   ?? false,
             news_enabled:                       data.news_enabled                       ?? false,
             news_earn_enabled:                  data.news_earn_enabled                  ?? false,
-            news_earn_kobo_per_read:            Number(data.news_earn_kobo_per_read)            || 5,
-            news_earn_daily_cap:                Number(data.news_earn_daily_cap)                || 20,
-            news_earn_kobo_per_minute:          Number(data.news_earn_kobo_per_minute)          || 200,
-            news_earn_max_minutes_per_article:  Number(data.news_earn_max_minutes_per_article)  || 5,
-            news_earn_daily_cap_minutes:        Number(data.news_earn_daily_cap_minutes)        || 30,
+            news_earn_kobo_per_read:            data.news_earn_kobo_per_read != null ? Number(data.news_earn_kobo_per_read) : 5,
+            news_earn_daily_cap:                data.news_earn_daily_cap != null ? Number(data.news_earn_daily_cap) : 20,
+            news_earn_kobo_per_minute:          data.news_earn_kobo_per_minute != null ? Number(data.news_earn_kobo_per_minute) : 200,
+            news_earn_max_minutes_per_article:  data.news_earn_max_minutes_per_article != null ? Number(data.news_earn_max_minutes_per_article) : 5,
+            news_earn_daily_cap_minutes:        data.news_earn_daily_cap_minutes != null ? Number(data.news_earn_daily_cap_minutes) : 30,
             game_entry_fees_enabled:        data.game_entry_fees_enabled        ?? false,
             game_entry_fee_wordle:          data.game_entry_fee_wordle          ?? 1000,
             game_entry_fee_higher_or_lower: data.game_entry_fee_higher_or_lower ?? 1000,
@@ -192,22 +199,42 @@ export default function AdminSettingsPage() {
             game_entry_fee_color_rush:      data.game_entry_fee_color_rush      ?? 500,
             game_entry_fee_word_scramble:   data.game_entry_fee_word_scramble   ?? 500,
           })
+          setLoadError(null)
         }
-      })
-      .finally(() => setLoading(false))
+      } catch (err) {
+        if (active) {
+          const msg = err instanceof Error ? err.message : "Failed to load platform settings"
+          setLoadError(msg)
+          toast.error(msg)
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    loadSettings()
+    return () => { active = false }
   }, [])
 
   async function save() {
+    if (loadError) return
     setSaving(true)
-    const res = await fetch("/api/admin/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    })
-    const json = await res.json()
-    if (json.error) toast.error(json.error)
-    else toast.success("Settings saved")
-    setSaving(false)
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        toast.error(json.error ?? "Failed to save settings")
+      } else {
+        toast.success("Settings saved")
+      }
+    } catch {
+      toast.error("Failed to save settings")
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -230,6 +257,15 @@ export default function AdminSettingsPage() {
           Configure withdrawals, verification, advertiser intake, display ads, and rewarded ad providers.
         </p>
       </div>
+
+      {loadError && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          <p className="font-medium">Unable to load current settings</p>
+          <p className="text-xs mt-1">
+            {loadError}. Saving is disabled to prevent overwriting live configuration with default values. Refresh the page to try again.
+          </p>
+        </div>
+      )}
 
       {/* ── AI Screenshot Verification ──────────────────────────────────── */}
       <Card className={settings.ai_verify_all_tasks ? "border-indigo-500 ring-1 ring-indigo-500/40" : ""}>
@@ -568,9 +604,9 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="ima_reward">Reward per view (₦)</Label>
-                  <Input id="ima_reward" type="number" min={1}
-                    value={Math.round(settings.ima_reward_kobo / 100)}
-                    onChange={(e) => setSettings((s) => ({ ...s, ima_reward_kobo: Math.round(Number(e.target.value) * 100) }))} />
+                  <Input id="ima_reward" type="number" min={0.01} step="0.01"
+                    value={settings.ima_reward_kobo / 100}
+                    onChange={(e) => setSettings((s) => ({ ...s, ima_reward_kobo: Math.round((parseFloat(e.target.value) || 0) * 100) }))} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -641,7 +677,12 @@ export default function AdminSettingsPage() {
                     type="button"
                     className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
                     title="Copy postback URL"
-                    onClick={() => navigator.clipboard.writeText(`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}&amount_local={amount_local}`)}
+                    onClick={() => {
+                      navigator.clipboard
+                        .writeText(`${APP_URL}/api/postback/cpx?user_id={user_id}&trans_id={trans_id}&status={status}&hash={secure_hash}&amount_usd={amount_usd}&amount_local={amount_local}`)
+                        .then(() => toast.success("Postback URL copied!"))
+                        .catch(() => toast.error("Failed to copy postback URL"))
+                    }}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -777,14 +818,14 @@ export default function AdminSettingsPage() {
                 <Textarea
                   id="monetag_multitag_script"
                   rows={4}
-                  placeholder={`(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})(\'glizauvo.net\',YOUR_ZONE_ID,document.createElement(\'script\'))`}
+                  placeholder='<script src="https://example.com/tag.min.js" data-zone="YOUR_ZONE_ID" async></script>'
                   value={settings.monetag_multitag_script}
                   onChange={(e) => setSettings((s) => ({ ...s, monetag_multitag_script: e.target.value }))}
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Paste the full script from Monetag → Ad Channels → your Multitag zone → <strong>Get Code</strong>.
-                  You can paste either the raw JS or the full <code className="bg-muted px-1 rounded">&lt;script&gt;…&lt;/script&gt;</code> tag — both are handled.
+                  Paste an external <code className="bg-muted px-1 rounded">&lt;script src="https://..."&gt;&lt;/script&gt;</code> tag from Monetag → Ad Channels → your Multitag zone.
+                  Inline JavaScript and non-HTTPS URLs are rejected for security.
                   Injected into <code className="bg-muted px-1 rounded">&lt;head&gt;</code> on every page.
                 </p>
               </div>
@@ -816,7 +857,7 @@ export default function AdminSettingsPage() {
                 <Textarea
                   id="monetag_interstitial_script"
                   rows={4}
-                  placeholder={`(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})(\'glizauvo.net\',YOUR_INTERSTITIAL_ZONE_ID,document.createElement(\'script\'))`}
+                  placeholder='<script src="https://example.com/tag.min.js" data-zone="YOUR_INTERSTITIAL_ZONE_ID" async></script>'
                   value={settings.monetag_games_interstitial_script}
                   onChange={(e) =>
                     setSettings((s) => ({ ...s, monetag_games_interstitial_script: e.target.value }))
@@ -824,7 +865,9 @@ export default function AdminSettingsPage() {
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Create a separate <strong>Interstitial</strong> zone in Monetag and paste its script here.
+                  Create a separate <strong>Interstitial</strong> zone in Monetag and paste its external{" "}
+                  <code className="bg-muted px-1 rounded">&lt;script src="https://..."&gt;&lt;/script&gt;</code> tag here.
+                  Inline JavaScript and non-HTTPS URLs are rejected.
                   Loaded on all <code className="bg-muted px-1 rounded">/dashboard/games/*</code> pages — fires between game navigations.
                 </p>
               </div>
@@ -892,12 +935,12 @@ export default function AdminSettingsPage() {
                         id="news_earn_per_min"
                         type="number"
                         min={0}
-                        step={0.01}
-                        value={((settings.news_earn_kobo_per_minute ?? 200) / 100).toFixed(2)}
+                        step="0.01"
+                        value={(settings.news_earn_kobo_per_minute ?? 200) / 100}
                         onChange={e =>
                           setSettings(s => ({
                             ...s,
-                            news_earn_kobo_per_minute: Math.round(Number(e.target.value) * 100),
+                            news_earn_kobo_per_minute: Math.round((parseFloat(e.target.value) || 0) * 100),
                           }))
                         }
                         className="w-28"
@@ -1019,7 +1062,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      <Button onClick={save} disabled={saving} className="w-full sm:w-auto">
+      <Button onClick={save} disabled={saving || !!loadError} className="w-full sm:w-auto">
         {saving ? <Loader2 className="animate-spin" /> : <Save className="w-4 h-4" />}
         Save Settings
       </Button>

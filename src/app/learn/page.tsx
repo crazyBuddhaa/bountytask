@@ -16,7 +16,7 @@ import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
 
 export const metadata = {
-  title: "How It Works, About & FAQ — BountyTask",
+  title: "How It Works, About & FAQ",
   description:
     "Learn how BountyTask works, who we are, and get answers to the most common questions about earning Naira on our platform.",
 }

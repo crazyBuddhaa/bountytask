@@ -1,6 +1,7 @@
 "use client"
 import { ExternalLink, Copy, CheckCircle2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import type { Task } from "@/types"
 
@@ -125,6 +126,13 @@ interface SocialStepGuideProps {
 
 export function SocialStepGuide({ task }: SocialStepGuideProps) {
   const [copied, setCopied] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
 
   const platform = task.social_platform!
   const config = PLATFORM_CONFIG[platform] ?? { label: platform, emoji: "🌐", accentClass: "bg-gray-700 text-white" }
@@ -135,9 +143,14 @@ export function SocialStepGuide({ task }: SocialStepGuideProps) {
 
   async function handleCopy() {
     if (!task.social_required_comment_text) return
-    await navigator.clipboard.writeText(task.social_required_comment_text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(task.social_required_comment_text)
+      setCopied(true)
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error("Could not copy text. Please copy it manually.")
+    }
   }
 
   return (

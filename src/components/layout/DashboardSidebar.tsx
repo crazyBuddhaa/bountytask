@@ -26,16 +26,18 @@ const navItems = [
 interface DashboardSidebarProps {
   /** When true, renders as a plain flex column (for use inside a mobile Sheet). */
   mobile?: boolean
+  /** Optional callback invoked when a navigation link is clicked (e.g. to close a mobile Sheet). */
+  onNavigate?: () => void
 }
 
-export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
+export function DashboardSidebar({ mobile = false, onNavigate }: DashboardSidebarProps) {
   const pathname = usePathname()
 
   return (
     <aside
       className={cn(
-        "w-64 flex-col border-r bg-card min-h-screen",
-        mobile ? "flex" : "hidden lg:flex"
+        "w-64 flex-col border-r bg-card",
+        mobile ? "flex h-full overflow-y-auto" : "hidden lg:flex min-h-screen"
       )}
       // Stop clicks inside the sidebar from bubbling to the document.
       // Monetag OnClick popunder attaches a document-level bubble-phase
@@ -46,7 +48,7 @@ export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
       onClick={(e) => e.stopPropagation()}
     >
       <div className="p-6 border-b">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2">
           <Image src="/logo.png" alt="BountyTask" width={32} height={32} className="rounded-lg" />
           <span className="font-bold text-lg bounty-text-gradient">BountyTask</span>
         </Link>
@@ -59,6 +61,7 @@ export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                 active
@@ -79,6 +82,7 @@ export function DashboardSidebar({ mobile = false }: DashboardSidebarProps) {
           <p className="text-sm font-semibold mt-1">Get ₦500 per referral</p>
           <Link
             href="/dashboard/referral"
+            onClick={onNavigate}
             className="mt-2 inline-block text-xs underline opacity-90 hover:opacity-100"
           >
             Share your link →

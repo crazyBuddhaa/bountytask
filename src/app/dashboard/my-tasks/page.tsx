@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { CheckCircle2, Clock, XCircle, Flag, Filter } from "lucide-react"
+import { CheckCircle2, Clock, XCircle, Flag, Filter, AlertCircle, RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,7 @@ const statusConfig = {
 export default function MyTasksPage() {
   const [completions, setCompletions] = useState<CompletionWithTask[]>([])
   const [loading, setLoading]         = useState(true)
+  const [fetchError, setFetchError]   = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState("")
   const [page, setPage]               = useState(1)
   const [total, setTotal]             = useState(0)
@@ -30,14 +31,23 @@ export default function MyTasksPage() {
 
   const fetchCompletions = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (statusFilter) params.set("status", statusFilter)
+    setFetchError(null)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (statusFilter) params.set("status", statusFilter)
 
-    const res  = await fetch(`/api/my-tasks?${params}`)
-    const json = await res.json()
-    setCompletions(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+      const res  = await fetch(`/api/my-tasks?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error ?? "Failed to load submissions. Please try again.")
+      }
+      setCompletions(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load submissions. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [page, statusFilter])
 
   useEffect(() => { fetchCompletions() }, [fetchCompletions])
@@ -68,7 +78,7 @@ export default function MyTasksPage() {
             >
               <cfg.icon className={`w-4 h-4 ${cfg.color}`} />
               {cfg.label}
-              <span className="text-xs font-bold">{counts[s]}</span>
+              {!statusFilter && <span className="text-xs font-bold">{counts[s]}</span>}
             </button>
           )
         })}
@@ -92,6 +102,16 @@ export default function MyTasksPage() {
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
+      ) : fetchError ? (
+        <Card className="border-destructive/30">
+          <CardContent className="p-8 text-center space-y-3">
+            <AlertCircle className="w-8 h-8 mx-auto text-destructive" />
+            <p className="text-sm font-medium text-destructive">{fetchError}</p>
+            <Button variant="outline" size="sm" onClick={fetchCompletions} className="gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : completions.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-30" />

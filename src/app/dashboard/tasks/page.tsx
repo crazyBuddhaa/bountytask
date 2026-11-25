@@ -1,11 +1,11 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Filter, Zap, Clock, CheckCircle, Gauge } from "lucide-react"
+import { Search, Filter, Zap, Clock, Gauge, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TaskCard, WatchEarnBundleCard, SocialBundleCard } from "@/components/tasks/TaskCard"
@@ -27,6 +27,7 @@ export default function TasksPage() {
   const [categories, setCategories] = useState<TaskCategory[]>([])
   const [adTasks, setAdTasks] = useState<AdTaskStatus[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -36,17 +37,33 @@ export default function TasksPage() {
   const [tierUsage, setTierUsage] = useState<TierUsage | null>(null)
 
   const fetchTasks = useCallback(async () => {
+    if (type === "ads") {
+      setTasks([])
+      setTotal(0)
+      setFetchError(null)
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    const params = new URLSearchParams({ page: page.toString(), limit: "20" })
-    if (search) params.set("search", search)
-    if (category) params.set("category", category)
-    if (type && type !== "ads") params.set("type", type)
+    setFetchError(null)
+    try {
+      const params = new URLSearchParams({ page: page.toString(), limit: "20" })
+      if (search) params.set("search", search)
+      if (category) params.set("category", category)
+      if (type) params.set("type", type)
 
-    const res = await fetch(`/api/tasks?${params}`)
-    const json = await res.json()
-    setTasks(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+      const res = await fetch(`/api/tasks?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error ?? "Failed to load tasks. Please try again.")
+      }
+      setTasks(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load tasks. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [page, search, category, type])
 
   useEffect(() => {
@@ -56,6 +73,7 @@ export default function TasksPage() {
         const cats = Array.from(new Map((json.data ?? []).map((t: Task) => [t.category_id, t.category])).values()).filter(Boolean)
         setCategories(cats as TaskCategory[])
       })
+      .catch(() => { /* non-critical */ })
   }, [])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
@@ -64,10 +82,14 @@ export default function TasksPage() {
     fetch("/api/ad-tasks/status")
       .then(r => r.json())
       .then(json => setAdTasks(json.data ?? []))
+      .catch(() => { /* non-critical */ })
   }, [])
 
   const fetchTierUsage = useCallback(() => {
-    fetch("/api/tiers").then(r => r.json()).then(j => setTierUsage(j.data ?? null))
+    fetch("/api/tiers")
+      .then(r => r.json())
+      .then(j => setTierUsage(j.data ?? null))
+      .catch(() => { /* non-critical */ })
   }, [])
 
   useEffect(() => { fetchTierUsage() }, [fetchTierUsage])
@@ -76,23 +98,29 @@ export default function TasksPage() {
     taskId: string,
     proof?: { url?: string; text?: string }
   ): Promise<{ ok: boolean; aiReason?: string }> {
-    const fp = await getFingerprint()
-    const res = await fetch(`/api/tasks/${taskId}/complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proof_url: proof?.url, proof_text: proof?.text, device_fingerprint: fp }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      // AI rejection — pass the reason back to the modal so it shows inline
-      if (json.code === "AI_REJECTED") return { ok: false, aiReason: json.error }
-      toast.error(json.error)
+    try {
+      const fp = await getFingerprint()
+      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proof_url: proof?.url, proof_text: proof?.text, device_fingerprint: fp }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        // AI rejection — pass the reason back to the modal so it shows inline
+        if (json.code === "AI_REJECTED") return { ok: false, aiReason: json.error }
+        toast.error(json.error ?? "Could not submit task completion.")
+        return { ok: false }
+      }
+      toast.success(json.data.status === "approved" ? "Task completed! Credits added." : "Submission received! Pending review.")
+      fetchTasks()
+      fetchTierUsage()
+      router.refresh()
+      return { ok: true }
+    } catch {
+      toast.error("Network error while submitting task. Please try again.")
       return { ok: false }
     }
-    toast.success(json.data.status === "approved" ? "Task completed! Credits added." : "Submission received! Pending review.")
-    fetchTasks()
-    fetchTierUsage()
-    return { ok: true }
   }
 
   const limitReached = !!tierUsage && tierUsage.tasksCompletedToday >= tierUsage.dailyLimit
@@ -131,8 +159,8 @@ export default function TasksPage() {
 
       {limitReached && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-sm px-4 py-3">
-          You've reached your daily task limit for Tier {tierUsage?.currentTier?.id}. Invite more friends on the{" "}
-          <a href="/dashboard/referral" className="underline font-medium">Referral page</a> to unlock a higher tier and limit, or come back tomorrow.
+          You&apos;ve reached your daily task limit for Tier {tierUsage?.currentTier?.id}. Invite more friends on the{" "}
+          <Link href="/dashboard/referral" className="underline font-medium">Referral page</Link> to unlock a higher tier and limit, or come back tomorrow.
         </div>
       )}
 
@@ -173,6 +201,14 @@ export default function TasksPage() {
       {loading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52" />)}
+        </div>
+      ) : fetchError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center space-y-3">
+          <AlertCircle className="w-8 h-8 mx-auto text-destructive" />
+          <p className="text-sm font-medium text-destructive">{fetchError}</p>
+          <Button variant="outline" size="sm" onClick={fetchTasks} className="gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
         </div>
       ) : visibleAdTasks.length === 0 && tasks.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -216,7 +252,7 @@ export default function TasksPage() {
       )}
 
       {/* Pagination */}
-      {total > 20 && (
+      {type !== "ads" && total > 20 && (
         <div className="flex justify-center gap-2">
           <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
           <span className="flex items-center text-sm text-muted-foreground px-3">Page {page} of {Math.ceil(total / 20)}</span>
@@ -238,6 +274,19 @@ export default function TasksPage() {
 async function getFingerprint(): Promise<string> {
   const nav = window.navigator
   const str = [nav.userAgent, nav.language, screen.width, screen.height, Intl.DateTimeFormat().resolvedOptions().timeZone].join("|")
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str))
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32)
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    try {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str))
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32)
+    } catch { /* fall through to non-subtle fallback */ }
+  }
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return ((h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0")).padEnd(32, "0").slice(0, 32)
 }

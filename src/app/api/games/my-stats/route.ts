@@ -5,6 +5,7 @@ import { getLiveBalance } from "@/lib/ledger"
 import { GAME_SLUGS } from "@/lib/games"
 import type { GameSlug } from "@/lib/games"
 import { SLUG_TO_FEE_KEY } from "@/app/api/games/enter/route"
+import { parseBoolSetting } from "@/lib/security"
 
 export interface GameStat {
   game_slug: GameSlug
@@ -55,7 +56,7 @@ export async function GET() {
 
   // Entry fee map
   const feeMap = Object.fromEntries((feeRows.data ?? []).map(r => [r.key, r.value]))
-  const feesEnabled = feeMap["game_entry_fees_enabled"] === true
+  const feesEnabled = parseBoolSetting(feeMap["game_entry_fees_enabled"], false)
   const entryFees: Record<GameSlug, number> = {} as Record<GameSlug, number>
   for (const slug of GAME_SLUGS) {
     entryFees[slug] = feesEnabled ? (Number(feeMap[SLUG_TO_FEE_KEY[slug]]) || 0) : 0

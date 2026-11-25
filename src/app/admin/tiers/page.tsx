@@ -16,10 +16,24 @@ export default function AdminTiersPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch("/api/admin/tiers")
-      .then((r) => r.json())
-      .then(({ data }) => setTiers(data ?? []))
-      .finally(() => setLoading(false))
+    let active = true
+    async function loadTiers() {
+      try {
+        const res = await fetch("/api/admin/tiers")
+        const json = await res.json()
+        if (!res.ok) {
+          if (active) toast.error(json.error ?? "Failed to load tiers")
+          return
+        }
+        if (active) setTiers(json.data ?? [])
+      } catch {
+        if (active) toast.error("Failed to load tiers")
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    loadTiers()
+    return () => { active = false }
   }, [])
 
   function update(id: number, patch: Partial<Tier>) {
@@ -28,21 +42,29 @@ export default function AdminTiersPage() {
 
   async function save(tier: Tier) {
     setSavingId(tier.id)
-    const res = await fetch(`/api/admin/tiers/${tier.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: tier.name,
-        min_referrals: tier.min_referrals,
-        min_completions: tier.min_completions,
-        daily_task_limit: tier.daily_task_limit,
-        perks: tier.perks,
-      }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setSavingId(null); return }
-    toast.success(`${tier.name} saved`)
-    setSavingId(null)
+    try {
+      const res = await fetch(`/api/admin/tiers/${tier.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: tier.name,
+          min_referrals: tier.min_referrals,
+          min_completions: tier.min_completions,
+          daily_task_limit: tier.daily_task_limit,
+          perks: tier.perks,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to save tier")
+        return
+      }
+      toast.success(`${tier.name} saved`)
+    } catch {
+      toast.error("Failed to save tier")
+    } finally {
+      setSavingId(null)
+    }
   }
 
   return (

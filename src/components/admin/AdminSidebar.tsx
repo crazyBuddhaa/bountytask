@@ -27,11 +27,18 @@ const links = [
   { href: "/admin/settings",             label: "Settings",              icon: Settings        },
 ]
 
-export function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
+export function AdminSidebar({
+  mobile = false,
+  onNavigate,
+}: {
+  mobile?: boolean
+  onNavigate?: () => void
+}) {
   const pathname = usePathname()
   const router   = useRouter()
 
   async function handleSignOut() {
+    onNavigate?.()
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push("/sign-in")
@@ -39,7 +46,7 @@ export function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <aside
-      className={`w-56 shrink-0 ${mobile ? "flex" : "hidden lg:flex"} flex-col bg-card border-r border-border h-screen sticky top-0`}
+      className={`${mobile ? "w-full flex" : "w-56 hidden lg:flex"} shrink-0 flex-col bg-card border-r border-border h-screen sticky top-0`}
     >
       {/* Brand */}
       <div className="h-16 flex items-center px-5 border-b border-border">
@@ -57,6 +64,7 @@ export function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
               <Link
                 key={href}
                 href={href}
+                onClick={onNavigate}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all
                   ${active
                     ? "bg-primary text-primary-foreground"
@@ -73,6 +81,7 @@ export function AdminSidebar({ mobile = false }: { mobile?: boolean }) {
       {/* Footer */}
       <div className="border-t border-border p-3">
         <Link href="/dashboard"
+          onClick={onNavigate}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-all mb-1">
           ← User Dashboard
         </Link>

@@ -221,7 +221,7 @@ export default function LandingPage() {
                 <Link href="/sign-in">Sign In</Link>
               </Button>
             </div>
-            <div className="flex justify-center gap-6 mt-6 text-sm text-white/70">
+            <div className="flex flex-wrap justify-center gap-6 mt-6 text-sm text-white/70">
               {["₦200 signup bonus", "No card required", "Withdraw in 48hrs"].map(t => (
                 <span key={t} className="flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />{t}

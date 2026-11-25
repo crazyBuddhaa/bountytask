@@ -30,10 +30,10 @@ export default async function NewsPage() {
   const admin = createAdminClient()
 
   // Fetch initial page + user reads in parallel
-  const [articlesRes, readsRes, readsTodayRes] = await Promise.all([
+  const [articlesRes, readsRes] = await Promise.all([
     admin
       .from("news_articles")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("is_active", true)
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(20),
@@ -43,30 +43,17 @@ export default async function NewsPage() {
       .select("article_id")
       .eq("user_id", user.id)
       .limit(500),
-
-    (async () => {
-      if (!settings.earnEnabled) return { count: 0 }
-      const startOfDay = new Date()
-      startOfDay.setUTCHours(0, 0, 0, 0)
-      return admin
-        .from("news_reads")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id",  user.id)
-        .eq("credited", true)
-        .gte("read_at", startOfDay.toISOString())
-    })(),
   ])
 
   const readSet  = new Set((readsRes.data ?? []).map(r => r.article_id))
   const articles = (articlesRes.data ?? []).map(a => ({ ...a, read: readSet.has(a.id) }))
-  const hasMore  = articles.length === 20
+  const hasMore  = (articlesRes.count ?? 0) > articles.length
 
   return (
     <NewsClient
       initialArticles={articles}
       initialHasMore={hasMore}
       settings={settings}
-      readsToday={readsTodayRes.count ?? 0}
     />
   )
 }

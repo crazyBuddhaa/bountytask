@@ -1,11 +1,12 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
+import { Suspense, useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, Calendar } from "lucide-react"
+import { ArrowLeft, ArrowUp, ArrowDown, CheckCircle, Calendar, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const MAX_GUESSES = 7
 
@@ -27,35 +28,65 @@ function Stars({ won, guesses }: { won: boolean; guesses: number }) {
   )
 }
 
-export default function HigherOrLowerPage() {
-  const [secret, setSecret]   = useState(0)
-  const [date, setDate]       = useState("")
-  const [guess, setGuess]     = useState("")
-  const [history, setHistory] = useState<GuessRecord[]>([])
-  const [gameOver, setGameOver] = useState(false)
-  const [won, setWon]         = useState(false)
-  const [loading, setLoading] = useState(true)
+function HigherOrLowerContent() {
+  const { entryId, ensureEntry, submitSession } = useGameEntry("higher-or-lower")
+
+  const [secret, setSecret]         = useState(0)
+  const [date, setDate]             = useState("")
+  const [guess, setGuess]           = useState("")
+  const [history, setHistory]       = useState<GuessRecord[]>([])
+  const [gameOver, setGameOver]     = useState(false)
+  const [won, setWon]               = useState(false)
+  const [loading, setLoading]       = useState(true)
+  const [loadError, setLoadError]   = useState<string | null>(null)
   const [alreadyPlayed, setAlreadyPlayed] = useState(false)
-  const [minVal, setMinVal]   = useState(1)
-  const [maxVal, setMaxVal]   = useState(100)
+  const [minVal, setMinVal]         = useState(1)
+  const [maxVal, setMaxVal]         = useState(100)
   const sessionSaved = useRef(false)
+  const initEntryRef = useRef(false)
+
+  const loadGame = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [seedRes, statsRes] = await Promise.all([
+        fetch("/api/games/seed?game=higher-or-lower"),
+        fetch("/api/games/my-stats"),
+      ])
+      if (!seedRes.ok) throw new Error("Failed to load today's puzzle")
+      const seedJson = await seedRes.json()
+      setSecret(seedJson.number ?? 50)
+      setDate(seedJson.date ?? "")
+
+      let playedToday = false
+      if (statsRes.ok) {
+        const statsJson = await statsRes.json()
+        playedToday = Boolean(statsJson.data?.["higher-or-lower"]?.completed_today)
+        if (playedToday) setAlreadyPlayed(true)
+      }
+
+      if (!playedToday && !entryId && !initEntryRef.current) {
+        initEntryRef.current = true
+        await ensureEntry()
+      }
+    } catch {
+      setLoadError("Could not load today's Higher or Lower puzzle. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }, [entryId, ensureEntry])
 
   useEffect(() => {
-    fetch("/api/games/seed?game=higher-or-lower")
-      .then(r => r.json())
-      .then(j => { setSecret(j.number ?? 50); setDate(j.date ?? ""); setLoading(false) })
-    fetch("/api/games/my-stats")
-      .then(r => r.json())
-      .then(j => { if (j.data?.["higher-or-lower"]?.completed_today) setAlreadyPlayed(true) })
-  }, [])
+    void loadGame()
+  }, [loadGame])
 
   async function saveSession(completed: boolean, score: number, guessCount: number) {
     if (sessionSaved.current) return
     sessionSaved.current = true
-    await fetch("/api/games/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game_slug: "higher-or-lower", score, completed, metadata: { secret, guesses: guessCount, date } }),
+    await submitSession({
+      score,
+      completed,
+      metadata: { secret, guesses: guessCount, date },
     })
   }
 
@@ -79,11 +110,11 @@ export default function HigherOrLowerPage() {
       setWon(true); setGameOver(true)
       const score = scoreFromGuesses(newHistory.length)
       toast.success(`🎉 Correct! +${score} pts in ${newHistory.length} ${newHistory.length === 1 ? "guess" : "guesses"}`)
-      saveSession(true, score, newHistory.length)
+      void saveSession(true, score, newHistory.length)
     } else if (newHistory.length >= MAX_GUESSES) {
       setGameOver(true)
       toast.error(`Out of guesses! The number was ${secret}`)
-      saveSession(false, 0, MAX_GUESSES)
+      void saveSession(true, 0, MAX_GUESSES)
     }
   }
 
@@ -95,6 +126,18 @@ export default function HigherOrLowerPage() {
   if (loading) return (
     <div className="flex items-center justify-center h-96">
       <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+    </div>
+  )
+
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center gap-4 max-w-md mx-auto py-16 text-center">
+      <AlertCircle className="w-10 h-10 text-destructive" />
+      <p className="font-bold text-lg">Failed to load game</p>
+      <p className="text-sm text-muted-foreground">{loadError}</p>
+      <div className="flex gap-2">
+        <Button onClick={() => void loadGame()} size="sm">Retry</Button>
+        <Link href="/dashboard/games"><Button variant="outline" size="sm">All Games</Button></Link>
+      </div>
     </div>
   )
 
@@ -244,5 +287,13 @@ export default function HigherOrLowerPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function HigherOrLowerPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" /></div>}>
+      <HigherOrLowerContent />
+    </Suspense>
   )
 }

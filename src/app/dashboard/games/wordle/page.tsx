@@ -1,16 +1,24 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft, Calendar } from "lucide-react"
+import { ArrowLeft, Calendar, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const WORD_LENGTH = 5
 const MAX_GUESSES = 6
 
 type TileState = "empty" | "filled" | "correct" | "present" | "absent"
 interface Tile { letter: string; state: TileState }
+
+const KEY_PRIORITY: Record<TileState, number> = {
+  empty:   0,
+  filled:  0,
+  absent:  1,
+  present: 2,
+  correct: 3,
+}
 
 const KEYBOARD_ROWS = [
   ["Q","W","E","R","T","Y","U","I","O","P"],
@@ -23,7 +31,9 @@ function scoreFromGuesses(guesses: number): number {
   return base[Math.min(guesses - 1, base.length - 1)]
 }
 
-export default function WordlePage() {
+function WordleContent() {
+  const { entryId, ensureEntry, submitSession } = useGameEntry("wordle")
+
   const [word, setWord]     = useState("")
   const [date, setDate]     = useState("")
   const [board, setBoard]   = useState<Tile[][]>(
@@ -37,29 +47,57 @@ export default function WordlePage() {
   const [won, setWon]                   = useState(false)
   const [keyStates, setKeyStates]       = useState<Record<string, TileState>>({})
   const [loading, setLoading]           = useState(true)
+  const [loadError, setLoadError]       = useState<string | null>(null)
   const [alreadyPlayed, setAlreadyPlayed] = useState(false)
   const [shakingRow, setShakingRow]     = useState<number | null>(null)
   const [revealedRows, setRevealedRows] = useState<Set<number>>(new Set())
   const sessionSaved = useRef(false)
+  const initEntryRef = useRef(false)
+
+  const loadGame = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [seedRes, statsRes] = await Promise.all([
+        fetch("/api/games/seed?game=wordle"),
+        fetch("/api/games/my-stats"),
+      ])
+      if (!seedRes.ok) throw new Error("Failed to load today's puzzle")
+      const seedJson = await seedRes.json()
+      setWord(seedJson.word ?? "")
+      setDate(seedJson.date ?? "")
+
+      let playedToday = false
+      if (statsRes.ok) {
+        const statsJson = await statsRes.json()
+        playedToday = Boolean(statsJson.data?.wordle?.completed_today)
+        if (playedToday) setAlreadyPlayed(true)
+      }
+
+      if (!playedToday && !entryId && !initEntryRef.current) {
+        initEntryRef.current = true
+        await ensureEntry()
+      }
+    } catch {
+      setLoadError("Could not load today's Wordle puzzle. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }, [entryId, ensureEntry])
 
   useEffect(() => {
-    fetch("/api/games/seed?game=wordle")
-      .then(r => r.json())
-      .then(j => { setWord(j.word ?? ""); setDate(j.date ?? ""); setLoading(false) })
-    fetch("/api/games/my-stats")
-      .then(r => r.json())
-      .then(j => { if (j.data?.wordle?.completed_today) setAlreadyPlayed(true) })
-  }, [])
+    void loadGame()
+  }, [loadGame])
 
   const saveSession = useCallback(async (completed: boolean, score: number, guessCount: number) => {
     if (sessionSaved.current) return
     sessionSaved.current = true
-    await fetch("/api/games/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game_slug: "wordle", score, completed, metadata: { word, guesses: guessCount, date } }),
+    await submitSession({
+      score,
+      completed,
+      metadata: { word, guesses: guessCount, date },
     })
-  }, [word, date])
+  }, [submitSession, word, date])
 
   const submitGuess = useCallback(() => {
     if (gameOver || currentRow >= MAX_GUESSES) return
@@ -93,7 +131,10 @@ export default function WordlePage() {
       const next = { ...prev }
       for (let i = 0; i < WORD_LENGTH; i++) {
         const key = guessArr[i]
-        if (next[key] !== "correct") next[key] = result[i]
+        const current = next[key] ?? "empty"
+        if (KEY_PRIORITY[result[i]] > KEY_PRIORITY[current]) {
+          next[key] = result[i]
+        }
       }
       return next
     })
@@ -103,11 +144,11 @@ export default function WordlePage() {
       setWon(true); setGameOver(true)
       const score = scoreFromGuesses(currentRow + 1)
       toast.success(`🎉 Brilliant! +${score} pts`)
-      saveSession(true, score, currentRow + 1)
+      void saveSession(true, score, currentRow + 1)
     } else if (currentRow + 1 >= MAX_GUESSES) {
       setGameOver(true)
       toast.error(`The word was ${word}`)
-      saveSession(false, 0, MAX_GUESSES)
+      void saveSession(true, 0, MAX_GUESSES)
     }
 
     setCurrentRow(r => r + 1)
@@ -134,7 +175,10 @@ export default function WordlePage() {
   }, [board, currentRow, currentCol, gameOver, alreadyPlayed, submitGuess])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => handleKey(e.key.toUpperCase())
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      handleKey(e.key.toUpperCase())
+    }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
   }, [handleKey])
@@ -161,6 +205,18 @@ export default function WordlePage() {
   if (loading) return (
     <div className="flex items-center justify-center h-96">
       <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+    </div>
+  )
+
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center gap-4 max-w-sm mx-auto py-16 text-center">
+      <AlertCircle className="w-10 h-10 text-destructive" />
+      <p className="font-bold text-lg">Failed to load game</p>
+      <p className="text-sm text-muted-foreground">{loadError}</p>
+      <div className="flex gap-2">
+        <Button onClick={() => void loadGame()} size="sm">Retry</Button>
+        <Link href="/dashboard/games"><Button variant="outline" size="sm">All Games</Button></Link>
+      </div>
     </div>
   )
 
@@ -241,21 +297,36 @@ export default function WordlePage() {
       <div className="w-full space-y-1.5">
         {KEYBOARD_ROWS.map((row, ri) => (
           <div key={ri} className="flex justify-center gap-1">
-            {row.map(key => (
-              <button
-                key={key}
-                onClick={() => handleKey(key)}
-                disabled={alreadyPlayed}
-                className={`${key.length > 1 ? "px-2 text-xs min-w-[3.2rem]" : "w-9"} h-11 rounded-lg font-bold text-sm transition-all
-                  ${keyColor[keyStates[key] ?? "empty"]}
-                  disabled:opacity-40 active:scale-95`}
-              >
-                {key}
-              </button>
-            ))}
+            {row.map(key => {
+              const isWide = key === "ENTER" || key === "⌫"
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleKey(key)}
+                  disabled={alreadyPlayed}
+                  className={`${
+                    isWide
+                      ? "flex-[1.5] min-w-0 max-w-[56px] px-1 text-xs"
+                      : "flex-1 min-w-0 max-w-[36px] text-sm"
+                  } h-11 rounded-lg font-bold transition-all
+                    ${keyColor[keyStates[key] ?? "empty"]}
+                    disabled:opacity-40 active:scale-95`}
+                >
+                  {key}
+                </button>
+              )
+            })}
           </div>
         ))}
       </div>
     </div>
+  )
+}
+
+export default function WordlePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" /></div>}>
+      <WordleContent />
+    </Suspense>
   )
 }

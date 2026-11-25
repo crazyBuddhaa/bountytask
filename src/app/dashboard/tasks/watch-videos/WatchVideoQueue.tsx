@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function WatchVideoQueue({ remaining: initialRemaining }: Props) {
+  const router = useRouter()
   const [task, setTask]           = useState<Task | null | undefined>(undefined) // undefined = loading
   const [claimed, setClaimed]     = useState(false)
   const [totalEarned, setTotalEarned] = useState(0)
@@ -46,6 +48,7 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
     setClaimed(true)
     setTotalEarned(prev => prev + task.reward_amount)
     setRemaining(prev => Math.max(prev - 1, 0))
+    router.refresh()
   }
 
   // Loading

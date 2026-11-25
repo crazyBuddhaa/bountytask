@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
 import Image from "next/image"
-import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight, TrendingUp, Zap, Calendar } from "lucide-react"
+import { Trophy, Gamepad2, Lock, Loader2, Coins, CheckCircle2, Star, ChevronRight, TrendingUp, Zap, Calendar, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { GAME_META, GAME_SLUGS } from "@/lib/games"
+import { GAME_META } from "@/lib/games"
 import type { GameSlug } from "@/lib/games"
 import type { GameStat } from "@/app/api/games/my-stats/route"
 
@@ -45,19 +45,31 @@ export default function GamesPage() {
   const [payload, setPayload] = useState<StatsPayload | null>(null)
   const [pools, setPools]     = useState<PoolPayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
 
-  const refresh = useCallback(() => {
-    Promise.all([
-      fetch("/api/games/my-stats").then(r => r.json()),
-      fetch("/api/games/pools").then(r => r.json()),
-    ]).then(([stats, poolData]) => {
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [statsRes, poolRes] = await Promise.all([
+        fetch("/api/games/my-stats"),
+        fetch("/api/games/pools"),
+      ])
+      if (!statsRes.ok) throw new Error("Failed to load game stats")
+      const stats = await statsRes.json()
       setPayload(stats)
-      if (poolData?.data) setPools(poolData.data)
+      if (poolRes.ok) {
+        const poolData = await poolRes.json()
+        if (poolData?.data) setPools(poolData.data)
+      }
+    } catch {
+      setError("Could not load games data. Please try again.")
+    } finally {
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => { void refresh() }, [refresh])
 
   const stats      = payload?.data        ?? null
   const entryFees  = payload?.entry_fees  ?? ({} as Record<GameSlug, number>)
@@ -86,6 +98,18 @@ export default function GamesPage() {
           </Button>
         </Link>
       </div>
+
+      {error && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5 text-sm text-destructive font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refresh()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Prize pool banner ──────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bounty-gradient p-px">
@@ -169,6 +193,7 @@ export default function GamesPage() {
               stat={stats?.[slug]}
               loading={loading}
               entryFeeKobo={entryFees[slug] ?? 0}
+              poolKobo={pools?.by_game?.[slug]?.prize_pool_kobo ?? 0}
               balance={balance}
               feesEnabled={feesOn}
               animIdx={i}
@@ -194,6 +219,7 @@ export default function GamesPage() {
               stat={stats?.[slug]}
               loading={loading}
               entryFeeKobo={entryFees[slug] ?? 0}
+              poolKobo={pools?.by_game?.[slug]?.prize_pool_kobo ?? 0}
               balance={balance}
               feesEnabled={feesOn}
               animIdx={i + 2}
@@ -206,12 +232,13 @@ export default function GamesPage() {
 }
 
 function GameCard({
-  slug, stat, loading, entryFeeKobo, balance, feesEnabled, animIdx,
+  slug, stat, loading, entryFeeKobo, poolKobo, balance, feesEnabled, animIdx,
 }: {
   slug: GameSlug
   stat?: GameStat
   loading: boolean
   entryFeeKobo: number
+  poolKobo: number
   balance: number
   feesEnabled: boolean
   animIdx: number
@@ -255,7 +282,7 @@ function GameCard({
   return (
     <div
       className={`group relative rounded-2xl overflow-hidden border ${theme.border} bg-card transition-all duration-300
-        hover:-translate-y-1 hover:shadow-xl ${theme.glowColor} animate-slide-up cursor-pointer`}
+        hover:-translate-y-1 hover:shadow-xl ${theme.glowColor} animate-slide-up`}
       style={{ animationDelay: `${animIdx * 60}ms`, animationFillMode: "both" }}
     >
       {/* ── Cover image area ─────────────────────────────────── */}
@@ -272,7 +299,7 @@ function GameCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
 
         {/* Top badges */}
-        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
           {meta.isDaily && (
             <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${theme.badgeClass}`}>
               <Calendar className="w-2.5 h-2.5" />
@@ -283,6 +310,12 @@ function GameCard({
             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
               <Coins className="w-2.5 h-2.5" />
               ₦{(entryFeeKobo / 100).toFixed(2)}
+            </span>
+          )}
+          {feesEnabled && poolKobo > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 tabular-nums">
+              <Trophy className="w-2.5 h-2.5" />
+              Pool ₦{(poolKobo / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
             </span>
           )}
         </div>

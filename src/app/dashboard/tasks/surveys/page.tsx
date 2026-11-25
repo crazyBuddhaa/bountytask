@@ -48,7 +48,10 @@ export default async function SurveysPage() {
               <span className="text-muted-foreground">Today&apos;s surveys</span>
               <span className="font-medium tabular-nums">{usedToday} / {settings.dailyCap}</span>
             </div>
-            <Progress value={(usedToday / settings.dailyCap) * 100} className="h-2" />
+            <Progress
+              value={Math.min(100, settings.dailyCap > 0 ? (usedToday / settings.dailyCap) * 100 : 100)}
+              className="h-2"
+            />
             {capHit && (
               <p className="text-xs text-muted-foreground">
                 You&apos;ve hit today&apos;s survey limit. Your daily count resets at midnight UTC.

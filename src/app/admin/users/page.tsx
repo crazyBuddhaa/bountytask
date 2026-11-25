@@ -26,6 +26,7 @@ export default function AdminUsersPage() {
   const [page, setPage]               = useState(1)
   const [total, setTotal]             = useState(0)
   const [editing, setEditing]         = useState<AdminUser | null>(null)
+  const [originalEditing, setOriginalEditing] = useState<AdminUser | null>(null)
   const [saving, setSaving]           = useState(false)
   // Soft-delete confirmation
   const [confirmUser, setConfirmUser] = useState<AdminUser | null>(null)
@@ -34,50 +35,72 @@ export default function AdminUsersPage() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (search) params.set("search", search)
-    if (role && role !== "all") params.set("role", role)
-    const res  = await fetch(`/api/admin/users?${params}`)
-    const json = await res.json()
-    setUsers(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (search) params.set("search", search)
+      if (role && role !== "all") params.set("role", role)
+      const res  = await fetch(`/api/admin/users?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load users")
+        return
+      }
+      setUsers(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load users")
+    } finally {
+      setLoading(false)
+    }
   }, [page, search, role])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
   async function handleSave(userId: string, updates: Partial<{ role: string; is_active: boolean; tier: number }>) {
     setSaving(true)
-    const res  = await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setSaving(false); return }
-    toast.success("User updated")
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u))
-    setEditing(null)
-    setSaving(false)
+    try {
+      const res  = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to update user")
+        return
+      }
+      toast.success("User updated")
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u))
+      setEditing(null)
+      setOriginalEditing(null)
+    } catch {
+      toast.error("Failed to update user")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleToggleActive(user: AdminUser, activate: boolean) {
     setConfirming(true)
-    const res  = await fetch(`/api/admin/users/${user.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: activate }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      toast.error(json.error)
+    try {
+      const res  = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: activate }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to update user status")
+        return
+      }
+      toast.success(activate ? "User reactivated" : "User deactivated")
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: activate } : u))
+      setConfirmUser(null)
+    } catch {
+      toast.error("Failed to update user status")
+    } finally {
       setConfirming(false)
-      return
     }
-    toast.success(activate ? "User reactivated" : "User deactivated")
-    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: activate } : u))
-    setConfirmUser(null)
-    setConfirming(false)
   }
 
   return (
@@ -126,6 +149,14 @@ export default function AdminUsersPage() {
               ? Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>
               ))
+              : users.length === 0
+              ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                    No users match your filters.
+                  </TableCell>
+                </TableRow>
+              )
               : users.map(u => (
                 <TableRow key={u.id} className={!u.is_active ? "opacity-60" : ""}>
                   <TableCell>
@@ -148,7 +179,7 @@ export default function AdminUsersPage() {
                     <div className="flex items-center gap-1">
                       {/* Edit role / tier */}
                       <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit user"
-                        onClick={() => setEditing(u)}>
+                        onClick={() => { setEditing(u); setOriginalEditing(u) }}>
                         <UserCog className="w-3.5 h-3.5" />
                       </Button>
                       {/* Soft delete / reactivate */}
@@ -186,13 +217,13 @@ export default function AdminUsersPage() {
 
       {/* Edit modal — role, tier only */}
       {editing && (
-        <Dialog open onOpenChange={() => setEditing(null)}>
+        <Dialog open onOpenChange={() => { setEditing(null); setOriginalEditing(null) }}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>Edit User: {editing.full_name}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div>
                 <Label>Role</Label>
-                <Select defaultValue={editing.role}
+                <Select value={editing.role}
                   onValueChange={v => setEditing(prev => prev ? { ...prev, role: v } : prev)}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -204,7 +235,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <Label>Tier (manual override)</Label>
-                <Select defaultValue={String(editing.tier)}
+                <Select value={String(editing.tier)}
                   onValueChange={v => setEditing(prev => prev ? { ...prev, tier: parseInt(v) } : prev)}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -217,9 +248,15 @@ export default function AdminUsersPage() {
                 </p>
               </div>
               <div className="flex gap-3 pt-1">
-                <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button variant="outline" className="flex-1" onClick={() => { setEditing(null); setOriginalEditing(null) }}>Cancel</Button>
                 <Button variant="gradient" className="flex-1" disabled={saving}
-                  onClick={() => handleSave(editing.id, { role: editing.role, tier: editing.tier })}>
+                  onClick={() => {
+                    const updates: Partial<{ role: string; tier: number }> = { tier: editing.tier }
+                    if (originalEditing && editing.role !== originalEditing.role) {
+                      updates.role = editing.role
+                    }
+                    handleSave(editing.id, updates)
+                  }}>
                   Save
                 </Button>
               </div>

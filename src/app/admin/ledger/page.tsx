@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { Search, BookOpen } from "lucide-react"
+import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,8 +22,11 @@ const refTypeLabels: Record<string, string> = {
   signup_bonus:        "Signup Bonus",
   withdrawal_debit:    "Withdrawal",
   withdrawal_reversal: "Withdrawal Reversal",
-  manual_credit:       "Manual Credit",
-  manual_debit:        "Manual Debit",
+  admin_adjustment:    "Admin Adjustment",
+  penalty:             "Penalty",
+  game_entry_fee:      "Game Entry Fee",
+  game_prize:          "Game Prize",
+  news_read_reward:    "News Read Reward",
 }
 
 export default function AdminLedgerPage() {
@@ -38,17 +42,28 @@ export default function AdminLedgerPage() {
 
   const fetchLedger = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (userId)   params.set("user_id",   userId)
-    if (refType && refType !== "all") params.set("ref_type", refType)
-    if (dateFrom) params.set("date_from", dateFrom)
-    if (dateTo)   params.set("date_to",   dateTo)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (userId)   params.set("user_id",   userId)
+      if (refType && refType !== "all") params.set("ref_type", refType)
+      if (dateFrom) params.set("date_from", dateFrom)
+      if (dateTo)   params.set("date_to",   dateTo)
 
-    const res  = await fetch(`/api/admin/ledger?${params}`)
-    const json = await res.json()
-    setEntries(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+      const res  = await fetch(`/api/admin/ledger?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load ledger entries")
+        setEntries([])
+        setTotal(0)
+        return
+      }
+      setEntries(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load ledger entries")
+    } finally {
+      setLoading(false)
+    }
   }, [page, userId, refType, dateFrom, dateTo])
 
   useEffect(() => {

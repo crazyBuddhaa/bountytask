@@ -40,19 +40,31 @@ function RegisterForm() {
 
   useEffect(() => {
     const code = refCode?.trim().toUpperCase() ?? ""
-    if (!code) { setCodeStatus("idle"); return }
+    if (!code) {
+      setCodeStatus("idle")
+      return
+    }
 
     setCodeStatus("checking")
+    const controller = new AbortController()
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code)}`)
+        const res = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code)}`, {
+          signal: controller.signal,
+        })
         const json = await res.json()
         setCodeStatus(json.valid ? "valid" : "invalid")
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return
         setCodeStatus("idle")
       }
     }, 500)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      controller.abort()
+    }
   }, [refCode])
 
   async function onSubmit(data: FormData) {
@@ -73,7 +85,12 @@ function RegisterForm() {
       })
       if (error) { toast.error(error.message); return }
 
-      if (signUpData.user) {
+      if (signUpData.user?.identities?.length === 0) {
+        toast.error("An account with this email already exists.")
+        return
+      }
+
+      if (signUpData.session && signUpData.user) {
         try {
           await fetch("/api/auth/credit-signup-bonus", {
             method: "POST",
@@ -114,7 +131,7 @@ function RegisterForm() {
           <Label htmlFor="full_name">Full Name</Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input id="full_name" placeholder="Ada Okonkwo" className="pl-9" {...register("full_name")} />
+            <Input id="full_name" autoComplete="name" placeholder="Ada Okonkwo" className="pl-9" {...register("full_name")} />
           </div>
           {errors.full_name && <p className="text-xs text-destructive">{errors.full_name.message}</p>}
         </div>
@@ -123,7 +140,7 @@ function RegisterForm() {
           <Label htmlFor="email">Email</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input id="email" type="email" placeholder="you@example.com" className="pl-9" {...register("email")} />
+            <Input id="email" type="email" autoComplete="email" placeholder="you@example.com" className="pl-9" {...register("email")} />
           </div>
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
         </div>
@@ -132,7 +149,7 @@ function RegisterForm() {
           <Label htmlFor="password">Password</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input id="password" type="password" placeholder="Min. 8 characters" className="pl-9" {...register("password")} />
+            <Input id="password" type="password" autoComplete="new-password" placeholder="Min. 8 characters" className="pl-9" {...register("password")} />
           </div>
           {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
@@ -145,6 +162,7 @@ function RegisterForm() {
             <Gift className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               id="referral_code"
+              autoComplete="off"
               placeholder="e.g. ABC12345"
               className={`pl-9 pr-9 uppercase tracking-widest ${
                 codeStatus === "valid" ? "border-emerald-500 focus-visible:ring-emerald-500" :

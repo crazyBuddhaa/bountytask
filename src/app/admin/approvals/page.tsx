@@ -76,6 +76,7 @@ export default function AdminApprovalsPage() {
   const [loading, setLoading]         = useState(true)
   const [selected, setSelected]       = useState<Set<string>>(new Set())
   const [rejecting, setRejecting]     = useState<string | null>(null)
+  const [confirmBulkApprove, setConfirmBulkApprove] = useState(false)
   const [reason, setReason]           = useState("")
   const [processing, setProcessing]   = useState(false)
   const [total, setTotal]             = useState(0)
@@ -84,11 +85,20 @@ export default function AdminApprovalsPage() {
 
   const fetchPending = useCallback(async () => {
     setLoading(true)
-    const res  = await fetch(`/api/admin/approvals?page=${page}&limit=${limit}`)
-    const json = await res.json()
-    setCompletions(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const res  = await fetch(`/api/admin/approvals?page=${page}&limit=${limit}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load pending approvals")
+        return
+      }
+      setCompletions(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load pending approvals")
+    } finally {
+      setLoading(false)
+    }
   }, [page])
 
   useEffect(() => { fetchPending() }, [fetchPending])
@@ -101,19 +111,35 @@ export default function AdminApprovalsPage() {
 
   async function handleBulk(action: "approve" | "reject", ids: string[], rejectionReason?: string) {
     setProcessing(true)
-    const res = await fetch("/api/admin/approvals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, action, reason: rejectionReason }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setProcessing(false); return }
-    toast.success(`${json.data.processed} completion(s) ${action}d`)
-    setSelected(new Set())
-    setRejecting(null)
-    setReason("")
-    fetchPending()
-    setProcessing(false)
+    try {
+      const res = await fetch("/api/admin/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, action, reason: rejectionReason }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to process completion")
+        if (res.status === 409) {
+          setRejecting(null)
+          setConfirmBulkApprove(false)
+          setReason("")
+          setSelected(new Set())
+          fetchPending()
+        }
+        return
+      }
+      toast.success(`${json.data.processed} completion(s) ${action}d`)
+      setSelected(new Set())
+      setRejecting(null)
+      setConfirmBulkApprove(false)
+      setReason("")
+      fetchPending()
+    } catch {
+      toast.error("Failed to process completion")
+    } finally {
+      setProcessing(false)
+    }
   }
 
   const selectedArr = Array.from(selected)
@@ -129,7 +155,7 @@ export default function AdminApprovalsPage() {
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
             <Button variant="outline" size="sm" className="text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-              onClick={() => handleBulk("approve", selectedArr)} disabled={processing}>
+              onClick={() => setConfirmBulkApprove(true)} disabled={processing}>
               {processing ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
               Approve all
             </Button>
@@ -266,6 +292,28 @@ export default function AdminApprovalsPage() {
           </span>
           <Button variant="outline" size="sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
         </div>
+      )}
+
+      {/* Bulk approve confirmation modal */}
+      {confirmBulkApprove && (
+        <Dialog open onOpenChange={(o) => { if (!o && !processing) setConfirmBulkApprove(false) }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Approve {selected.size} Submission{selected.size === 1 ? "" : "s"}?</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This will approve {selected.size} pending submission{selected.size === 1 ? "" : "s"} and immediately credit rewards to the selected users.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" disabled={processing} onClick={() => setConfirmBulkApprove(false)}>Cancel</Button>
+                <Button variant="gradient" className="flex-1" disabled={processing}
+                  onClick={() => handleBulk("approve", selectedArr)}>
+                  {processing && <Loader2 className="animate-spin" />}
+                  Confirm Approval
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Rejection reason modal */}

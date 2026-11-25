@@ -115,6 +115,7 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
     document.querySelectorAll(`script[src="${SCRIPT_SRC}"]`).forEach((el) => el.remove())
 
     // ── Inject a fresh script tag ─────────────────────────────────────────────
+    let readyTimer: ReturnType<typeof setTimeout> | undefined
     const script = document.createElement("script")
     script.type  = "text/javascript"
     script.src   = SCRIPT_SRC
@@ -130,7 +131,7 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
       // inspect the div: if CPX rendered children into it we're "ready";
       // if the div is still empty CPX silently rejected the config and we
       // treat it as "no-surveys" so we never show a blank white space.
-      setTimeout(() => {
+      readyTimer = setTimeout(() => {
         if (cancelled) return
         setStatus((prev) => {
           if (prev !== "loading") return prev  // a callback already fired
@@ -146,6 +147,7 @@ export function CpxWidget({ appId, userId, secureHash, username, email }: CpxWid
 
     return () => {
       cancelled = true
+      if (readyTimer) clearTimeout(readyTimer)
       script.remove()
     }
   }, [appId, userId, secureHash, username, email, retryKey])

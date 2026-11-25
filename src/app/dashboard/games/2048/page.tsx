@@ -1,10 +1,10 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Suspense, useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const SIZE = 4
 type Board = (number | null)[][]
@@ -101,53 +101,67 @@ const TILE_STYLES: Record<number, { bg: string; text: string; shadow: string }> 
   2048: { bg: "bg-gradient-to-br from-amber-400 to-orange-500", text: "text-white", shadow: "shadow-xl shadow-orange-500/60" },
 }
 
-export default function Game2048Page() {
-  const [board, setBoard]       = useState<Board>(initBoard)
-  const [score, setScore]       = useState(0)
-  const [bestScore, setBestScore] = useState(0)
-  const [phase, setPhase]       = useState<"playing" | "won" | "lost">("playing")
-  const [submitted, setSubmitted] = useState(false)
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
-  const scoreRef   = useRef(0)
+function Game2048Content() {
+  const { entryId, entering, ensureEntry, submitSession } = useGameEntry("2048")
+
+  const [board, setBoard]           = useState<Board>(() => initBoard())
+  const [score, setScore]           = useState(0)
+  const [bestScore, setBestScore]   = useState(0)
+  const [phase, setPhase]           = useState<"playing" | "won" | "lost">("playing")
+  const [entryReady, setEntryReady] = useState(Boolean(entryId))
+  const touchStart   = useRef<{ x: number; y: number } | null>(null)
+  const boardRef     = useRef<Board>(board)
+  const scoreRef     = useRef(0)
+  const submittedRef = useRef(false)
+  const initEntryRef = useRef(false)
+
+  boardRef.current = board
+
+  // Direct load without entry_id: acquire entry token before playing
+  useEffect(() => {
+    if (entryId || initEntryRef.current) return
+    initEntryRef.current = true
+    void ensureEntry().then(ok => {
+      setEntryReady(ok)
+    })
+  }, [entryId, ensureEntry])
 
   const saveSession = useCallback(async (finalScore: number) => {
-    if (submitted) return
-    setSubmitted(true)
-    await fetch("/api/games/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game_slug: "2048", score: finalScore, completed: true, metadata: { score: finalScore } }),
+    if (submittedRef.current) return
+    submittedRef.current = true
+    await submitSession({
+      score: finalScore,
+      completed: true,
+      metadata: { score: finalScore },
     })
-  }, [submitted])
+  }, [submitSession])
 
   const handleMove = useCallback((dir: Direction) => {
-    if (phase !== "playing") return
-    setBoard(prev => {
-      const { board: next, gain, moved } = move(prev, dir)
-      if (!moved) return prev
+    if (phase !== "playing" || !entryReady || entering) return
+    const { board: next, gain, moved } = move(boardRef.current, dir)
+    if (!moved) return
 
-      scoreRef.current += gain
-      const newScore = scoreRef.current
-      setScore(newScore)
-      setBestScore(b => Math.max(b, newScore))
+    const withNew = addRandom(next)
+    boardRef.current = withNew
+    setBoard(withNew)
 
-      const won2048 = next.flat().some(v => v === 2048)
-      const withNew = addRandom(next)
+    scoreRef.current += gain
+    const newScore = scoreRef.current
+    setScore(newScore)
+    setBestScore(b => Math.max(b, newScore))
 
-      if (won2048) {
-        setPhase("won")
-        toast.success("🎉 You reached 2048!")
-        saveSession(newScore)
-        return withNew
-      }
-      if (!hasMovesLeft(withNew)) {
-        setPhase("lost")
-        saveSession(newScore)
-        return withNew
-      }
-      return withNew
-    })
-  }, [phase, saveSession])
+    const won2048 = next.flat().some(v => v === 2048)
+    if (won2048) {
+      setPhase("won")
+      toast.success("🎉 You reached 2048!")
+      void saveSession(newScore)
+      return
+    }
+    if (!hasMovesLeft(withNew)) {
+      setPhase("lost")
+      void saveSession(newScore)
+    }
+  }, [phase, entryReady, entering, saveSession])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -173,12 +187,21 @@ export default function Game2048Page() {
     else handleMove(dy > 0 ? "down" : "up")
   }
 
-  function restart() {
+  async function restart() {
+    if (entering) return
+    const ok = await ensureEntry()
+    if (!ok) {
+      setEntryReady(false)
+      return
+    }
+    const fresh = initBoard()
+    boardRef.current = fresh
     scoreRef.current = 0
-    setBoard(initBoard())
+    submittedRef.current = false
+    setEntryReady(true)
+    setBoard(fresh)
     setScore(0)
     setPhase("playing")
-    setSubmitted(false)
   }
 
   function tileSize(val: number): string {
@@ -270,13 +293,21 @@ export default function Game2048Page() {
             </>
           )}
           <div className="flex justify-center gap-2">
-            <Button onClick={restart} className="bg-amber-500 hover:bg-amber-600 text-white border-0 font-bold shadow-md shadow-amber-500/30" size="sm">
-              New Game
+            <Button onClick={() => void restart()} disabled={entering} className="bg-amber-500 hover:bg-amber-600 text-white border-0 font-bold shadow-md shadow-amber-500/30" size="sm">
+              {entering ? "Starting…" : "New Game"}
             </Button>
             <Link href="/dashboard/games"><Button variant="outline" size="sm">All Games</Button></Link>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+export default function Game2048Page() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" /></div>}>
+      <Game2048Content />
+    </Suspense>
   )
 }

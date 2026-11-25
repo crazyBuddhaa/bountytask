@@ -39,10 +39,19 @@ export default function PendingVerificationsPage() {
 
   async function fetchRecords(status: FilterStatus) {
     setLoading(true)
-    const res = await fetch(`/api/admin/pending-verifications?status=${status}`)
-    const json = await res.json()
-    setRecords(json.data ?? [])
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/admin/pending-verifications?status=${status}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load verification requests")
+        return
+      }
+      setRecords(json.data ?? [])
+    } catch {
+      toast.error("Failed to load verification requests")
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchRecords(filter) }, [filter])
@@ -50,22 +59,33 @@ export default function PendingVerificationsPage() {
   async function handleAction() {
     if (!selected || !action) return
     setActing(true)
-    const res = await fetch("/api/admin/pending-verifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selected.id, action, notes }),
-    })
-    const json = await res.json()
-    if (json.error) {
-      toast.error(json.error)
-    } else {
+    try {
+      const res = await fetch("/api/admin/pending-verifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selected.id, action, notes }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        toast.error(json.error ?? "Failed to process verification request")
+        if (res.status === 409) {
+          setSelected(null)
+          setAction(null)
+          setNotes("")
+          fetchRecords(filter)
+        }
+        return
+      }
       toast.success(action === "approve" ? "User verified — withdrawals unlocked" : "Request rejected")
       setSelected(null)
       setAction(null)
       setNotes("")
       fetchRecords(filter)
+    } catch {
+      toast.error("Failed to process verification request")
+    } finally {
+      setActing(false)
     }
-    setActing(false)
   }
 
   return (
@@ -109,7 +129,7 @@ export default function PendingVerificationsPage() {
           <p>No {filter} requests</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-xl border border-border overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>

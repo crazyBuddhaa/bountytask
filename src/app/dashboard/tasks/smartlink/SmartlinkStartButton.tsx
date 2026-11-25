@@ -1,5 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, Loader2, Clock } from "lucide-react"
 
@@ -19,6 +21,7 @@ function formatCountdown(ms: number): string {
 }
 
 export function SmartlinkStartButton({ rewardKobo, cooldownUntil, capHit }: Props) {
+  const router = useRouter()
   const rewardNaira = (rewardKobo / 100).toFixed(2)
 
   const getCooldownMs = useCallback(() => {
@@ -60,7 +63,7 @@ export function SmartlinkStartButton({ rewardKobo, cooldownUntil, capHit }: Prop
         return
       }
       if (!res.ok) {
-        console.error("Smartlink click error:", data.error)
+        toast.error(data.error ?? "Could not open sponsored link. Please try again.")
         return
       }
 
@@ -69,6 +72,10 @@ export function SmartlinkStartButton({ rewardKobo, cooldownUntil, capHit }: Prop
       // Cooldown starts now
       const next = new Date(Date.now() + 30 * 60 * 1000).toISOString()
       setLocalCooldownUntil(next)
+      toast.success(`₦${rewardNaira} credited to your balance!`)
+      router.refresh()
+    } catch {
+      toast.error("Network error. Please check your connection and try again.")
     } finally {
       setLoading(false)
     }

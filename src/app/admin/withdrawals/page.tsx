@@ -40,13 +40,22 @@ export default function AdminWithdrawalsPage() {
 
   const fetchWithdrawals = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
-    const res  = await fetch(`/api/admin/withdrawals?${params}`)
-    const json = await res.json()
-    setWithdrawals(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
+      const res  = await fetch(`/api/admin/withdrawals?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load withdrawals")
+        return
+      }
+      setWithdrawals(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load withdrawals")
+    } finally {
+      setLoading(false)
+    }
   }, [page, statusFilter])
 
   useEffect(() => { fetchWithdrawals() }, [fetchWithdrawals])
@@ -54,21 +63,39 @@ export default function AdminWithdrawalsPage() {
   async function handleAction() {
     if (!acting) return
     setProcessing(true)
-    const res = await fetch("/api/admin/withdrawals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: acting.w.id, status: acting.action === "paid" ? "paid" : acting.action === "approve" ? "approved" : "rejected",
-        reason: acting.action === "reject" ? notes : undefined,
-        admin_notes: notes || undefined,
-      }),
-    })
-    const json = await res.json()
-    if (!res.ok) { toast.error(json.error); setProcessing(false); return }
-    toast.success(`Withdrawal ${acting.action}d`)
-    setActing(null); setNotes("")
-    fetchWithdrawals()
-    setProcessing(false)
+    const pastTenseLabels: Record<"approve" | "reject" | "paid", string> = {
+      approve: "approved",
+      reject:  "rejected",
+      paid:    "marked as paid",
+    }
+    try {
+      const res = await fetch("/api/admin/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: acting.w.id, status: acting.action === "paid" ? "paid" : acting.action === "approve" ? "approved" : "rejected",
+          reason: acting.action === "reject" ? notes : undefined,
+          admin_notes: notes || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to update withdrawal")
+        if (res.status === 409) {
+          setActing(null)
+          setNotes("")
+          fetchWithdrawals()
+        }
+        return
+      }
+      toast.success(`Withdrawal ${pastTenseLabels[acting.action]}`)
+      setActing(null); setNotes("")
+      fetchWithdrawals()
+    } catch {
+      toast.error("Failed to update withdrawal")
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (

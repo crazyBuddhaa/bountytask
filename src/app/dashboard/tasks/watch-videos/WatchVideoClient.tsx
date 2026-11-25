@@ -32,6 +32,7 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
   const playerRef        = useRef<any>(null)
   const heartbeatRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const localCountRef    = useRef(0)
+  const [heartbeatCount, setHeartbeatCount] = useState(0)
   const [playerReady, setPlayerReady]   = useState(false)
   const [canClaim, setCanClaim]         = useState(false)
   const [claiming, setClaiming]         = useState(false)
@@ -41,7 +42,18 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
 
   // Register watch session as soon as the component mounts
   useEffect(() => {
+    let active = true
     fetch(`/api/tasks/${task.id}/watch/start`, { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok && active) {
+          const json = await res.json().catch(() => ({}))
+          toast.error(json.error ?? "Could not start watch session. Please refresh.")
+        }
+      })
+      .catch(() => {
+        if (active) toast.error("Network error starting watch session.")
+      })
+    return () => { active = false }
   }, [task.id])
 
   const startHeartbeat = useCallback(() => {
@@ -50,11 +62,19 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
       try {
         const res = await fetch(`/api/tasks/${task.id}/watch/heartbeat`, { method: "POST" })
         if (res.ok) {
-          localCountRef.current += 1
-          const watched = localCountRef.current * 10
-          const pct = Math.min(Math.round((watched / required) * 100), 100)
+          const json = await res.json().catch(() => ({}))
+          const serverCount =
+            typeof json?.heartbeat_count === "number"
+              ? json.heartbeat_count
+              : typeof json?.data?.heartbeat_count === "number"
+              ? json.data.heartbeat_count
+              : localCountRef.current + 1
+          localCountRef.current = serverCount
+          setHeartbeatCount(serverCount)
+          const watchedSeconds = serverCount * 10
+          const pct = Math.min(Math.round((watchedSeconds / required) * 100), 100)
           setProgress(pct)
-          if (watched >= required) setCanClaim(true)
+          if (watchedSeconds >= required) setCanClaim(true)
         }
       } catch { /* silent */ }
     }, 10_000)
@@ -68,10 +88,17 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
   }, [])
 
   // Cleanup on unmount
-  useEffect(() => () => stopHeartbeat(), [stopHeartbeat])
+  useEffect(() => {
+    return () => {
+      stopHeartbeat()
+      try { playerRef.current?.destroy?.() } catch { /* ignore */ }
+      playerRef.current = null
+    }
+  }, [stopHeartbeat])
 
   const initPlayer = useCallback(() => {
     if (!videoId) return
+    try { playerRef.current?.destroy?.() } catch { /* ignore */ }
     playerRef.current = new window.YT.Player("yt-player", {
       videoId,
       playerVars: { rel: 0, modestbranding: 1 },
@@ -83,41 +110,56 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
             startHeartbeat()
           } else if (event.data === S.ENDED) {
             stopHeartbeat()
-            setCanClaim(true)
-            setProgress(100)
+            const watchedSeconds = localCountRef.current * 10
+            if (watchedSeconds >= required) {
+              setCanClaim(true)
+              setProgress(100)
+            }
           } else {
             stopHeartbeat()
           }
         },
       },
     })
-  }, [videoId, startHeartbeat, stopHeartbeat])
+  }, [videoId, required, startHeartbeat, stopHeartbeat])
 
   // Load YouTube IFrame API once
   useEffect(() => {
     if (typeof window === "undefined") return
     if (window.YT?.Player) { initPlayer(); return }
-    const tag = document.createElement("script")
-    tag.src = "https://www.youtube.com/iframe_api"
-    document.head.appendChild(tag)
-    window.onYouTubeIframeAPIReady = initPlayer
+    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]')
+    if (!existingScript) {
+      const tag = document.createElement("script")
+      tag.src = "https://www.youtube.com/iframe_api"
+      document.head.appendChild(tag)
+    }
+    const prevReady = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof prevReady === "function" && prevReady !== initPlayer) prevReady()
+      initPlayer()
+    }
   }, [initPlayer])
 
   async function handleClaim() {
     setClaiming(true)
-    const res = await fetch(`/api/tasks/${task.id}/complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      toast.error(json.error)
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Could not claim reward. Please try again.")
+        return
+      }
+      toast.success(`₦${(task.reward_amount / 100).toFixed(2)} credited to your balance!`)
+      onClaimed()
+    } catch {
+      toast.error("Network error while claiming reward. Please try again.")
+    } finally {
       setClaiming(false)
-      return
     }
-    toast.success(`₦${(task.reward_amount / 100).toFixed(2)} credited to your balance!`)
-    onClaimed()
   }
 
   return (
@@ -141,7 +183,7 @@ export default function WatchVideoClient({ task, onClaimed }: Props) {
               Watch progress
             </span>
             <span className="font-medium tabular-nums text-xs">
-              {Math.min(localCountRef.current * 10, required)}s / {required}s
+              {Math.min(heartbeatCount * 10, required)}s / {required}s
             </span>
           </div>
           <div className="h-2 w-full rounded-full bg-muted overflow-hidden">

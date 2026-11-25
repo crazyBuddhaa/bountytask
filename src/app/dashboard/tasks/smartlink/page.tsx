@@ -56,7 +56,10 @@ export default async function SmartlinkPage() {
               <span className="text-muted-foreground">Today&apos;s completions</span>
               <span className="font-medium tabular-nums">{usedToday} / {settings.dailyCap}</span>
             </div>
-            <Progress value={(usedToday / settings.dailyCap) * 100} className="h-2" />
+            <Progress
+              value={Math.min(100, settings.dailyCap > 0 ? (usedToday / settings.dailyCap) * 100 : 100)}
+              className="h-2"
+            />
           </CardContent>
         </Card>
       )}

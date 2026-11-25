@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { PlayCircle, ShieldCheck, Zap } from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
 import WatchAdClient from "./WatchAdClient"
 
 export default async function WatchAdPage() {
@@ -47,8 +48,7 @@ export default async function WatchAdPage() {
             <PlayCircle className="w-6 h-6" /> Watch an Ad
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Earn {(ima.rewardKobo / 100).toFixed(2).replace(/\.?0+$/, "")
-              .replace(/^(\d+\.\d{1,2}).*$/, "$1")} ₦ per video ad watched to completion.
+            Earn {formatCurrency(ima.rewardKobo)} per video ad watched to completion.
           </p>
         </div>
         <Badge variant="outline" className="whitespace-nowrap shrink-0">
@@ -63,7 +63,10 @@ export default async function WatchAdPage() {
             <span className="text-muted-foreground">Today&apos;s ads watched</span>
             <span className="font-medium tabular-nums">{usedToday} / {ima.dailyCap}</span>
           </div>
-          <Progress value={(usedToday / ima.dailyCap) * 100} className="h-2" />
+          <Progress
+            value={Math.min(100, ima.dailyCap > 0 ? (usedToday / ima.dailyCap) * 100 : 100)}
+            className="h-2"
+          />
           {capHit && (
             <p className="text-xs text-muted-foreground">Daily limit reached. Resets at midnight UTC.</p>
           )}

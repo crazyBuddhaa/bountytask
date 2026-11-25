@@ -19,27 +19,33 @@ export default function SecurityPage() {
 
   const strength = passwordStrength(newPassword)
 
-  async function handleChangePassword() {
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
     if (newPassword !== confirmPassword) { toast.error("New passwords do not match"); return }
     if (newPassword.length < 8) { toast.error("Password must be at least 8 characters"); return }
     setLoading(true)
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    // Re-authenticate with current password
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.email) { toast.error("Not authenticated"); setLoading(false); return }
+      // Re-authenticate with current password
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.email) { toast.error("Not authenticated"); return }
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: user.email, password: currentPassword,
-    })
-    if (signInError) { toast.error("Current password is incorrect"); setLoading(false); return }
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email, password: currentPassword,
+      })
+      if (signInError) { toast.error("Current password is incorrect"); return }
 
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) { toast.error(error.message); setLoading(false); return }
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) { toast.error(error.message); return }
 
-    toast.success("Password changed successfully!")
-    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("")
-    setLoading(false)
+      toast.success("Password changed successfully!")
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("")
+    } catch {
+      toast.error("Could not update password. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -56,90 +62,107 @@ export default function SecurityPage() {
             <KeyRound className="w-4 h-4" /> Change Password
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Current Password</Label>
-            <div className="relative">
-              <Input
-                type={showCurrent ? "text" : "password"}
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
-                className="pr-10"
-              />
-              <button type="button" onClick={() => setShowCurrent(s => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>New Password</Label>
-            <div className="relative">
-              <Input
-                type={showNew ? "text" : "password"}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                className="pr-10"
-              />
-              <button type="button" onClick={() => setShowNew(s => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {newPassword && (
-              <div className="mt-2 space-y-1">
-                <div className="flex gap-1">
-                  {[0, 1, 2, 3].map(i => (
-                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < strength.score
-                      ? strength.score <= 1 ? "bg-red-500" : strength.score <= 2 ? "bg-amber-500" : "bg-emerald-500"
-                      : "bg-muted"}`} />
-                  ))}
-                </div>
-                <p className={`text-xs font-medium ${strength.score <= 1 ? "text-red-500" : strength.score <= 2 ? "text-amber-500" : "text-emerald-600"}`}>
-                  {strength.label}
-                </p>
-                {strength.tips.length > 0 && (
-                  <ul className="text-xs text-muted-foreground space-y-0.5">
-                    {strength.tips.map(t => <li key={t}>• {t}</li>)}
-                  </ul>
-                )}
+        <CardContent>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="current-password">Current Password</Label>
+              <div className="relative">
+                <Input
+                  id="current-password"
+                  type={showCurrent ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={showCurrent ? "Hide current password" : "Show current password"}
+                  onClick={() => setShowCurrent(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Confirm New Password</Label>
-            <div className="relative">
-              <Input
-                type={showConfirm ? "text" : "password"}
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Repeat new password"
-                className={`pr-10 ${confirmPassword && confirmPassword !== newPassword ? "border-destructive" : ""}`}
-              />
-              <button type="button" onClick={() => setShowConfirm(s => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
             </div>
-            {confirmPassword && confirmPassword !== newPassword && (
-              <p className="text-xs text-destructive">Passwords do not match</p>
-            )}
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              variant="gradient"
-              onClick={handleChangePassword}
-              disabled={loading || !currentPassword || !newPassword || newPassword !== confirmPassword}
-            >
-              {loading && <Loader2 className="animate-spin" />}
-              Update password
-            </Button>
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showNew ? "text" : "password"}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={showNew ? "Hide new password" : "Show new password"}
+                  onClick={() => setShowNew(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {newPassword && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex gap-1">
+                    {[0, 1, 2, 3].map(i => (
+                      <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < strength.score
+                        ? strength.score <= 1 ? "bg-red-500" : strength.score <= 2 ? "bg-amber-500" : "bg-emerald-500"
+                        : "bg-muted"}`} />
+                    ))}
+                  </div>
+                  <p className={`text-xs font-medium ${strength.score <= 1 ? "text-red-500" : strength.score <= 2 ? "text-amber-500" : "text-emerald-600"}`}>
+                    {strength.label}
+                  </p>
+                  {strength.tips.length > 0 && (
+                    <ul className="text-xs text-muted-foreground space-y-0.5">
+                      {strength.tips.map(t => <li key={t}>• {t}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirm ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password"
+                  className={`pr-10 ${confirmPassword && confirmPassword !== newPassword ? "border-destructive" : ""}`}
+                />
+                <button
+                  type="button"
+                  aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+                  onClick={() => setShowConfirm(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirmPassword && confirmPassword !== newPassword && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="submit"
+                variant="gradient"
+                disabled={loading || !currentPassword || !newPassword || newPassword !== confirmPassword}
+              >
+                {loading && <Loader2 className="animate-spin" />}
+                Update password
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 

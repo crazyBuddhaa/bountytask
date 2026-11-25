@@ -6,10 +6,9 @@ import { toast } from "sonner"
 import Link from "next/link"
 import {
   ArrowLeft, Clock, ExternalLink, Newspaper,
-  Timer, Coins, CheckCircle2, Loader2, AlertCircle,
+  Timer, Coins, CheckCircle2, AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDistanceToNow } from "date-fns"
@@ -68,11 +67,12 @@ export default function ArticleReaderPage() {
   const [notFound, setNotFound] = useState(false)
 
   // Earn state
-  const [earnInfo, setEarnInfo]           = useState<EarnInfo | null>(null)
-  const [minutesCredited, setMinutesCredited] = useState(0)
+  const [earnInfo, setEarnInfo]                 = useState<EarnInfo | null>(null)
+  const [minutesCredited, setMinutesCredited]   = useState(0)
   const [dailyMinutesUsed, setDailyMinutesUsed] = useState(0)
-  const [capReached, setCapReached]           = useState(false)
-  const [totalEarnedKobo, setTotalEarnedKobo] = useState(0)
+  const [capReached, setCapReached]             = useState(false)
+  const [capReason, setCapReason]               = useState<"article" | "daily" | null>(null)
+  const [totalEarnedKobo, setTotalEarnedKobo]   = useState(0)
 
   // Timer display
   const [secondsOnPage, setSecondsOnPage] = useState(0)
@@ -81,6 +81,17 @@ export default function ArticleReaderPage() {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tickRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const capRef       = useRef(false)
+
+  const stopTimers = useCallback(() => {
+    if (tickRef.current) {
+      clearInterval(tickRef.current)
+      tickRef.current = null
+    }
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current)
+      heartbeatRef.current = null
+    }
+  }, [])
 
   // ── Fetch article + content + mark as read ─────────────────────────────────
   useEffect(() => {
@@ -105,13 +116,29 @@ export default function ArticleReaderPage() {
         if (!cancelled) {
           setArticle(contentJson.article ?? null)
           if (readJson) {
+            const maxMin    = readJson.maxMinutesPerArticle ?? 5
+            const dailyCap  = readJson.dailyCapMinutes      ?? 30
+            const minsCred  = readJson.minutesCredited      ?? 0
+            const dailyUsed = readJson.dailyMinutesUsed     ?? 0
+
             setEarnInfo({
-              earnEnabled:          readJson.earnEnabled          ?? false,
-              koboPerMinute:        readJson.koboPerMinute        ?? 200,
-              maxMinutesPerArticle: readJson.maxMinutesPerArticle ?? 5,
-              dailyCapMinutes:      readJson.dailyCapMinutes      ?? 30,
+              earnEnabled:          readJson.earnEnabled   ?? false,
+              koboPerMinute:        readJson.koboPerMinute ?? 200,
+              maxMinutesPerArticle: maxMin,
+              dailyCapMinutes:      dailyCap,
             })
-            setMinutesCredited(readJson.minutesCredited ?? 0)
+            setMinutesCredited(minsCred)
+            setDailyMinutesUsed(dailyUsed)
+
+            if (dailyUsed >= dailyCap) {
+              capRef.current = true
+              setCapReached(true)
+              setCapReason("daily")
+            } else if (minsCred >= maxMin) {
+              capRef.current = true
+              setCapReached(true)
+              setCapReason("article")
+            }
           }
           setLoading(false)
         }
@@ -126,7 +153,7 @@ export default function ArticleReaderPage() {
 
   // ── Heartbeat ──────────────────────────────────────────────────────────────
   const sendHeartbeat = useCallback(async () => {
-    if (capRef.current) return
+    if (capRef.current || document.hidden) return
     try {
       const res  = await fetch(`/api/news/${id}/heartbeat`, { method: "POST" })
       const json = await res.json()
@@ -147,35 +174,51 @@ export default function ArticleReaderPage() {
       ) {
         capRef.current = true
         setCapReached(true)
-        if (heartbeatRef.current) {
-          clearInterval(heartbeatRef.current)
-          heartbeatRef.current = null
-        }
+        setCapReason(json.reason === "daily_cap_reached" ? "daily" : "article")
+        stopTimers()
       }
 
       if (json.daily_minutes_used !== undefined) {
         setDailyMinutesUsed(json.daily_minutes_used)
       }
     } catch { /* silent — will retry next tick */ }
-  }, [id])
+  }, [id, stopTimers])
 
   // ── Start timers once article is loaded and earn is enabled ───────────────
   useEffect(() => {
-    if (loading || !earnInfo?.earnEnabled) return
+    if (loading || !earnInfo?.earnEnabled || capReached) {
+      stopTimers()
+      return
+    }
 
-    // On-screen tick counter
-    tickRef.current = setInterval(() => {
-      setSecondsOnPage(s => s + 1)
-    }, TICK_MS)
+    const startTimers = () => {
+      if (capRef.current || document.hidden) return
+      if (!tickRef.current) {
+        tickRef.current = setInterval(() => {
+          setSecondsOnPage(s => s + 1)
+        }, TICK_MS)
+      }
+      if (!heartbeatRef.current) {
+        heartbeatRef.current = setInterval(sendHeartbeat, HEARTBEAT_MS)
+      }
+    }
 
-    // Heartbeat every 60 seconds
-    heartbeatRef.current = setInterval(sendHeartbeat, HEARTBEAT_MS)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopTimers()
+      } else {
+        startTimers()
+      }
+    }
+
+    startTimers()
+    document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
-      if (tickRef.current)      clearInterval(tickRef.current)
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      stopTimers()
     }
-  }, [loading, earnInfo, sendHeartbeat])
+  }, [loading, earnInfo, capReached, sendHeartbeat, stopTimers])
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const maxMin       = earnInfo?.maxMinutesPerArticle ?? 5
@@ -240,7 +283,11 @@ export default function ArticleReaderPage() {
             <div className="flex items-center gap-2">
               <Coins className={`w-4 h-4 ${capReached ? "text-muted-foreground" : "text-amber-500"}`} />
               <span className="text-sm font-semibold">
-                {capReached ? "Earning complete for this article" : `Earn ${fmt(koboPerMin)} per minute you read`}
+                {capReached
+                  ? capReason === "daily"
+                    ? "Daily earning limit reached"
+                    : "Earning complete for this article"
+                  : `Earn ${fmt(koboPerMin)} per minute you read`}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -277,7 +324,9 @@ export default function ArticleReaderPage() {
 
           {capReached && (
             <p className="text-xs text-muted-foreground text-center">
-              You&apos;ve earned the maximum for this article. Open another article to keep earning.
+              {capReason === "daily"
+                ? "You've reached your daily reading earning limit. Come back tomorrow to earn more."
+                : "You've earned the maximum for this article. Open another article to keep earning."}
             </p>
           )}
         </div>
@@ -345,7 +394,7 @@ export default function ArticleReaderPage() {
             </div>
           ) : (
             <div className="text-center py-8 space-y-3">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" />
+              <Newspaper className="w-6 h-6 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
                 Full content isn&apos;t available for this article.
               </p>

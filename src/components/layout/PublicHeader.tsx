@@ -46,7 +46,7 @@ export function PublicHeader() {
 
         {/* Mobile toggle */}
         <button className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
-          onClick={() => setOpen(o => !o)} aria-label="Toggle menu">
+          onClick={() => setOpen(o => !o)} aria-label="Toggle menu" aria-expanded={open}>
           {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
@@ -61,8 +61,12 @@ export function PublicHeader() {
             </Link>
           ))}
           <div className="pt-3 flex flex-col gap-2">
-            <Button variant="outline" size="sm" asChild><Link href="/sign-in">Sign in</Link></Button>
-            <Button variant="gradient" size="sm" asChild><Link href="/register">Get Started Free</Link></Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/sign-in" onClick={() => setOpen(false)}>Sign in</Link>
+            </Button>
+            <Button variant="gradient" size="sm" asChild>
+              <Link href="/register" onClick={() => setOpen(false)}>Get Started Free</Link>
+            </Button>
           </div>
         </div>
       )}

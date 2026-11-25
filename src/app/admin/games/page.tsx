@@ -62,34 +62,55 @@ export default function AdminGamesPage() {
   const [pools, setPools] = useState<Pool[]>([])
   const [loading, setLoading] = useState(true)
   const [settling, setSettling] = useState<string | null>(null)
+  const [confirmPool, setConfirmPool] = useState<Pool | null>(null)
 
   async function fetchPools() {
-    const r = await fetch("/api/admin/games/pools")
-    const j = await r.json()
-    setPools(j.data ?? [])
-    setLoading(false)
+    setLoading(true)
+    try {
+      const r = await fetch("/api/admin/games/pools")
+      const j = await r.json()
+      if (!r.ok) {
+        toast.error(j.error ?? "Failed to load prize pools")
+        return
+      }
+      setPools(j.data ?? [])
+    } catch {
+      toast.error("Failed to load prize pools")
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchPools() }, [])
 
   async function settle(pool: Pool) {
     setSettling(pool.id)
-    const r = await fetch("/api/admin/games/settle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pool_id: pool.id }),
-    })
-    const j = await r.json()
-    setSettling(null)
-    if (j.error) {
-      toast.error(j.error)
-    } else {
+    try {
+      const r = await fetch("/api/admin/games/settle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pool_id: pool.id }),
+      })
+      const j = await r.json()
+      if (!r.ok || j.error) {
+        toast.error(j.error ?? "Failed to settle pool")
+        if (r.status === 409) {
+          setConfirmPool(null)
+          fetchPools()
+        }
+        return
+      }
       const { payouts } = j.data as { payouts: { rank: number; display_name: string; payout_kobo: number }[] }
       toast.success(
         `Settled! ${payouts.map(p => `#${p.rank} ${p.display_name} → ${fmt(p.payout_kobo)}`).join(" · ")}`,
         { duration: 8000 }
       )
+      setConfirmPool(null)
       fetchPools()
+    } catch {
+      toast.error("Failed to settle pool")
+    } finally {
+      setSettling(null)
     }
   }
 
@@ -129,7 +150,7 @@ export default function AdminGamesPage() {
             <Clock className="w-3.5 h-3.5" /> Pending settlement
           </h2>
           {unsettled.map(pool => (
-            <PoolCard key={pool.id} pool={pool} onSettle={settle} settling={settling === pool.id} />
+            <PoolCard key={pool.id} pool={pool} onRequestSettle={setConfirmPool} settling={settling === pool.id} />
           ))}
         </section>
       )}
@@ -140,36 +161,40 @@ export default function AdminGamesPage() {
             <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Settled
           </h2>
           {settled.map(pool => (
-            <PoolCard key={pool.id} pool={pool} onSettle={settle} settling={false} />
+            <PoolCard key={pool.id} pool={pool} onRequestSettle={setConfirmPool} settling={false} />
           ))}
         </section>
       )}
+
+      {/* Confirm settle dialog */}
+      <Dialog open={!!confirmPool} onOpenChange={(open) => { if (!open && !settling) setConfirmPool(null) }}>
+        {confirmPool && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Settle {confirmPool.game_slug} — {weekLabel(confirmPool.week_start)}?</DialogTitle>
+              <DialogDescription>
+                This will credit {fmt(confirmPool.prize_pool_kobo)} to the top-3 players (50&nbsp;%&nbsp;/&nbsp;30&nbsp;%&nbsp;/&nbsp;20&nbsp;%) and cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" disabled={settling === confirmPool.id} onClick={() => setConfirmPool(null)}>Cancel</Button>
+              <Button disabled={settling === confirmPool.id} onClick={() => settle(confirmPool)}>
+                {settling === confirmPool.id && <Loader2 className="animate-spin w-4 h-4" />}
+                Confirm &amp; Settle
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   )
 }
 
-function PoolCard({ pool, onSettle, settling }: { pool: Pool; onSettle: (p: Pool) => void; settling: boolean }) {
+function PoolCard({ pool, onRequestSettle, settling }: { pool: Pool; onRequestSettle: (p: Pool) => void; settling: boolean }) {
   const payouts = [...pool.leaderboard_payouts].sort((a, b) => a.rank - b.rank)
-  const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
     <Card className={pool.settled ? "opacity-70" : "border-amber-400/60"}>
-      {/* Confirm settle dialog */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Settle {pool.game_slug} — {weekLabel(pool.week_start)}?</DialogTitle>
-            <DialogDescription>
-              This will credit {fmt(pool.prize_pool_kobo)} to the top-3 players (50&nbsp;%&nbsp;/&nbsp;30&nbsp;%&nbsp;/&nbsp;20&nbsp;%) and cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setConfirmOpen(false); onSettle(pool) }}>Confirm &amp; Settle</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -184,7 +209,12 @@ function PoolCard({ pool, onSettle, settling }: { pool: Pool; onSettle: (p: Pool
             <CardDescription className="mt-0.5">{weekLabel(pool.week_start)}</CardDescription>
           </div>
           {!pool.settled && (
-            <Button size="sm" disabled={settling} className="shrink-0" onClick={() => setConfirmOpen(true)}>
+            <Button
+              size="sm"
+              disabled={settling || pool.prize_pool_kobo <= 0}
+              className="shrink-0"
+              onClick={() => onRequestSettle(pool)}
+            >
               {settling ? <Loader2 className="animate-spin w-4 h-4" /> : <Trophy className="w-4 h-4" />}
               Settle
             </Button>

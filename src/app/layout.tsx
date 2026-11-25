@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { getMonetagSettings, parseMonetagSnippet } from "@/lib/monetag";
 import { MonetagScript } from "@/components/ads/MonetagScript";
 import { Analytics } from "@vercel/analytics/next";
+import { AdSenseScript } from "@/components/ads/AdSenseScript";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,8 +25,7 @@ export const metadata: Metadata = {
   authors: [{ name: "BountyTask" }],
   icons: {
     icon: [
-      { url: "/icon.png",     sizes: "32x32",  type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.png", sizes: "32x32", type: "image/png" },
     ],
     apple: { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
     shortcut: "/favicon.ico",
@@ -67,14 +66,8 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {/* Google AdSense — public pages only; AdSense's own placement rules
-            handle suppression, but Monetag is gated client-side below. */}
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3580627557521419"
-          crossOrigin="anonymous"
-          strategy="beforeInteractive"
-        />
+        {/* Google AdSense — public pages only (gated client-side via AdSenseScript). */}
+        <AdSenseScript />
 
         {/* Monetag Multitag — public pages only.
             MonetagScript is a client component that reads usePathname() and

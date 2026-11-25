@@ -1,7 +1,8 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { Trophy, ArrowLeft, Crown, Gift, Sparkles } from "lucide-react"
+import { Trophy, ArrowLeft, Crown, Gift, Sparkles, AlertCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { GAME_META, GAME_SLUGS } from "@/lib/games"
@@ -61,39 +62,53 @@ function fmt(kobo: number) {
 }
 
 export default function LeaderboardPage() {
-  const [game, setGame]         = useState<GameSlug>("wordle")
-  const [rows, setRows]         = useState<LeaderboardEntry[]>([])
-  const [myRank, setMyRank]     = useState<number | null>(null)
+  const [game, setGame]           = useState<GameSlug>("wordle")
+  const [rows, setRows]           = useState<LeaderboardEntry[]>([])
+  const [myRank, setMyRank]       = useState<number | null>(null)
   const [weekStart, setWeekStart] = useState("")
-  const [loading, setLoading]   = useState(true)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
 
-  const [payouts, setPayouts]         = useState<Payout[]>([])
-  const [totalEarned, setTotalEarned] = useState(0)
+  const [payouts, setPayouts]               = useState<Payout[]>([])
+  const [totalEarned, setTotalEarned]       = useState(0)
   const [payoutsLoading, setPayoutsLoading] = useState(true)
+  const [payoutsError, setPayoutsError]     = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchRankings = useCallback(async (slug: GameSlug) => {
     setLoading(true)
-    fetch(`/api/games/leaderboard?game=${game}&limit=20`)
-      .then(r => r.json())
-      .then(j => {
-        setRows(j.data ?? [])
-        setMyRank(j.my_rank ?? null)
-        setWeekStart(j.week_start ?? "")
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [game])
-
-  useEffect(() => {
-    fetch("/api/games/my-payouts")
-      .then(r => r.json())
-      .then(j => {
-        setPayouts(j.data ?? [])
-        setTotalEarned(j.total_earned_kobo ?? 0)
-        setPayoutsLoading(false)
-      })
-      .catch(() => setPayoutsLoading(false))
+    setError(null)
+    try {
+      const r = await fetch(`/api/games/leaderboard?game=${slug}&limit=20`)
+      if (!r.ok) throw new Error("Failed to load leaderboard")
+      const j = await r.json()
+      setRows(j.data ?? [])
+      setMyRank(j.my_rank ?? null)
+      setWeekStart(j.week_start ?? "")
+    } catch {
+      setError("Could not load leaderboard rankings. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  const fetchPayouts = useCallback(async () => {
+    setPayoutsLoading(true)
+    setPayoutsError(null)
+    try {
+      const r = await fetch("/api/games/my-payouts")
+      if (!r.ok) throw new Error("Failed to load winnings")
+      const j = await r.json()
+      setPayouts(j.data ?? [])
+      setTotalEarned(j.total_earned_kobo ?? 0)
+    } catch {
+      setPayoutsError("Could not load your winnings. Please try again.")
+    } finally {
+      setPayoutsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchRankings(game) }, [game, fetchRankings])
+  useEffect(() => { void fetchPayouts() }, [fetchPayouts])
 
   const weekLabel = weekStart
     ? `Week of ${new Date(weekStart).toLocaleDateString("en-NG", { month: "short", day: "numeric" })}`
@@ -180,8 +195,19 @@ export default function LeaderboardPage() {
             </div>
           )}
 
+          {/* Error state */}
+          {!loading && error && (
+            <div className="py-14 text-center rounded-2xl border bg-card space-y-3">
+              <AlertCircle className="w-10 h-10 mx-auto text-destructive" />
+              <p className="font-semibold text-base">{error}</p>
+              <Button variant="outline" size="sm" onClick={() => void fetchRankings(game)}>
+                Retry
+              </Button>
+            </div>
+          )}
+
           {/* Empty state */}
-          {!loading && rows.length === 0 && (
+          {!loading && !error && rows.length === 0 && (
             <div className="py-20 text-center rounded-2xl border bg-card">
               <Trophy className="w-14 h-14 mx-auto mb-4 text-muted-foreground/20" />
               <p className="font-black text-lg">No scores yet this week</p>
@@ -196,7 +222,7 @@ export default function LeaderboardPage() {
           )}
 
           {/* Podium */}
-          {!loading && top3.length > 0 && (
+          {!loading && !error && top3.length > 0 && (
             <div className="flex items-end justify-center gap-3 pt-4 pb-2">
               {PODIUM_ORDER.map((rank, pi) => {
                 const row = top3.find(r => r.rank === rank)
@@ -227,7 +253,7 @@ export default function LeaderboardPage() {
           )}
 
           {/* Rank 4+ list */}
-          {!loading && rest.length > 0 && (
+          {!loading && !error && rest.length > 0 && (
             <div className="rounded-2xl border bg-card overflow-hidden divide-y">
               {rest.map(row => (
                 <div
@@ -258,7 +284,7 @@ export default function LeaderboardPage() {
           )}
 
           {/* My rank if outside top 20 */}
-          {!loading && myRank && myRank > 20 && (
+          {!loading && !error && myRank && myRank > 20 && (
             <div className="rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4 flex items-center gap-4">
               <div className="w-7 text-center font-black text-primary tabular-nums text-sm">#{myRank}</div>
               <div className="flex-1 text-sm font-semibold text-primary">Your current rank</div>
@@ -286,7 +312,17 @@ export default function LeaderboardPage() {
             </div>
           )}
 
-          {!payoutsLoading && payouts.length === 0 && (
+          {!payoutsLoading && payoutsError && (
+            <div className="py-14 text-center rounded-2xl border bg-card space-y-3">
+              <AlertCircle className="w-10 h-10 mx-auto text-destructive" />
+              <p className="font-semibold text-base">{payoutsError}</p>
+              <Button variant="outline" size="sm" onClick={() => void fetchPayouts()}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!payoutsLoading && !payoutsError && payouts.length === 0 && (
             <div className="py-20 text-center rounded-2xl border bg-card">
               <div className="w-16 h-16 rounded-2xl bounty-gradient mx-auto mb-4 flex items-center justify-center shadow-lg shadow-primary/30">
                 <Gift className="w-8 h-8 text-white" />
@@ -304,7 +340,7 @@ export default function LeaderboardPage() {
             </div>
           )}
 
-          {!payoutsLoading && payouts.length > 0 && (
+          {!payoutsLoading && !payoutsError && payouts.length > 0 && (
             <>
               {/* Total earned banner */}
               <div className="bounty-gradient p-px rounded-2xl">

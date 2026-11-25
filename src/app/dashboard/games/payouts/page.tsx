@@ -1,16 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import {
-  Trophy, Coins, ArrowLeft, Loader2, Calendar,
-  Star, TrendingUp, Gamepad2,
+  Trophy, Coins, ArrowLeft, Calendar,
+  Star, TrendingUp, Gamepad2, AlertCircle,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
+import { GAME_META } from "@/lib/games"
+import type { GameSlug } from "@/lib/games"
 import type { Payout } from "@/app/api/games/my-payouts/route"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -29,41 +31,31 @@ function weekLabel(start: string) {
 
 const RANK_ICON: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
-const GAME_NAMES: Record<string, string> = {
-  "wordle":          "Daily Wordle",
-  "higher-or-lower": "Higher or Lower",
-  "tap-target":      "Tap the Target",
-  "2048":            "2048",
-  "color-rush":      "Color Rush",
-  "word-scramble":   "Word Scramble",
-}
-
-const GAME_EMOJI: Record<string, string> = {
-  "wordle":          "🟩",
-  "higher-or-lower": "🔢",
-  "tap-target":      "🎯",
-  "2048":            "🧩",
-  "color-rush":      "🎨",
-  "word-scramble":   "📝",
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GamePayoutsPage() {
-  const [payouts, setPayouts]         = useState<Payout[]>([])
-  const [totalKobo, setTotalKobo]     = useState(0)
-  const [loading, setLoading]         = useState(true)
+  const [payouts, setPayouts]     = useState<Payout[]>([])
+  const [totalKobo, setTotalKobo] = useState(0)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch("/api/games/my-payouts")
-      .then(r => r.json())
-      .then(j => {
-        setPayouts(j.data ?? [])
-        setTotalKobo(j.total_earned_kobo ?? 0)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+  const loadPayouts = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await fetch("/api/games/my-payouts")
+      if (!r.ok) throw new Error("Failed to load winnings")
+      const j = await r.json()
+      setPayouts(j.data ?? [])
+      setTotalKobo(j.total_earned_kobo ?? 0)
+    } catch {
+      setError("Could not load your prize history. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { void loadPayouts() }, [loadPayouts])
 
   // Group by week
   const byWeek = payouts.reduce<Record<string, Payout[]>>((acc, p) => {
@@ -119,6 +111,16 @@ export default function GamePayoutsPage() {
             </Card>
           ))}
         </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="py-12 text-center space-y-3">
+            <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
+            <p className="font-semibold text-base">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => void loadPayouts()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : payouts.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center space-y-4">
@@ -157,7 +159,9 @@ export default function GamePayoutsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-3">
-                  {weekPayouts.map((payout) => (
+                  {weekPayouts.map((payout) => {
+                    const meta = GAME_META[payout.game_slug as GameSlug]
+                    return (
                     <div
                       key={payout.id}
                       className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 hover:bg-muted/70 transition-colors"
@@ -171,7 +175,7 @@ export default function GamePayoutsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-medium text-sm">
-                            {GAME_EMOJI[payout.game_slug]} {GAME_NAMES[payout.game_slug] ?? payout.game_slug}
+                            {meta?.emoji ?? "🎮"} {meta?.name ?? payout.game_slug}
                           </span>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                             Rank #{payout.rank}
@@ -194,7 +198,8 @@ export default function GamePayoutsPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </CardContent>
               </Card>
             )

@@ -29,12 +29,21 @@ export default function AdminTaskSubmissionsPage() {
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(page), limit: String(limit), status: statusFilter })
-    const res  = await fetch(`/api/admin/task-submissions?${params}`)
-    const json = await res.json()
-    setItems(json.data ?? [])
-    setTotal(json.total ?? 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit), status: statusFilter })
+      const res  = await fetch(`/api/admin/task-submissions?${params}`)
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to load advertiser requests")
+        return
+      }
+      setItems(json.data ?? [])
+      setTotal(json.total ?? 0)
+    } catch {
+      toast.error("Failed to load advertiser requests")
+    } finally {
+      setLoading(false)
+    }
   }, [page, statusFilter])
 
   useEffect(() => { fetchItems() }, [fetchItems])
@@ -42,18 +51,26 @@ export default function AdminTaskSubmissionsPage() {
   async function review(decision: "approve" | "reject") {
     if (!reviewing) return
     setSaving(true)
-    const res = await fetch(`/api/admin/task-submissions/${reviewing.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, admin_notes: notes || null }),
-    })
-    const json = await res.json()
-    setSaving(false)
-    if (!res.ok) { toast.error(json.error); return }
-    toast.success(decision === "approve" ? "Task created as a draft — activate it from the Tasks page." : "Submission rejected")
-    setReviewing(null)
-    setNotes("")
-    fetchItems()
+    try {
+      const res = await fetch(`/api/admin/task-submissions/${reviewing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, admin_notes: notes || null }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error ?? "Failed to review submission")
+        return
+      }
+      toast.success(decision === "approve" ? "Task created as a draft — activate it from the Tasks page." : "Submission rejected")
+      setReviewing(null)
+      setNotes("")
+      fetchItems()
+    } catch {
+      toast.error("Failed to review submission")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

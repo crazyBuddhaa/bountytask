@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // task_completions has two FKs to users (user_id, reviewed_by); the embed is ambiguous
     // without an explicit FK hint and PostgREST rejects the query, which was silently
     // surfacing as an empty "0 pending submissions" queue.
-    .select("*, task:tasks(id,title,reward_amount,type), user:users!task_completions_user_id_fkey(id,full_name,email,username)", { count: "exact" })
+    .select("*, task:tasks(id,title,reward_amount,type,social_platform,social_action), user:users!task_completions_user_id_fkey(id,full_name,email,username)", { count: "exact" })
     .eq("status", "pending")
     .order("submitted_at", { ascending: true })
     .range(from, from + limit - 1)

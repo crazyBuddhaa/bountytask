@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import { toast } from "sonner"
 import { Loader2, Upload, ExternalLink, XCircle, Share2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -51,7 +52,8 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
       setUploading(true)
       try {
         proofUrl = await uploadTaskProof(proofFile, task.id)
-      } catch {
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Upload failed")
         setUploading(false)
         setSubmitting(false)
         return
@@ -138,11 +140,11 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                     <span className="text-sm font-medium text-muted-foreground">
                       {proofFile ? proofFile.name : "Click or drag screenshot here"}
                     </span>
-                    <span className="text-xs text-muted-foreground mt-0.5">JPG, PNG — max 5 MB</span>
+                    <span className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WebP — max 10 MB</span>
                     <input
                       type="file"
                       className="hidden"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/jpeg,image/png,image/webp,video/mp4,application/pdf"
                       onChange={e => setProofFile(e.target.files?.[0] ?? null)}
                     />
                   </label>
@@ -214,11 +216,11 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                     <span className="text-sm font-medium text-muted-foreground">
                       {proofFile ? proofFile.name : "Click or drag screenshot here"}
                     </span>
-                    <span className="text-xs text-muted-foreground mt-0.5">JPG, PNG — max 5 MB</span>
+                    <span className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WebP — max 10 MB</span>
                     <input
                       type="file"
                       className="hidden"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/jpeg,image/png,image/webp,video/mp4,application/pdf"
                       onChange={e => setProofFile(e.target.files?.[0] ?? null)}
                     />
                   </label>
@@ -276,7 +278,8 @@ export function TaskCompletionModal({ task, onClose, onSubmit }: TaskCompletionM
                       <span className="text-xs text-muted-foreground">
                         {proofFile ? proofFile.name : "Click to upload screenshot"}
                       </span>
-                      <input type="file" className="hidden" accept="image/*,video/mp4,application/pdf"
+                      <span className="text-[11px] text-muted-foreground mt-0.5">JPG, PNG, WebP, MP4, PDF — max 10 MB</span>
+                      <input type="file" className="hidden" accept="image/jpeg,image/png,image/webp,video/mp4,application/pdf"
                         onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
                     </label>
                   </div>

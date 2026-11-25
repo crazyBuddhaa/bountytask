@@ -236,7 +236,7 @@ export default async function DashboardPage() {
                     <p className="text-xs text-muted-foreground">{timeAgo(entry.created_at)}</p>
                   </div>
                   <span className={`text-sm font-bold ${entry.delta > 0 ? "text-emerald-600" : "text-destructive"}`}>
-                    {entry.delta > 0 ? "+" : ""}{formatCurrency(Math.abs(entry.delta))}
+                    {entry.delta > 0 ? "+" : "-"}{formatCurrency(Math.abs(entry.delta))}
                   </span>
                 </div>
               ))

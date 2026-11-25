@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { PublicHeader } from "@/components/layout/PublicHeader"
 import { Footer } from "@/components/layout/Footer"
 
-export const metadata = { title: "About — BountyTask", description: "Learn about BountyTask and our mission to help Nigerians earn online." }
+export const metadata = { title: "About", description: "Learn about BountyTask and our mission to help Nigerians earn online." }
 
 const values = [
   { icon: Target,  title: "Fair & Transparent",  desc: "Every task reward is fixed and visible upfront. No hidden cuts, no bait-and-switch. What you see is exactly what you earn." },

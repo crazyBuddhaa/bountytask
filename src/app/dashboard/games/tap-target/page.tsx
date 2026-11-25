@@ -1,10 +1,11 @@
 "use client"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { Suspense, useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowLeft, Timer, Target, Crosshair } from "lucide-react"
+import { ArrowLeft, Timer, Crosshair } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { useGameEntry } from "@/hooks/useGameEntry"
 
 const GAME_DURATION  = 30
 const SPAWN_INTERVAL = 900
@@ -25,16 +26,19 @@ function Stars({ score }: { score: number }) {
   )
 }
 
-export default function TapTargetPage() {
-  const [phase, setPhase]     = useState<"idle" | "playing" | "done">("idle")
-  const [score, setScore]     = useState(0)
-  const [misses, setMisses]   = useState(0)
-  const [combo, setCombo]     = useState(0)
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
-  const [targets, setTargets] = useState<TargetObj[]>([])
+function TapTargetContent() {
+  const { entering, ensureEntry, submitSession } = useGameEntry("tap-target")
+
+  const [phase, setPhase]         = useState<"idle" | "playing" | "done">("idle")
+  const [score, setScore]         = useState(0)
+  const [misses, setMisses]       = useState(0)
+  const [combo, setCombo]         = useState(0)
+  const [timeLeft, setTimeLeft]   = useState(GAME_DURATION)
+  const [targets, setTargets]     = useState<TargetObj[]>([])
   const [submitted, setSubmitted] = useState(false)
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
-  const spawnRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const spawnRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const targetTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
   const startRef   = useRef(0)
   const scoreRef   = useRef(0)
   const missRef    = useRef(0)
@@ -42,8 +46,18 @@ export default function TapTargetPage() {
   const lastHitRef = useRef(0)
 
   const cleanup = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (spawnRef.current) clearInterval(spawnRef.current)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (spawnRef.current) {
+      clearInterval(spawnRef.current)
+      spawnRef.current = null
+    }
+    for (const timeoutId of targetTimeoutsRef.current) {
+      clearTimeout(timeoutId)
+    }
+    targetTimeoutsRef.current.clear()
   }, [])
 
   const spawnTarget = useCallback(() => {
@@ -51,8 +65,9 @@ export default function TapTargetPage() {
     const difficulty = Math.min(elapsed / GAME_DURATION, 1)
     const size       = Math.max(34, 68 - difficulty * 30)
     const id         = nextId++
-    setTargets(prev => [...prev, { id, x: 5 + Math.random() * 85, y: 5 + Math.random() * 85, size }])
-    setTimeout(() => {
+    setTargets(prev => [...prev, { id, x: 12 + Math.random() * 76, y: 12 + Math.random() * 76, size }])
+    const timeoutId = setTimeout(() => {
+      targetTimeoutsRef.current.delete(timeoutId)
       setTargets(prev => {
         const still = prev.some(t => t.id === id)
         if (still) {
@@ -64,9 +79,15 @@ export default function TapTargetPage() {
         return prev.filter(t => t.id !== id)
       })
     }, TARGET_LIFETIME)
+    targetTimeoutsRef.current.add(timeoutId)
   }, [])
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
+    if (entering) return
+    const ok = await ensureEntry()
+    if (!ok) return
+
+    cleanup()
     scoreRef.current = 0; missRef.current = 0; comboRef.current = 0; lastHitRef.current = 0
     setScore(0); setMisses(0); setCombo(0)
     setTargets([]); setTimeLeft(GAME_DURATION); setSubmitted(false); setPhase("playing")
@@ -78,22 +99,22 @@ export default function TapTargetPage() {
         return prev - 1
       })
     }, 1000)
-  }, [spawnTarget, cleanup])
+  }, [entering, ensureEntry, spawnTarget, cleanup])
 
   useEffect(() => {
     if (phase === "done" && !submitted) {
       setSubmitted(true)
       const s = scoreRef.current
-      fetch("/api/games/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          game_slug: "tap-target", score: s, completed: true,
-          duration_seconds: GAME_DURATION, metadata: { hits: s, misses: missRef.current },
-        }),
-      }).then(r => r.json()).then(j => { if (!j.error) toast.success(`Score saved: ${s} hits!`) })
+      void submitSession({
+        score: s,
+        completed: true,
+        duration_seconds: GAME_DURATION,
+        metadata: { hits: s, misses: missRef.current },
+      }).then(res => {
+        if (res.ok) toast.success(`Score saved: ${s} hits!`)
+      })
     }
-  }, [phase, submitted])
+  }, [phase, submitted, submitSession])
 
   useEffect(() => () => cleanup(), [cleanup])
 
@@ -168,8 +189,8 @@ export default function TapTargetPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Replays</p>
               </div>
             </div>
-            <Button onClick={startGame} className="w-full bg-red-500 hover:bg-red-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-red-500/30">
-              Start Game
+            <Button onClick={() => void startGame()} disabled={entering} className="w-full bg-red-500 hover:bg-red-600 text-white border-0 font-black text-base py-6 shadow-lg shadow-red-500/30">
+              {entering ? "Starting…" : "Start Game"}
             </Button>
           </div>
         </div>
@@ -182,7 +203,7 @@ export default function TapTargetPage() {
           <div className="flex items-center gap-3">
             <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
               <div
-                className={`h-2 rounded-full transition-all duration-1000 ${urgency ? "bg-red-500" : "bg-red-500"}`}
+                className={`h-2 rounded-full transition-all duration-1000 ${urgency ? "bg-red-500" : "bg-primary"}`}
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -257,12 +278,22 @@ export default function TapTargetPage() {
               {score >= 20 ? "🔥 Lightning reflexes!" : score >= 10 ? "👏 Solid performance!" : "Keep tapping to improve!"}
             </p>
             <div className="flex justify-center gap-3">
-              <Button onClick={startGame} className="bg-red-500 hover:bg-red-600 text-white border-0 font-bold shadow-md shadow-red-500/30">Play Again</Button>
+              <Button onClick={() => void startGame()} disabled={entering} className="bg-red-500 hover:bg-red-600 text-white border-0 font-bold shadow-md shadow-red-500/30">
+                {entering ? "Starting…" : "Play Again"}
+              </Button>
               <Link href="/dashboard/games"><Button variant="outline">All Games</Button></Link>
             </div>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+export default function TapTargetPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-96"><div className="w-8 h-8 rounded-full border-2 border-red-500 border-t-transparent animate-spin" /></div>}>
+      <TapTargetContent />
+    </Suspense>
   )
 }
