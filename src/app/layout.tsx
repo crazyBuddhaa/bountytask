@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { getMonetagSettings, parseMonetagSnippet } from "@/lib/monetag";
 import { MonetagScript } from "@/components/ads/MonetagScript";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -90,6 +91,7 @@ export default async function RootLayout({
           closeButton
           toastOptions={{ duration: 4000 }}
         />
+        <Analytics />
       </body>
     </html>
   );
