@@ -42,7 +42,7 @@ const steps = [
   {
     n: "04",
     title: "Withdraw to your bank",
-    desc: "Once your balance hits ₦5,000, request a transfer to any Nigerian bank account. Verified via Paystack and paid within 48 hours.",
+    desc: "Once your balance hits ₦3,000, request a transfer to any Nigerian bank account. Verified via Paystack and paid within 48 hours.",
   },
 ]
 
@@ -113,7 +113,7 @@ const faqs = [
   },
   {
     q: "What is the minimum withdrawal amount?",
-    a: "The minimum withdrawal is ₦5,000. This covers bank transfer fees while keeping the process sustainable for everyone.",
+    a: "The minimum withdrawal is ₦3,000. This covers bank transfer fees while keeping the process sustainable for everyone.",
   },
   {
     q: "How long does a withdrawal take?",

@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     q: "What is the minimum withdrawal?",
-    a: "The minimum withdrawal amount is ₦5,000. This helps us cover bank transfer fees while keeping them sustainable.",
+    a: "The minimum withdrawal amount is ₦3,000. This helps us cover bank transfer fees while keeping them sustainable.",
   },
   {
     q: "How long does withdrawal take?",

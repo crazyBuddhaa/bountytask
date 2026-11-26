@@ -93,7 +93,7 @@ async function getLandingData(): Promise<{
     const minWithdrawalKobo =
       settingRes.data?.value != null && Number(settingRes.data.value) > 0
         ? Number(settingRes.data.value)
-        : 500000
+        : 300000
 
     const rows = tasksRes.data ?? []
     if (rows.length > 0) {
@@ -127,7 +127,7 @@ async function getLandingData(): Promise<{
 
     return { tasks: FALLBACK_TASKS, isLiveTasks: false, minWithdrawalKobo }
   } catch {
-    return { tasks: FALLBACK_TASKS, isLiveTasks: false, minWithdrawalKobo: 500000 }
+    return { tasks: FALLBACK_TASKS, isLiveTasks: false, minWithdrawalKobo: 300000 }
   }
 }
 

@@ -20,10 +20,16 @@ UPDATE public.platform_settings
    SET value = '40'
  WHERE key = 'asterra_reward_kobo' AND value = '250';
 
--- 4. Seed defaults if missing (including CPX user share = 65%, keeping 35% platform margin)
+-- 4. Minimum withdrawal: ₦5,000 -> ₦3,000 (300,000 kobo)
+UPDATE public.platform_settings
+   SET value = '300000'
+ WHERE key = 'min_withdrawal_kobo' AND value = '500000';
+
+-- 5. Seed defaults if missing (including CPX user share = 65%, keeping 35% platform margin)
 INSERT INTO public.platform_settings (key, value) VALUES
   ('news_earn_kobo_per_minute',         '30'),
   ('news_earn_max_minutes_per_article', '3'),
   ('asterra_reward_kobo',               '40'),
-  ('cpx_user_share_percent',            '65')
+  ('cpx_user_share_percent',            '65'),
+  ('min_withdrawal_kobo',               '300000')
 ON CONFLICT (key) DO NOTHING;

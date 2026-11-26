@@ -45,7 +45,7 @@ export const getVerificationSettings = unstable_cache(
       bank_number:                s.bank_transfer_number           ?? "",
       bank_account_name:          s.bank_transfer_name             ?? "",
       phone_verification_enabled: s.phone_verification_enabled     ?? false,
-      min_withdrawal_kobo:        s.min_withdrawal_kobo            ?? 500_000,
+      min_withdrawal_kobo:        s.min_withdrawal_kobo            ?? 300_000,
     }
   },
   ["verification-settings"],
