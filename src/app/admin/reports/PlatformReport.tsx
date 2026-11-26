@@ -221,7 +221,7 @@ export function PlatformReport({ period }: { period: Period }) {
                     {formatSignedCurrency(prof?.net_margin_kobo ?? 0)}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-                    Excludes passive AdSense/Monetag display revenue tracked in external ad dashboards
+                    Excludes passive Monetag/Adsterra display revenue tracked in external ad dashboards
                   </p>
                 </div>
               </div>

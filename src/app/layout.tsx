@@ -6,7 +6,6 @@ import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { getMonetagSettings, parseMonetagSnippet } from "@/lib/monetag";
 import { MonetagScript } from "@/components/ads/MonetagScript";
 import { Analytics } from "@vercel/analytics/next";
-import { AdSenseScript } from "@/components/ads/AdSenseScript";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -39,7 +38,6 @@ export const metadata: Metadata = {
     description: "Complete tasks, earn Naira. Nigeria's #1 task-to-earn platform.",
   },
   other: {
-    "google-adsense-account": "ca-pub-3580627557521419",
     "monetag": "689126602663cc000bc9537926f3b8bf",
   },
 };
@@ -73,9 +71,6 @@ export default async function RootLayout({
         />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {/* Google AdSense — public pages only (gated client-side via AdSenseScript). */}
-        <AdSenseScript />
-
         {/* Monetag Multitag — public pages only.
             MonetagScript is a client component that reads usePathname() and
             returns null on /admin/* and /dashboard/*, so pop-unders, in-page

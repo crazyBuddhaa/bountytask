@@ -530,16 +530,15 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* ── Display Ads (AdSense snippets) ──────────────────────────────── */}
+      {/* ── Display Ads (Banner / Native snippets) ──────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <LayoutTemplate className="w-4 h-4" /> Display Ads (AdSense)
+            <LayoutTemplate className="w-4 h-4" /> Display Ads (Banner / Native)
           </CardTitle>
           <CardDescription>
-            Paste your Google AdSense (or any network) HTML snippet for passive banner placements.
-            Use manual ad units — not Auto Ads — to control exact placement. Keep units visually
-            separated from reward UI to comply with AdSense policy.
+            Paste passive banner, native, or social-bar HTML snippets (e.g. Adsterra, Monetag, or
+            other GPT-friendly networks) for inline placements across Dashboard, Tasks, and News.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

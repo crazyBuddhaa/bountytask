@@ -23,7 +23,7 @@ const sections = [
   },
   {
     title: "4. Cookies & Advertising",
-    body: "We use essential cookies to maintain your authenticated session and preferences. On public-facing pages, third-party advertising partners (such as Google AdSense) may use cookies to serve relevant ads. You can manage cookie preferences through your browser settings.",
+    body: "We use essential cookies to maintain your authenticated session and preferences. Third-party advertising and survey partners may use cookies to serve relevant offers and ads. You can manage cookie preferences through your browser settings.",
   },
   {
     title: "5. Sharing of Information",
