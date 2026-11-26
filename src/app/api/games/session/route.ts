@@ -23,6 +23,7 @@ const GAME_SCORE_CEILINGS: Record<GameSlug, number> = {
   "2048":            100000,
   "color-rush":      500,
   "word-scramble":   2500,
+  "math-sprint":     5000,
 }
 
 const schema = z.object({

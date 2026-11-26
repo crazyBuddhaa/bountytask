@@ -55,6 +55,7 @@ const GAME_COLORS: Record<GameSlug, string> = {
   '2048':            'text-amber-500',
   'color-rush':      'text-violet-500',
   'word-scramble':   'text-pink-500',
+  'math-sprint':     'text-amber-500',
 }
 
 function fmt(kobo: number) {

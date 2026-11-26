@@ -42,6 +42,7 @@ const GAME_EMOJI: Record<string, string> = {
   "2048":            "🧩",
   "color-rush":      "🎨",
   "word-scramble":   "📝",
+  "math-sprint":     "⚡",
 }
 
 const RANK_ICON = ["🥇", "🥈", "🥉"]

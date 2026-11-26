@@ -130,6 +130,7 @@ const settingsSchema = z.object({
   game_entry_fee_2048:           z.number().int().min(0).optional(),
   game_entry_fee_color_rush:     z.number().int().min(0).optional(),
   game_entry_fee_word_scramble:  z.number().int().min(0).optional(),
+  game_entry_fee_math_sprint:    z.number().int().min(0).optional(),
 
   // ── Ad-blocker detection & penalty ─────────────────────────────────────────
   adblock_detector_enabled:  z.boolean().optional(),

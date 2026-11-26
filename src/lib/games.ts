@@ -3,9 +3,14 @@
 // ============================================================
 
 export const GAME_SLUGS = [
-  'wordle', 'higher-or-lower', 'tap-target', '2048', 'color-rush', 'word-scramble',
+  'wordle', 'higher-or-lower', 'tap-target', '2048', 'color-rush', 'word-scramble', 'math-sprint',
 ] as const
 export type GameSlug = typeof GAME_SLUGS[number]
+
+/** Active games shown in the Games Hub (higher-or-lower is retired from hub but preserved for historical payouts). */
+export const ACTIVE_GAME_SLUGS: GameSlug[] = [
+  'wordle', 'math-sprint', '2048', 'color-rush', 'word-scramble', 'tap-target',
+]
 
 export interface GameMeta {
   name: string
@@ -13,10 +18,12 @@ export interface GameMeta {
   emoji: string
   isDaily: boolean   // true = one play per day
   leaderboardLabel: string
+  isNew?: boolean
 }
 
 export const GAME_META: Record<GameSlug, GameMeta> = {
   'wordle':          { name: 'Daily Wordle',      emoji: '🟩', isDaily: true,  description: 'Guess the 5-letter word in 6 tries', leaderboardLabel: 'Best score' },
+  'math-sprint':     { name: 'Quick Math Blitz',  emoji: '⚡', isDaily: false, description: 'Solve rapid arithmetic in 45s with streak multipliers', leaderboardLabel: 'Best score', isNew: true },
   'higher-or-lower': { name: 'Higher or Lower',   emoji: '🔢', isDaily: true,  description: 'Find the secret number with fewest guesses', leaderboardLabel: 'Best score' },
   'tap-target':      { name: 'Tap the Target',    emoji: '🎯', isDaily: false, description: 'Hit as many targets as possible in 30 s', leaderboardLabel: 'Most hits' },
   '2048':            { name: '2048',              emoji: '🧮', isDaily: false, description: 'Slide tiles and reach 2048', leaderboardLabel: 'Highest score' },

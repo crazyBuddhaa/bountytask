@@ -16,6 +16,7 @@ export const SLUG_TO_FEE_KEY: Record<GameSlug, string> = {
   "2048":            "game_entry_fee_2048",
   "color-rush":      "game_entry_fee_color_rush",
   "word-scramble":   "game_entry_fee_word_scramble",
+  "math-sprint":     "game_entry_fee_math_sprint",
 }
 
 const schema = z.object({

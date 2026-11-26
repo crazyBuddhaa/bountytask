@@ -73,6 +73,7 @@ type Settings = {
   game_entry_fee_2048: number
   game_entry_fee_color_rush: number
   game_entry_fee_word_scramble: number
+  game_entry_fee_math_sprint: number
   // Ad-blocker detection & penalty
   adblock_detector_enabled: boolean
   adblock_warning_threshold: number
@@ -130,6 +131,7 @@ const DEFAULTS: Settings = {
   game_entry_fee_2048: 500,
   game_entry_fee_color_rush: 500,
   game_entry_fee_word_scramble: 500,
+  game_entry_fee_math_sprint: 500,
   adblock_detector_enabled: true,
   adblock_warning_threshold: 2,
   adblock_penalty_kobo: 5000,
@@ -208,6 +210,7 @@ export default function AdminSettingsPage() {
             game_entry_fee_2048:            data.game_entry_fee_2048            ?? 500,
             game_entry_fee_color_rush:      data.game_entry_fee_color_rush      ?? 500,
             game_entry_fee_word_scramble:   data.game_entry_fee_word_scramble   ?? 500,
+            game_entry_fee_math_sprint:     data.game_entry_fee_math_sprint     ?? 500,
             adblock_detector_enabled:       data.adblock_detector_enabled !== undefined ? (data.adblock_detector_enabled === true || data.adblock_detector_enabled === "true") : true,
             adblock_warning_threshold:      data.adblock_warning_threshold != null ? Number(data.adblock_warning_threshold) : 2,
             adblock_penalty_kobo:           data.adblock_penalty_kobo != null ? Number(data.adblock_penalty_kobo) : 5000,
@@ -1064,7 +1067,8 @@ export default function AdminSettingsPage() {
                   { key: "game_entry_fee_tap_target",      label: "Tap the Target",  emoji: "🎯" },
                   { key: "game_entry_fee_2048",            label: "2048",            emoji: "🧩" },
                   { key: "game_entry_fee_color_rush",      label: "Color Rush",      emoji: "🎨" },
-                  { key: "game_entry_fee_word_scramble",   label: "Word Scramble",   emoji: "📝" },
+                  { key: "game_entry_fee_word_scramble",   label: "Word Scramble",     emoji: "📝" },
+                  { key: "game_entry_fee_math_sprint",     label: "Quick Math Blitz",  emoji: "⚡" },
                 ] as const
               ).map(({ key, label, emoji }) => (
                 <div key={key} className="flex items-center gap-3">
