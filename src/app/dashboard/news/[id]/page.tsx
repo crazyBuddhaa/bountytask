@@ -153,7 +153,7 @@ export default function ArticleReaderPage() {
 
   // ── Heartbeat ──────────────────────────────────────────────────────────────
   const sendHeartbeat = useCallback(async () => {
-    if (capRef.current || document.hidden) return
+    if (capRef.current || document.hidden || window.__btAdBlockDetected) return
     try {
       const res  = await fetch(`/api/news/${id}/heartbeat`, { method: "POST" })
       const json = await res.json()

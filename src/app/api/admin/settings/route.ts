@@ -130,6 +130,11 @@ const settingsSchema = z.object({
   game_entry_fee_2048:           z.number().int().min(0).optional(),
   game_entry_fee_color_rush:     z.number().int().min(0).optional(),
   game_entry_fee_word_scramble:  z.number().int().min(0).optional(),
+
+  // ── Ad-blocker detection & penalty ─────────────────────────────────────────
+  adblock_detector_enabled:  z.boolean().optional(),
+  adblock_warning_threshold: z.number().int().min(0).max(10).optional(),
+  adblock_penalty_kobo:      z.number().int().min(0).max(500_000).optional(),
 })
 
 export async function GET() {

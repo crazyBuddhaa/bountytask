@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import {
   Loader2, Save, Settings2, CreditCard, Building2, Smartphone,
   Banknote, Megaphone, LayoutTemplate, PlayCircle, LayoutGrid,
-  ClipboardList, Key, Gift, ScanEye, Tv2, Newspaper,
+  ClipboardList, Key, Gift, ScanEye, Tv2, Newspaper, ShieldCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -73,6 +73,10 @@ type Settings = {
   game_entry_fee_2048: number
   game_entry_fee_color_rush: number
   game_entry_fee_word_scramble: number
+  // Ad-blocker detection & penalty
+  adblock_detector_enabled: boolean
+  adblock_warning_threshold: number
+  adblock_penalty_kobo: number
 }
 
 const DEFAULTS: Settings = {
@@ -126,6 +130,9 @@ const DEFAULTS: Settings = {
   game_entry_fee_2048: 500,
   game_entry_fee_color_rush: 500,
   game_entry_fee_word_scramble: 500,
+  adblock_detector_enabled: true,
+  adblock_warning_threshold: 2,
+  adblock_penalty_kobo: 5000,
 }
 
 const APP_URL =
@@ -201,6 +208,9 @@ export default function AdminSettingsPage() {
             game_entry_fee_2048:            data.game_entry_fee_2048            ?? 500,
             game_entry_fee_color_rush:      data.game_entry_fee_color_rush      ?? 500,
             game_entry_fee_word_scramble:   data.game_entry_fee_word_scramble   ?? 500,
+            adblock_detector_enabled:       data.adblock_detector_enabled !== undefined ? (data.adblock_detector_enabled === true || data.adblock_detector_enabled === "true") : true,
+            adblock_warning_threshold:      data.adblock_warning_threshold != null ? Number(data.adblock_warning_threshold) : 2,
+            adblock_penalty_kobo:           data.adblock_penalty_kobo != null ? Number(data.adblock_penalty_kobo) : 5000,
           })
           setLoadError(null)
         }
@@ -1077,6 +1087,77 @@ export default function AdminSettingsPage() {
               <p className="text-xs text-muted-foreground pt-1">
                 Prize splits: 🥇 50% · 🥈 30% · 🥉 20%. Settle weekly pools from the <strong>Games</strong> admin page.
               </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Ad-Blocker Detection & Penalty ──────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-destructive" /> Ad-Blocker Detection &amp; Penalty
+          </CardTitle>
+          <CardDescription>
+            Detect ad blockers on the user dashboard, pause earning with a warning modal, and
+            deduct a capped wallet penalty + flag the account after repeated strikes (max 1 strike per 30 min).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable ad-blocker detector</p>
+              <p className="text-xs text-muted-foreground">
+                Blocks dashboard earning when an ad blocker or Brave Shields is active
+              </p>
+            </div>
+            <Switch
+              checked={settings.adblock_detector_enabled}
+              onCheckedChange={(v) => setSettings((s) => ({ ...s, adblock_detector_enabled: v }))}
+            />
+          </div>
+
+          {settings.adblock_detector_enabled && (
+            <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+              <div className="space-y-1.5">
+                <Label htmlFor="adblock_warning_threshold">Warnings before penalty (per day)</Label>
+                <Input
+                  id="adblock_warning_threshold"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={settings.adblock_warning_threshold}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      adblock_warning_threshold: Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)),
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set to 0 to penalize on the first detection. Default: 2 warnings.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="adblock_penalty_naira">Penalty per offense (₦)</Label>
+                <Input
+                  id="adblock_penalty_naira"
+                  type="number"
+                  min={0}
+                  max={5000}
+                  step={1}
+                  value={Math.round(settings.adblock_penalty_kobo / 100)}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      adblock_penalty_kobo: Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)),
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set to 0 for warning-only mode. Capped at user&apos;s available balance.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>

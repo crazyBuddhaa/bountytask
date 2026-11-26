@@ -6,6 +6,7 @@ import { getUserTierStatus } from "@/lib/tiers"
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"
 import { AdSlot } from "@/components/ads/AdSlot"
+import { AdBlockGuard } from "@/components/ads/AdBlockGuard"
 import type { UserProfile } from "@/types"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="flex-1 flex flex-col min-w-0">
         <DashboardHeader user={profile} balance={balance} unreadCount={unreadCount} currentTier={tierStatus.currentTier} />
         <main className="flex-1 p-4 lg:p-6 animate-fade-in space-y-4">
+          <AdBlockGuard />
           {children}
           <AdSlot placement="dashboard" />
         </main>
