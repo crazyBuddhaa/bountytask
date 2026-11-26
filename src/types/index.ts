@@ -99,6 +99,7 @@ export interface Task {
   submission_id: string | null;
   youtube_url: string | null;
   min_watch_seconds: number | null;
+  video_watch_mode?: "full" | "half" | "custom" | null;
   video_secret_code?: string | null;
   video_code_hint?: string | null;
   has_secret_code?: boolean;

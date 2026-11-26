@@ -72,11 +72,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (task.youtube_url) {
     const expectedCode =
       typeof task.video_secret_code === "string" ? task.video_secret_code.trim() : ""
-    const required = task.min_watch_seconds ?? 30
+    const watchMode = (task.video_watch_mode as "full" | "half" | "custom" | null) ?? "custom"
+    const customRequired = task.min_watch_seconds ?? 30
 
     const { data: session } = await admin
       .from("video_watch_sessions")
-      .select("heartbeat_count, started_at")
+      .select("heartbeat_count, started_at, video_duration_seconds")
       .eq("user_id", user.id)
       .eq("task_id", taskId)
       .single()
@@ -86,6 +87,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: null,
         error: "You must open and watch the video before claiming the reward.",
       }, { status: 403 })
+    }
+
+    const duration =
+      typeof session.video_duration_seconds === "number" && session.video_duration_seconds >= 5
+        ? session.video_duration_seconds
+        : null
+
+    let required = customRequired
+    if (watchMode === "full" && duration) {
+      required = Math.max(5, Math.floor(duration * 0.85))
+    } else if (watchMode === "half" && duration) {
+      required = Math.max(5, Math.floor(duration * 0.5))
+    } else if (duration) {
+      // Never soft-lock on a Short whose total length is shorter than min_watch_seconds
+      required = Math.min(customRequired, Math.max(5, Math.floor(duration * 0.9)))
     }
 
     if (expectedCode) {
@@ -112,7 +128,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }, { status: 422 })
       }
     } else {
-      // Classic embedded heartbeat mode
+      // Embedded iframe heartbeat mode (5s per heartbeat)
       if (session.heartbeat_count === 0) {
         return NextResponse.json({
           data: null,
@@ -120,12 +136,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }, { status: 403 })
       }
 
-      const watchedSeconds = session.heartbeat_count * 10
+      const watchedSeconds = session.heartbeat_count * 5
       if (watchedSeconds < required) {
-        const remaining = Math.ceil((required - watchedSeconds) / 60)
+        const remainingSec = Math.max(1, required - watchedSeconds)
         return NextResponse.json({
           data: null,
-          error: `Keep watching — you need at least ${remaining} more minute${remaining === 1 ? "" : "s"} of watch time.`,
+          error: `Keep watching — you need ${remainingSec}s more of watch time.`,
         }, { status: 403 })
       }
     }

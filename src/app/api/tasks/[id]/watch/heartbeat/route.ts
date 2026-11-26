@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = 'force-dynamic'
 
-// Minimum seconds between accepted heartbeats — prevents flooding
-const MIN_INTERVAL_SECONDS = 8
+// Minimum seconds between accepted heartbeats (client fires every 5s so Shorts track cleanly)
+const MIN_INTERVAL_SECONDS = 4
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: taskId } = await params
@@ -44,5 +44,10 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: "Heartbeat too frequent" }, { status: 429 })
   }
 
-  return NextResponse.json({ data: { heartbeat_count: row.heartbeat_count } })
+  return NextResponse.json({
+    data: {
+      heartbeat_count: row.heartbeat_count,
+      watched_seconds: row.heartbeat_count * 5,
+    },
+  })
 }

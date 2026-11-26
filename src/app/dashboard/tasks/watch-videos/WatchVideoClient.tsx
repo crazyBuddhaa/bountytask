@@ -273,8 +273,25 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
   const [canClaim, setCanClaim] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [pausedByTab, setPausedByTab] = useState(false)
+  const [videoDuration, setVideoDuration] = useState<number | null>(null)
 
-  const required = task.min_watch_seconds ?? 30
+  const watchMode = task.video_watch_mode ?? "custom"
+  const customRequired = task.min_watch_seconds ?? 30
+  const required = (() => {
+    if (watchMode === "full" && videoDuration) {
+      return Math.max(5, Math.floor(videoDuration * 0.85))
+    }
+    if (watchMode === "half" && videoDuration) {
+      return Math.max(5, Math.floor(videoDuration * 0.5))
+    }
+    if (videoDuration) {
+      return Math.min(customRequired, Math.max(5, Math.floor(videoDuration * 0.9)))
+    }
+    return customRequired
+  })()
+  const requiredRef = useRef(required)
+  requiredRef.current = required
+
   const videoId = extractVideoId(task.youtube_url ?? "")
 
   useEffect(() => {
@@ -315,7 +332,7 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
             playerRef.current.setPlaybackRate(1)
           }
         } catch { /* ignore */ }
-        setWatchedSecDisplay((prev) => Math.min(prev + 1, required))
+        setWatchedSecDisplay((prev) => Math.min(prev + 1, requiredRef.current))
       }, 1000)
     }
 
@@ -327,20 +344,20 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
           if (res.ok) {
             const json = await res.json().catch(() => ({}))
             const serverCount =
-              typeof json?.heartbeat_count === "number"
-                ? json.heartbeat_count
-                : typeof json?.data?.heartbeat_count === "number"
-                  ? json.data.heartbeat_count
+              typeof json?.data?.heartbeat_count === "number"
+                ? json.data.heartbeat_count
+                : typeof json?.heartbeat_count === "number"
+                  ? json.heartbeat_count
                   : localCountRef.current + 1
             localCountRef.current = serverCount
-            const watchedSeconds = serverCount * 10
-            setWatchedSecDisplay((prev) => Math.max(prev, Math.min(watchedSeconds, required)))
-            if (watchedSeconds >= required) setCanClaim(true)
+            const watchedSeconds = serverCount * 5
+            setWatchedSecDisplay((prev) => Math.max(prev, Math.min(watchedSeconds, requiredRef.current)))
+            if (watchedSeconds >= requiredRef.current) setCanClaim(true)
           }
         } catch { /* silent */ }
-      }, 10_000)
+      }, 5_000)
     }
-  }, [task.id, required])
+  }, [task.id])
 
   // Auto-pause video & heartbeats when user switches tabs
   useEffect(() => {
@@ -372,7 +389,20 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
       videoId,
       playerVars: { rel: 0, modestbranding: 1 },
       events: {
-        onReady: () => setPlayerReady(true),
+        onReady: () => {
+          setPlayerReady(true)
+          try {
+            const dur = Math.round(playerRef.current?.getDuration?.() ?? 0)
+            if (dur >= 5) {
+              setVideoDuration(dur)
+              void fetch(`/api/tasks/${task.id}/watch/start`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ duration_seconds: dur }),
+              })
+            }
+          } catch { /* ignore */ }
+        },
         onStateChange: (event: { data: number }) => {
           const S = window.YT.PlayerState
           if (event.data === S.PLAYING) {
@@ -380,9 +410,9 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
             startTimers()
           } else if (event.data === S.ENDED) {
             stopTimers()
-            if (localCountRef.current * 10 >= required) {
+            if (localCountRef.current * 5 >= requiredRef.current) {
               setCanClaim(true)
-              setWatchedSecDisplay(required)
+              setWatchedSecDisplay(requiredRef.current)
             }
           } else {
             stopTimers()
@@ -390,7 +420,7 @@ function EmbeddedVideoTask({ task, onClaimed, onSkip }: Props) {
         },
       },
     })
-  }, [videoId, required, startTimers, stopTimers])
+  }, [videoId, task.id, startTimers, stopTimers])
 
   useEffect(() => {
     if (typeof window === "undefined") return

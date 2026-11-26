@@ -125,7 +125,7 @@ const EDITABLE_TASK_FIELDS = [
   "title", "description", "instructions", "category_id", "type", "status",
   "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
   "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
-  "youtube_url", "min_watch_seconds", "video_secret_code", "video_code_hint",
+  "youtube_url", "min_watch_seconds", "video_watch_mode", "video_secret_code", "video_code_hint",
   // Social media task fields
   "social_platform", "social_action", "social_target_handle", "social_target_post_url",
   "social_required_comment_text", "ai_verify_screenshot",
@@ -558,20 +558,41 @@ export default function AdminTasksPage() {
                       Users will watch this embedded in the app.
                     </p>
                   </div>
-                  <div>
-                    <Label htmlFor="minWatch">Minimum watch time (seconds)</Label>
-                    <Input
-                      id="minWatch"
-                      type="number"
-                      min={30}
-                      className="mt-1"
-                      placeholder="e.g. 300 for a 5-min video"
-                      value={editing.min_watch_seconds ?? ""}
-                      onChange={e => setEditing(prev => ({ ...prev, min_watch_seconds: e.target.value ? parseInt(e.target.value) : null }))}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Leave blank to default to 30 s.
-                    </p>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label>Watch requirement</Label>
+                      <Select
+                        value={editing.video_watch_mode ?? "custom"}
+                        onValueChange={v => setEditing(prev => ({ ...prev, video_watch_mode: v as "full" | "half" | "custom" }))}
+                      >
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full">Full video (~100% · best for Shorts)</SelectItem>
+                          <SelectItem value="half">Half video (50% of total length)</SelectItem>
+                          <SelectItem value="custom">Custom seconds</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Reads real YouTube length automatically when set to Full or Half.
+                      </p>
+                    </div>
+                    {(editing.video_watch_mode ?? "custom") === "custom" && (
+                      <div>
+                        <Label htmlFor="minWatch">Minimum watch time (seconds)</Label>
+                        <Input
+                          id="minWatch"
+                          type="number"
+                          min={10}
+                          className="mt-1"
+                          placeholder="e.g. 60 for 1 min"
+                          value={editing.min_watch_seconds ?? ""}
+                          onChange={e => setEditing(prev => ({ ...prev, min_watch_seconds: e.target.value ? parseInt(e.target.value) : null }))}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Leave blank to default to 30 s (auto-capped for Shorts).
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 pt-2 border-t border-border">
                     <div>
