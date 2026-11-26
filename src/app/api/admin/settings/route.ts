@@ -157,16 +157,17 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ data: null, error: parsed.error.errors[0].message }, { status: 400 })
   }
 
-  // Reject raw inline scripts or non-HTTPS URLs for Monetag script snippets
+  // Reject non-HTTPS external script src URLs while allowing valid HTTPS <script src>
+  // tags and Monetag's official inline loader snippets.
   for (const key of ["monetag_multitag_script", "monetag_games_interstitial_script"] as const) {
     const val = parsed.data[key]
     if (typeof val === "string" && val.trim().length > 0) {
       const snippet = parseMonetagSnippet(val)
-      if (snippet.kind !== "src") {
+      if (snippet.kind === "empty") {
         return NextResponse.json(
           {
             data: null,
-            error: `${key} must be an external <script src="https://..."> tag; inline scripts and non-HTTPS URLs are not allowed.`,
+            error: `${key} has an invalid or non-HTTPS script URL.`,
           },
           { status: 400 }
         )
