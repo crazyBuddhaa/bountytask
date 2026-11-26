@@ -48,8 +48,17 @@ export async function GET(request: NextRequest) {
   const { data, error, count } = await query
   if (error) return NextResponse.json({ data: null, error: error.message }, { status: 500 })
 
+  const safeData = (data ?? []).map((row) => {
+    const { video_secret_code, ...rest } = row as Record<string, unknown>
+    return {
+      ...rest,
+      has_secret_code:
+        typeof video_secret_code === "string" && video_secret_code.trim().length > 0,
+    }
+  })
+
   return NextResponse.json({
-    data, total: count ?? 0, page, limit, hasMore: (count ?? 0) > from + limit, error: null,
+    data: safeData, total: count ?? 0, page, limit, hasMore: (count ?? 0) > from + limit, error: null,
   })
 }
 

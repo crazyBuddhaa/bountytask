@@ -125,7 +125,7 @@ const EDITABLE_TASK_FIELDS = [
   "title", "description", "instructions", "category_id", "type", "status",
   "reward_amount", "max_completions", "max_completions_per_user", "requires_proof", "proof_instructions",
   "time_limit_hours", "verification_url", "expires_at", "cost_type", "advertiser_cost_kobo",
-  "youtube_url", "min_watch_seconds",
+  "youtube_url", "min_watch_seconds", "video_secret_code", "video_code_hint",
   // Social media task fields
   "social_platform", "social_action", "social_target_handle", "social_target_post_url",
   "social_required_comment_text", "ai_verify_screenshot",
@@ -572,6 +572,34 @@ export default function AdminTasksPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Leave blank to default to 30 s.
                     </p>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2 border-t border-border">
+                    <div>
+                      <Label htmlFor="videoSecretCode">Secret code (recommended for own channel)</Label>
+                      <Input
+                        id="videoSecretCode"
+                        className="mt-1"
+                        placeholder="e.g. LAGOS24"
+                        value={editing.video_secret_code ?? ""}
+                        onChange={e => setEditing(prev => ({ ...prev, video_secret_code: e.target.value || null }))}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        When set, users watch natively on YouTube (no iframe) and enter this code to claim.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="videoCodeHint">Code hint (optional)</Label>
+                      <Input
+                        id="videoCodeHint"
+                        className="mt-1"
+                        placeholder="e.g. Mentioned around 2:15"
+                        value={editing.video_code_hint ?? ""}
+                        onChange={e => setEditing(prev => ({ ...prev, video_code_hint: e.target.value || null }))}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Shown to users so they know where to look or listen.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

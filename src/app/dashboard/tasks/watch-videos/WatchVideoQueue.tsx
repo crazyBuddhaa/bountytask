@@ -21,13 +21,15 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
   const [totalEarned, setTotalEarned] = useState(0)
   const [remaining, setRemaining] = useState(initialRemaining)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [skippedIds, setSkippedIds] = useState<string[]>([])
 
-  const fetchNext = useCallback(async () => {
+  const fetchNext = useCallback(async (skipList: string[] = []) => {
     setTask(undefined) // loading
     setFetchError(null)
     setClaimed(false)
     try {
-      const res = await fetch("/api/tasks/video/next")
+      const qs = skipList.length > 0 ? `?skip=${encodeURIComponent(skipList.join(","))}` : ""
+      const res = await fetch(`/api/tasks/video/next${qs}`)
       const json = await res.json()
       if (!res.ok) {
         setFetchError(json.error ?? "Failed to load video. Please refresh and try again.")
@@ -41,7 +43,7 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
     }
   }, [])
 
-  useEffect(() => { fetchNext() }, [fetchNext])
+  useEffect(() => { void fetchNext() }, [fetchNext])
 
   function handleClaimed() {
     if (!task) return
@@ -49,6 +51,13 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
     setTotalEarned(prev => prev + task.reward_amount)
     setRemaining(prev => Math.max(prev - 1, 0))
     router.refresh()
+  }
+
+  function handleSkip() {
+    if (!task) return
+    const nextSkipped = [...skippedIds, task.id]
+    setSkippedIds(nextSkipped)
+    void fetchNext(nextSkipped)
   }
 
   // Loading
@@ -71,7 +80,7 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
         <CardContent className="p-8 space-y-3 text-center">
           <CardTitle className="text-base text-destructive">Something went wrong</CardTitle>
           <CardDescription>{fetchError}</CardDescription>
-          <Button variant="outline" size="sm" onClick={fetchNext}>Try again</Button>
+          <Button variant="outline" size="sm" onClick={() => void fetchNext(skippedIds)}>Try again</Button>
         </CardContent>
       </Card>
     )
@@ -122,7 +131,7 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
             </p>
           </div>
           {remaining > 0 && (
-            <Button onClick={fetchNext} className="gap-2">
+            <Button onClick={() => void fetchNext(skippedIds)} className="gap-2">
               Watch Next <ChevronRight className="w-4 h-4" />
             </Button>
           )}
@@ -133,23 +142,6 @@ export default function WatchVideoQueue({ remaining: initialRemaining }: Props) 
 
   // Active video
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-base leading-snug">{task.title}</CardTitle>
-            {task.description && (
-              <CardDescription className="mt-1 text-xs line-clamp-2">{task.description}</CardDescription>
-            )}
-          </div>
-          <Badge variant="success" className="shrink-0 text-[10px]">
-            +{formatCurrency(task.reward_amount)}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <WatchVideoClient task={task} onClaimed={handleClaimed} />
-      </CardContent>
-    </Card>
+    <WatchVideoClient task={task} onClaimed={handleClaimed} onSkip={handleSkip} />
   )
 }

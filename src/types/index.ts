@@ -99,6 +99,9 @@ export interface Task {
   submission_id: string | null;
   youtube_url: string | null;
   min_watch_seconds: number | null;
+  video_secret_code?: string | null;
+  video_code_hint?: string | null;
+  has_secret_code?: boolean;
   // ── Social media task fields ──────────────────────────────────
   social_platform: SocialPlatform | null;
   social_action: SocialAction | null;

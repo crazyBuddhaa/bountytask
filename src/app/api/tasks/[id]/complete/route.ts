@@ -6,7 +6,7 @@ import { creditReferralBonus } from "@/lib/referrals"
 import { flagUser, checkTaskCompletionRate, recordDevice, checkDeviceConflict } from "@/lib/fraud"
 import { checkDailyTaskLimit, recalcUserTier } from "@/lib/tiers"
 import { notifyTaskApproved } from "@/lib/notifications"
-import { isTrustedUploadUrl, parseBoolSetting } from "@/lib/security"
+import { isTrustedUploadUrl, parseBoolSetting, timingSafeStringEqual } from "@/lib/security"
 import { getClientIp } from "@/lib/utils"
 import { z } from "zod"
 
@@ -18,6 +18,7 @@ const bodySchema = z.object({
   proof_url: z.string().url().optional().nullable(),
   proof_text: z.string().max(2000).optional().nullable(),
   device_fingerprint: z.string().optional(),
+  video_code: z.string().trim().max(100).optional().nullable(),
 })
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -69,29 +70,64 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // ── Video task: server-side watch verification ──────────────────────────────
   if (task.youtube_url) {
+    const expectedCode =
+      typeof task.video_secret_code === "string" ? task.video_secret_code.trim() : ""
+    const required = task.min_watch_seconds ?? 30
+
     const { data: session } = await admin
       .from("video_watch_sessions")
-      .select("heartbeat_count")
+      .select("heartbeat_count, started_at")
       .eq("user_id", user.id)
       .eq("task_id", taskId)
       .single()
 
-    if (!session || session.heartbeat_count === 0) {
+    if (!session) {
       return NextResponse.json({
         data: null,
-        error: "You must watch the video before claiming the reward.",
+        error: "You must open and watch the video before claiming the reward.",
       }, { status: 403 })
     }
 
-    const watchedSeconds = session.heartbeat_count * 10
-    const required = task.min_watch_seconds ?? 30
+    if (expectedCode) {
+      // Secret-code mode (native YouTube viewing): verify minimum wall-clock time + secret code
+      const elapsedSec = Math.floor(
+        (Date.now() - new Date(session.started_at).getTime()) / 1000
+      )
+      if (elapsedSec < required) {
+        const remainingSec = Math.max(1, required - elapsedSec)
+        return NextResponse.json({
+          data: null,
+          error: `Keep watching on YouTube — please wait ${remainingSec}s more before submitting the code.`,
+        }, { status: 403 })
+      }
 
-    if (watchedSeconds < required) {
-      const remaining = Math.ceil((required - watchedSeconds) / 60)
-      return NextResponse.json({
-        data: null,
-        error: `Keep watching — you need at least ${remaining} more minute${remaining === 1 ? "" : "s"} of watch time.`,
-      }, { status: 403 })
+      const providedCode = (parsed.data.video_code ?? "").trim()
+      if (
+        !providedCode ||
+        !timingSafeStringEqual(providedCode.toLowerCase(), expectedCode.toLowerCase())
+      ) {
+        return NextResponse.json({
+          data: null,
+          error: "Incorrect secret code. Watch the video carefully and try again.",
+        }, { status: 422 })
+      }
+    } else {
+      // Classic embedded heartbeat mode
+      if (session.heartbeat_count === 0) {
+        return NextResponse.json({
+          data: null,
+          error: "You must watch the video before claiming the reward.",
+        }, { status: 403 })
+      }
+
+      const watchedSeconds = session.heartbeat_count * 10
+      if (watchedSeconds < required) {
+        const remaining = Math.ceil((required - watchedSeconds) / 60)
+        return NextResponse.json({
+          data: null,
+          error: `Keep watching — you need at least ${remaining} more minute${remaining === 1 ? "" : "s"} of watch time.`,
+        }, { status: 403 })
+      }
     }
   }
   // ───────────────────────────────────────────────────────────────────────────
